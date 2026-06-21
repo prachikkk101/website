@@ -1,94 +1,158 @@
 // src/utils/exportExcel.js
 import * as XLSX from 'xlsx';
 
-function getToday() {
+function today() {
   return new Date().toISOString().split('T')[0];
 }
 
-function downloadWorkbook(wb, filename) {
+function download(wb, filename) {
   XLSX.writeFile(wb, filename);
 }
 
+/* ── Helper: styled header row ── */
+function applyHeaderStyle(ws, headerRow, cols) {
+  // XLSX community edition doesn't support cell styles directly,
+  // so we manually set the header row values and column widths.
+  XLSX.utils.sheet_add_aoa(ws, [headerRow], { origin: 'A1' });
+  ws['!cols'] = cols.map(w => ({ wch: w }));
+}
+
+/* ══════════════════════════════════════
+   1. Export House Connections
+   ══════════════════════════════════════ */
 export function exportHouseData(houses) {
-  const rows = houses.map(h => ({
-    'Acct Type': h.acctType,
-    'BP No.': h.bpNo,
-    'Customer Name': h.name,
-    'Mobile': h.mobile,
-    'House No.': h.houseNo,
-    'Area': h.area,
-    'City': h.city,
-    'Meter No.': h.meterNo,
-    'Meter Date': h.meterDate,
-    'GC Status': h.gcStatus,
-    'GI Status': h.giStatus,
-    'RFC': h.rfc,
-    'NG Status': h.ngStatus,
-    'SARAL Status': h.saralStatus,
-    'Photo Uploaded': h.meterPhoto ? 'Yes' : 'No',
-  }));
+  const headers = [
+    'Acct Type','BP No.','Customer Name','Mobile','House No.','Area','City',
+    'Meter No.','Meter Date','GC Status','GI Status','RFC','NG Status','SARAL Status','Photo Uploaded',
+  ];
 
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const rows = houses.map(h => [
+    h.acctType, h.bpNo, h.name, h.mobile, h.houseNo, h.area, h.city,
+    h.meterNo, h.meterDate, h.gcStatus, h.giStatus, h.rfc, h.ngStatus, h.saralStatus,
+    h.meterPhoto ? 'Yes' : 'No',
+  ]);
 
-  // Set column widths
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
   ws['!cols'] = [
-    { wch: 12 }, // Acct Type
-    { wch: 14 }, // BP No.
-    { wch: 22 }, // Customer Name
+    { wch: 10 }, // Acct Type
+    { wch: 16 }, // BP No
+    { wch: 20 }, // Name
     { wch: 14 }, // Mobile
-    { wch: 18 }, // House No.
-    { wch: 12 }, // Area
-    { wch: 12 }, // City
-    { wch: 16 }, // Meter No.
+    { wch: 14 }, // House No
+    { wch: 10 }, // Area
+    { wch: 10 }, // City
+    { wch: 16 }, // Meter No
     { wch: 12 }, // Meter Date
-    { wch: 14 }, // GC Status
-    { wch: 12 }, // GI Status
-    { wch: 10 }, // RFC
+    { wch: 12 }, // GC Status
+    { wch: 10 }, // GI Status
+    { wch: 8  }, // RFC
     { wch: 12 }, // NG Status
     { wch: 16 }, // SARAL Status
-    { wch: 16 }, // Photo Uploaded
+    { wch: 12 }, // Photo
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'House Connections');
-  downloadWorkbook(wb, `GP_PMS_HouseData_${getToday()}.xlsx`);
+  download(wb, `GP_PMS_HouseData_${today()}.xlsx`);
 }
 
+/* ══════════════════════════════════════
+   2. Export Stock Statement
+   ══════════════════════════════════════ */
 export function exportStockData(stock) {
+  const title   = [['OXYGEN PROTECH PVT LTD — Stock Statement']];
+  const headers = [['Sr.','Material','Unit','Opening Stock','Received Qty','Issued Qty','Return Qty','Net Used','Physical On Site','Physical In Store','Required','Status']];
+
   const rows = stock.map((s, i) => {
-    const netUsed = s.issued - s.returned;
-    return {
-      'Sr.': i + 1,
-      'Material': s.material,
-      'Unit': s.unit,
-      'Opening Stock': s.opening,
-      'Received Qty': s.received,
-      'Issued Qty': s.issued,
-      'Return Qty': s.returned,
-      'Net Used': netUsed,
-      'Physical On Site': s.physical_site,
-      'Physical In Store': s.physical_store,
-      'Required': s.required,
-    };
+    const netUsed = (s.issued ?? s.issued) - (s.ret ?? s.returned ?? 0);
+    const status  = s.status?.label ?? s.status ?? '';
+    return [
+      i + 1,
+      s.mat ?? s.material,
+      s.unit,
+      s.open ?? s.opening,
+      s.recv ?? s.received,
+      s.issued,
+      s.ret ?? s.returned,
+      netUsed,
+      s.onSite ?? s.physical_site,
+      s.inStore ?? s.physical_store,
+      s.req ?? s.required,
+      status,
+    ];
   });
 
-  const ws = XLSX.utils.json_to_sheet(rows);
+  const ws = XLSX.utils.aoa_to_sheet([...title, ...headers, ...rows]);
+
+  // Merge title across all 12 columns: A1:L1
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }];
 
   ws['!cols'] = [
-    { wch: 6 },  // Sr.
-    { wch: 28 }, // Material
-    { wch: 8 },  // Unit
-    { wch: 16 }, // Opening Stock
-    { wch: 14 }, // Received Qty
-    { wch: 12 }, // Issued Qty
-    { wch: 12 }, // Return Qty
-    { wch: 12 }, // Net Used
-    { wch: 18 }, // Physical On Site
-    { wch: 18 }, // Physical In Store
-    { wch: 12 }, // Required
+    { wch: 5  }, // Sr
+    { wch: 25 }, // Material
+    { wch: 7  }, // Unit
+    { wch: 10 }, // Opening
+    { wch: 10 }, // Received
+    { wch: 10 }, // Issued
+    { wch: 10 }, // Returned
+    { wch: 10 }, // Net Used
+    { wch: 10 }, // On Site
+    { wch: 10 }, // In Store
+    { wch: 10 }, // Required
+    { wch: 10 }, // Status
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Stock Statement');
-  downloadWorkbook(wb, `GP_PMS_Stock_${getToday()}.xlsx`);
+  download(wb, `GP_PMS_Stock_${today()}.xlsx`);
+}
+
+/* ══════════════════════════════════════
+   3. Export PE Laying Data
+   ══════════════════════════════════════ */
+export function exportPELaying(data) {
+  const headers = [[
+    'Sr.','Laying Date','Testing Date','Charging Date','RA Bill No.','Report No.','Work Status','Area',
+    'Coil No.','Ø32mm OC','Ø32mm Boring','Ø32mm Total','Ø63mm OC','Ø63mm Boring','Ø63mm HDD','Ø63mm Total','Ø90mm Total','Ø125mm Total',
+  ]];
+
+  const rows = data.map(r => [
+    r.sr, r.layDate, r.testDate, r.chargeDate, r.raBill, r.reportNo, r.status, r.area, r.coil,
+    r.d32oc, r.d32b, r.d32oc + r.d32b,
+    r.d63oc, r.d63b, r.d63hdd, r.d63oc + r.d63b + r.d63hdd,
+    r.d90tot, r.d125tot,
+  ]);
+
+  /* Totals row */
+  const tot = data.reduce((acc, r) => ({
+    d32oc: acc.d32oc + r.d32oc,
+    d32b:  acc.d32b  + r.d32b,
+    d63oc: acc.d63oc + r.d63oc,
+    d63b:  acc.d63b  + r.d63b,
+    d63h:  acc.d63h  + r.d63hdd,
+    d90:   acc.d90   + r.d90tot,
+    d125:  acc.d125  + r.d125tot,
+  }), { d32oc:0,d32b:0,d63oc:0,d63b:0,d63h:0,d90:0,d125:0 });
+
+  const totalRow = [
+    '','','','','','','','TOTAL','',
+    tot.d32oc, tot.d32b, tot.d32oc+tot.d32b,
+    tot.d63oc, tot.d63b, tot.d63h, tot.d63oc+tot.d63b+tot.d63h,
+    tot.d90, tot.d125,
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows, totalRow]);
+
+  ws['!cols'] = [
+    { wch: 5  },{ wch: 12 },{ wch: 12 },{ wch: 14 },{ wch: 14 },
+    { wch: 10 },{ wch: 10 },{ wch: 20 },{ wch: 18 },
+    { wch: 10 },{ wch: 12 },{ wch: 12 },
+    { wch: 10 },{ wch: 12 },{ wch: 10 },{ wch: 12 },
+    { wch: 12 },{ wch: 12 },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Data');
+  download(wb, `GP_PMS_PELaying_${today()}.xlsx`);
 }

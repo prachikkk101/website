@@ -1,84 +1,76 @@
 // src/components/HouseTable.jsx
 import { useState, useMemo } from 'react';
-import { houses, areas, societies, acctTypes } from '../data/houses';
+import { houses, areas, acctTypes } from '../data/houses';
 import MeterModal from './MeterModal';
 import { exportHouseData } from '../utils/exportExcel';
 
-const STATUS_BADGE = {
-  'Done': 'badge-done',
-  'Done 3.0': 'badge-done',
-  'Pending': 'badge-pending',
+/* ── Status Badge ── */
+const STATUS_MAP = {
+  'Done':        'badge-done',
+  'Done 3.0':    'badge-done',
+  'Pending':     'badge-pending',
   'Not Updated': 'badge-updated',
-  'RFC': 'badge-rfc',
-  '-': '',
+  'RFC':         'badge-rfc',
+  '-':           '',
+  '—':           '',
 };
 
 function StatusBadge({ val }) {
-  if (!val || val === '-') return <span className="text-gray-400">—</span>;
-  const cls = STATUS_BADGE[val] || 'badge-done';
-  return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-semibold whitespace-nowrap ${cls}`}>
-      {val}
-    </span>
-  );
+  if (!val || val === '-' || val === '—') return <span style={{ color: '#cbd5e1' }}>—</span>;
+  const cls = STATUS_MAP[val] ?? 'badge-done';
+  return <span className={`badge ${cls}`}>{val}</span>;
 }
 
 const PAGE_SIZE = 8;
 
+/* ── Column widths for filter inputs ── */
+const INPUT_WIDTHS = { acct: 160, agency: 220, area: 160, bp: 130, house: 160, meter: 120 };
+
 export default function HouseTable() {
-  const [view, setView] = useState('houses'); // 'houses' | 'stock'
-  const [filterAcct, setFilterAcct] = useState('');
-  const [filterArea, setFilterArea] = useState('');
-  const [filterSociety, setFilterSociety] = useState('');
-  const [filterBP, setFilterBP] = useState('');
-  const [filterHouse, setFilterHouse] = useState('');
-  const [filterMeter, setFilterMeter] = useState('');
-  const [page, setPage] = useState(1);
-  const [modalHouse, setModalHouse] = useState(null);
-
-  const filtered = useMemo(() => {
-    return houses.filter(h => {
-      if (filterAcct && h.acctType !== filterAcct) return false;
-      if (filterArea && h.area !== filterArea) return false;
-      if (filterBP && !h.bpNo.includes(filterBP)) return false;
-      if (filterHouse && !h.houseNo.toLowerCase().includes(filterHouse.toLowerCase())) return false;
-      if (filterMeter && !h.meterNo.includes(filterMeter)) return false;
-      return true;
-    });
-  }, [filterAcct, filterArea, filterBP, filterHouse, filterMeter]);
-
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const [view,          setView]          = useState('houses');
+  const [filterAcct,    setFilterAcct]    = useState('');
+  const [filterArea,    setFilterArea]    = useState('');
+  const [filterBP,      setFilterBP]      = useState('');
+  const [filterHouse,   setFilterHouse]   = useState('');
+  const [filterMeter,   setFilterMeter]   = useState('');
+  const [page,          setPage]          = useState(1);
+  const [modalHouse,    setModalHouse]    = useState(null);
 
   function reset() { setPage(1); }
 
+  const filtered = useMemo(() => houses.filter(h => {
+    if (filterAcct  && h.acctType !== filterAcct) return false;
+    if (filterArea  && h.area     !== filterArea)  return false;
+    if (filterBP    && !h.bpNo.includes(filterBP))         return false;
+    if (filterHouse && !h.houseNo.toLowerCase().includes(filterHouse.toLowerCase())) return false;
+    if (filterMeter && !h.meterNo.includes(filterMeter))   return false;
+    return true;
+  }), [filterAcct, filterArea, filterBP, filterHouse, filterMeter]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
   return (
     <div>
-      {/* Toggle */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex items-center gap-0 rounded-lg overflow-hidden border" style={{ borderColor: '#2d6a27' }}>
+      {/* ── Toggle + Export ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ display: 'flex' }}>
           <button
             onClick={() => { setView('houses'); reset(); }}
-            className="px-4 py-2 text-sm font-semibold transition-all flex items-center gap-2"
-            style={view === 'houses'
-              ? { background: '#2d6a27', color: 'white' }
-              : { background: 'white', color: '#2d6a27' }
-            }
+            className={`btn ${view === 'houses' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ borderRadius: '5px 0 0 5px' }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
             </svg>
             House Connections
           </button>
           <button
             onClick={() => { setView('stock'); reset(); }}
-            className="px-4 py-2 text-sm font-semibold transition-all flex items-center gap-2 border-l"
-            style={view === 'stock'
-              ? { background: '#2d6a27', color: 'white', borderColor: '#2d6a27' }
-              : { background: 'white', color: '#2d6a27', borderColor: '#2d6a27' }
-            }
+            className={`btn ${view === 'stock' ? 'btn-primary' : 'btn-outline'}`}
+            style={{ borderRadius: '0 5px 5px 0', borderLeft: 'none' }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
             </svg>
             Stock Status
@@ -87,13 +79,12 @@ export default function HouseTable() {
 
         <button
           onClick={() => exportHouseData(filtered)}
-          className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
-          style={{ background: '#2d6a27' }}
+          className="btn btn-outline"
+          style={{ marginLeft: 'auto' }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/>
-            <line x1="12" y1="15" x2="12" y2="3"/>
+            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
           </svg>
           Export Excel
         </button>
@@ -101,108 +92,110 @@ export default function HouseTable() {
 
       {view === 'houses' ? (
         <>
-          {/* Filters */}
-          <div className="card p-4 mb-4 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {/* ── Filter Bar ── */}
+          <div className="card section-block" style={{ padding: '10px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
               <select
+                className="gp-select-dark"
+                style={{ width: INPUT_WIDTHS.acct }}
                 value={filterAcct}
                 onChange={e => { setFilterAcct(e.target.value); reset(); }}
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
               >
                 <option value="">-- Account Type --</option>
                 {acctTypes.map(a => <option key={a}>{a}</option>)}
               </select>
+
               <select
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
-                defaultValue=""
+                className="gp-select-dark"
+                style={{ width: INPUT_WIDTHS.agency }}
               >
-                <option value="">OXYGEN PROTECH PVT LTD</option>
-                {societies.map(s => <option key={s}>{s}</option>)}
+                <option>OXYGEN PROTECH PVT LTD</option>
               </select>
+
               <select
+                className="gp-select-dark"
+                style={{ width: INPUT_WIDTHS.area }}
                 value={filterArea}
                 onChange={e => { setFilterArea(e.target.value); reset(); }}
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
               >
                 <option value="">Select Area</option>
                 {areas.map(a => <option key={a}>{a}</option>)}
               </select>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               <input
-                type="text"
+                className="gp-input-dark"
+                style={{ width: INPUT_WIDTHS.bp }}
                 placeholder="BP Number"
                 value={filterBP}
                 onChange={e => { setFilterBP(e.target.value); reset(); }}
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
               />
               <input
-                type="text"
+                className="gp-input-dark"
+                style={{ width: INPUT_WIDTHS.house }}
                 placeholder="House No / Address"
                 value={filterHouse}
                 onChange={e => { setFilterHouse(e.target.value); reset(); }}
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
               />
               <input
-                type="text"
+                className="gp-input-dark"
+                style={{ width: INPUT_WIDTHS.meter }}
                 placeholder="Meter No."
                 value={filterMeter}
                 onChange={e => { setFilterMeter(e.target.value); reset(); }}
-                className="px-3 py-2.5 rounded-lg border text-sm font-medium focus:outline-none focus:ring-2 focus:ring-green-600"
-                style={{ background: '#1f2937', color: 'white', borderColor: '#374151' }}
               />
+              <button
+                className="btn btn-primary"
+                onClick={reset}
+              >Search</button>
             </div>
           </div>
 
           {/* Showing info */}
-          <p className="text-sm text-gray-500 mb-2">
-            Showing page {page} of {totalPages} — {filtered.length} entries
+          <p style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+            Showing page {page} of {Math.max(1, totalPages)} — {filtered.length} entries
           </p>
 
-          {/* Table */}
-          <div className="card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+          {/* ── Table ── */}
+          <div className="card section-block" style={{ overflow: 'hidden' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="gp-table">
                 <thead>
-                  <tr style={{ background: '#2d6a27' }}>
-                    {['Acct', 'BP No.', 'Name', 'Mobile', 'House No.', 'Area', 'City', 'Meter No.', 'Meter Date', 'GC Status', 'GI Status', 'RFC', 'NG Status', 'SARAL', 'Photo', 'Action'].map(col => (
-                      <th key={col} className="px-3 py-3 text-left text-xs font-bold text-white whitespace-nowrap">{col}</th>
+                  <tr>
+                    {['Acct','BP No.','Name','Mobile','House No.','Area','City','Meter No.','Meter Date','GC Status','GI Status','RFC','NG Status','SARAL','Photo','Action'].map(col => (
+                      <th key={col}>{col}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {paged.map((h, i) => (
-                    <tr key={h.id} className={`tbl-row border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-                      <td className="px-3 py-2.5 text-xs font-medium text-gray-600 whitespace-nowrap">{h.acctType}</td>
-                      <td className="px-3 py-2.5 font-semibold text-gray-800 whitespace-nowrap">{h.bpNo}</td>
-                      <td className="px-3 py-2.5 font-bold text-gray-900 whitespace-nowrap">{h.name}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{h.mobile}</td>
-                      <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{h.houseNo}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{h.area}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{h.city}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{h.meterNo}</td>
-                      <td className="px-3 py-2.5 text-gray-600 whitespace-nowrap">{h.meterDate}</td>
-                      <td className="px-3 py-2.5"><StatusBadge val={h.gcStatus} /></td>
-                      <td className="px-3 py-2.5"><StatusBadge val={h.giStatus} /></td>
-                      <td className="px-3 py-2.5"><StatusBadge val={h.rfc} /></td>
-                      <td className="px-3 py-2.5"><StatusBadge val={h.ngStatus} /></td>
-                      <td className="px-3 py-2.5"><StatusBadge val={h.saralStatus} /></td>
-                      <td className="px-3 py-2.5 text-center">
+                  {paged.map(h => (
+                    <tr key={h.id}>
+                      <td style={{ fontSize: 11, color: '#64748b' }}>{h.acctType}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.bpNo}</td>
+                      <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h.name}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{h.mobile}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{h.houseNo}</td>
+                      <td>{h.area}</td>
+                      <td>{h.city}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.meterNo}</td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{h.meterDate}</td>
+                      <td><StatusBadge val={h.gcStatus}    /></td>
+                      <td><StatusBadge val={h.giStatus}    /></td>
+                      <td><StatusBadge val={h.rfc}         /></td>
+                      <td><StatusBadge val={h.ngStatus}    /></td>
+                      <td><StatusBadge val={h.saralStatus} /></td>
+                      <td style={{ textAlign: 'center' }}>
                         {h.meterPhoto
-                          ? <span className="text-green-600">✓</span>
-                          : <span className="text-red-400">✗</span>
+                          ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>
+                          : <span style={{ color: '#dc2626', fontWeight: 700 }}>✗</span>
                         }
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <button
-                          onClick={() => setModalHouse(h)}
-                          className="px-3 py-1 rounded-lg text-xs font-semibold text-white transition-all hover:opacity-80 whitespace-nowrap"
-                          style={{ background: '#2d6a27' }}
+                          onClick={e => { e.stopPropagation(); setModalHouse(h); }}
+                          className="btn btn-primary btn-sm"
+                          style={{ borderRadius: 4 }}
                         >
                           Meter Details
                         </button>
@@ -211,8 +204,8 @@ export default function HouseTable() {
                   ))}
                   {paged.length === 0 && (
                     <tr>
-                      <td colSpan={16} className="px-4 py-10 text-center text-gray-400">
-                        No records found matching filters.
+                      <td colSpan={16} style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
+                        No records match the current filters.
                       </td>
                     </tr>
                   )}
@@ -220,46 +213,21 @@ export default function HouseTable() {
               </table>
             </div>
 
-            {/* Pagination */}
+            {/* ── Pagination ── */}
             {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 py-4 px-4 border-t border-gray-100">
-                <button
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border disabled:opacity-40 hover:bg-gray-50 transition-all"
-                  style={{ borderColor: '#2d6a27', color: '#2d6a27' }}
-                >
-                  ← Prev
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setPage(p)}
-                    className="w-8 h-8 rounded-lg text-sm font-semibold transition-all"
-                    style={p === page
-                      ? { background: '#2d6a27', color: 'white' }
-                      : { background: 'white', color: '#2d6a27', border: '1px solid #2d6a27' }
-                    }
-                  >
-                    {p}
-                  </button>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
+                <button className="page-btn" onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}>←</button>
+                {Array.from({ length: totalPages }, (_, i) => i+1).map(p => (
+                  <button key={p} className={`page-btn${p===page?' active':''}`} onClick={() => setPage(p)}>{p}</button>
                 ))}
-                <button
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium border disabled:opacity-40 hover:bg-gray-50 transition-all"
-                  style={{ borderColor: '#2d6a27', color: '#2d6a27' }}
-                >
-                  Next →
-                </button>
+                <button className="page-btn" onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={page===totalPages}>→</button>
               </div>
             )}
           </div>
         </>
       ) : (
-        <div className="card p-8 flex items-center justify-center text-gray-400">
-          <p>Switch to <strong className="text-gray-700">Stock Status</strong> view is shown in the Inventory page. <br/>
-          Use the top nav to go to <strong className="text-gray-700">Inventory</strong>.</p>
+        <div className="card" style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+          Stock Status is shown in the <strong style={{ color: '#374151' }}>Inventory</strong> section. Use the top nav to navigate there.
         </div>
       )}
 
@@ -268,10 +236,7 @@ export default function HouseTable() {
         <MeterModal
           house={modalHouse}
           onClose={() => setModalHouse(null)}
-          onSave={(data) => {
-            console.log('Saved meter data:', data);
-            setModalHouse(null);
-          }}
+          onSave={() => setModalHouse(null)}
         />
       )}
     </div>

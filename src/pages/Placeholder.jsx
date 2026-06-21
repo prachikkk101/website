@@ -1,25 +1,17 @@
 // src/pages/Placeholder.jsx
-// Placeholder for pages not yet implemented
-
 export default function Placeholder({ title, icon }) {
   return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <div
-        className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6"
-        style={{ background: '#e8f5e4' }}
-      >
-        <span className="text-4xl">{icon || '🔧'}</span>
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'80px 24px', textAlign:'center' }}>
+      <div style={{ width:72, height:72, borderRadius:16, background:'#e8f5e4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, marginBottom:20 }}>
+        {icon ?? '🔧'}
       </div>
-      <h2 className="text-2xl font-bold text-gray-700 mb-2">{title}</h2>
-      <p className="text-gray-400 text-sm max-w-xs">
-        This module is under development. Come back soon for the full feature set.
+      <h2 style={{ fontSize:22, fontWeight:700, color:'#374151', margin:'0 0 8px' }}>{title}</h2>
+      <p style={{ fontSize:13, color:'#94a3b8', maxWidth:280, margin:'0 0 24px' }}>
+        This module is currently under development. Full features coming soon.
       </p>
-      <div
-        className="mt-6 px-6 py-2.5 rounded-xl text-sm font-semibold"
-        style={{ background: '#2d6a27', color: 'white' }}
-      >
+      <span style={{ padding:'8px 20px', background:'#2d6a27', color:'#fff', borderRadius:8, fontSize:13, fontWeight:600 }}>
         Coming Soon
-      </div>
+      </span>
     </div>
   );
 }
