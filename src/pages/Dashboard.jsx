@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import { kpiData, sitesData, housesDoneThisMonth, dailyEntries, activeWorkers, lowStockAlerts } from '../data/dashboard';
 import { useSite } from '../context/SiteContext';
 
-const ACCT_TABS = ['Domestic', 'Commercial', 'Industrial', 'CNG'];
+const ACCT_TABS = ['Domestic', 'Commercial', 'Industrial'];
 const DATE_RANGES = ['Last 30 Days', 'Last 90 Days', 'Last 6 Months', 'Custom'];
 
 /* ── KPI Tiles ── */

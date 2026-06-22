@@ -20,13 +20,41 @@ function applyHeaderStyle(ws, headerRow, cols) {
 /* ══════════════════════════════════════
    1. Export House Connections
    ══════════════════════════════════════ */
-export function exportHouseData(houses) {
+function parseEntryDate(dateStr) {
+  if (!dateStr || dateStr === '-' || dateStr === '—') return null;
+  if (dateStr.includes('-') && dateStr.split('-')[0].length === 4) {
+    return dateStr;
+  }
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      const day = parts[0].padStart(2, '0');
+      const month = parts[1].padStart(2, '0');
+      const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+      return `${year}-${month}-${day}`;
+    }
+  }
+  return null;
+}
+
+export function exportHouseData(houses, fromDate, toDate) {
   const headers = [
     'Acct Type','BP No.','Customer Name','Mobile','House No.','Area','City',
     'Meter No.','Meter Date','GC Status','GI Status','RFC','NG Status','SARAL Status','Photo Uploaded',
   ];
 
-  const rows = houses.map(h => [
+  let filteredHouses = houses;
+  if (fromDate || toDate) {
+    filteredHouses = houses.filter(h => {
+      const entryDate = h.entryDate || parseEntryDate(h.meterDate);
+      if (!entryDate) return false;
+      if (fromDate && entryDate < fromDate) return false;
+      if (toDate && entryDate > toDate) return false;
+      return true;
+    });
+  }
+
+  const rows = filteredHouses.map(h => [
     h.acctType, h.bpNo, h.name, h.mobile, h.houseNo, h.area, h.city,
     h.meterNo, h.meterDate, h.gcStatus, h.giStatus, h.rfc, h.ngStatus, h.saralStatus,
     h.meterPhoto ? 'Yes' : 'No',
@@ -54,7 +82,12 @@ export function exportHouseData(houses) {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'House Connections');
-  download(wb, `GP_PMS_HouseData_${today()}.xlsx`);
+
+  const filename = (fromDate && toDate)
+    ? `GP_PMS_HouseData_${fromDate}_to_${toDate}.xlsx`
+    : `GP_PMS_HouseData_${today()}.xlsx`;
+
+  download(wb, filename);
 }
 
 /* ══════════════════════════════════════

@@ -2,13 +2,21 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useSite, SITE_OPTIONS } from '../context/SiteContext';
+import ToastContainer from './Toast';
 
 const navItems = [
   { label: 'GA Dashboard',     to: '/dashboard' },
-  { label: 'Customer On-Board',to: '/customers', dropdown: true },
-  { label: 'Inventory',        to: '/inventory', dropdown: true },
+  {
+    label: 'Customer On-Board',
+    to: '/customers',
+    dropdown: true,
+    submenu: [
+      { label: 'House Connections', to: '/customers' },
+      { label: 'I&C Work',         to: '/ic-work' },
+    ]
+  },
+  { label: 'Inventory',        to: '/inventory' },
   { label: 'PE Laying',        to: '/pe-laying' },
-  { label: 'I&C Work',         to: '/ic-work' },
   { label: 'Reports',          to: '/reports' },
   { label: 'Masters',          to: '/masters' },
 ];
@@ -49,6 +57,7 @@ export default function Layout() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f4f0' }}>
+      <ToastContainer />
       {/* ── Top Navbar ── */}
       <header style={{ background: '#1f4e1a', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', height: 48 }}>
@@ -59,17 +68,49 @@ export default function Layout() {
           </div>
 
           {/* Nav tabs */}
-          <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'hidden' }}>
-            {navItems.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
-              >
-                {item.label}
-                {item.dropdown && <ChevronDown />}
-              </NavLink>
-            ))}
+          <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'visible' }}>
+            {navItems.map(item => {
+              if (item.submenu) {
+                const isSubActive = item.submenu.some(sub => location.pathname === sub.to);
+                return (
+                  <div
+                    key={item.label}
+                    className="nav-tab-container"
+                    style={{ position: 'relative', display: 'flex', alignItems: 'stretch' }}
+                  >
+                    <NavLink
+                      to={item.to}
+                      className={() => `nav-tab${isSubActive ? ' active' : ''}`}
+                    >
+                      {item.label}
+                      <ChevronDown />
+                    </NavLink>
+                    <div className="nav-dropdown-menu">
+                      {item.submenu.map(sub => (
+                        <NavLink
+                          key={sub.to}
+                          to={sub.to}
+                          className={({ isActive }) => `nav-dropdown-item${isActive ? ' active' : ''}`}
+                        >
+                          {sub.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
+                >
+                  {item.label}
+                  {item.dropdown && <ChevronDown />}
+                </NavLink>
+              );
+            })}
           </nav>
 
           {/* Right side */}

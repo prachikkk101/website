@@ -1,6 +1,8 @@
 // src/pages/Inventory.jsx
 import { useState, useMemo } from 'react';
-import stockData from '../data/stockData';
+import { useSite } from '../context/SiteContext';
+import { useToast } from '../components/Toast';
+import SlidePanel from '../components/SlidePanel';
 import { exportStockData } from '../utils/exportExcel';
 
 /* ── Status logic ── */
@@ -12,111 +14,93 @@ function getStatus(onSite, inStore, open, recv) {
   return             { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
 }
 
-/* ── Receive Stock Modal ── */
-const MAT_LIST = stockData.map(s => s.mat);
-const UNITS = ['Mtr','Pcs','Set','Nos','Kg'];
-
-function ReceiveModal({ onClose, onAdd }) {
-  const [mat,      setMat]      = useState('');
-  const [unit,     setUnit]     = useState('Mtr');
-  const [qty,      setQty]      = useState(1);
-  const [supplier, setSupplier] = useState('');
-  const [invoice,  setInvoice]  = useState('');
-  const [date,     setDate]     = useState(new Date().toISOString().split('T')[0]);
-
-  function submit() {
-    if (!mat || qty < 1) return;
-    onAdd({ mat, qty: Number(qty) });
-    onClose();
-  }
-
-  return (
-    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <div className="modal-header">
-          <span className="modal-title">Receive Stock</span>
-          <button className="modal-close" onClick={onClose}>×</button>
-        </div>
-        <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-          <div>
-            <label style={LBL}>Material</label>
-            <select className="gp-select" style={{ width: '100%' }} value={mat} onChange={e => setMat(e.target.value)}>
-              <option value="">— Select Material —</option>
-              {MAT_LIST.map(m => <option key={m}>{m}</option>)}
-            </select>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={LBL}>Unit</label>
-              <select className="gp-select" style={{ width: '100%' }} value={unit} onChange={e => setUnit(e.target.value)}>
-                {UNITS.map(u => <option key={u}>{u}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={LBL}>Qty Received</label>
-              <input type="number" className="gp-input" style={{ width: '100%' }} min={1} value={qty} onChange={e => setQty(e.target.value)} />
-            </div>
-          </div>
-          <div>
-            <label style={LBL}>Supplier</label>
-            <input className="gp-input" style={{ width: '100%' }} placeholder="Supplier name" value={supplier} onChange={e => setSupplier(e.target.value)} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            <div>
-              <label style={LBL}>Invoice No.</label>
-              <input className="gp-input" style={{ width: '100%' }} placeholder="INV-2025-001" value={invoice} onChange={e => setInvoice(e.target.value)} />
-            </div>
-            <div>
-              <label style={LBL}>Date</label>
-              <input type="date" className="gp-input" style={{ width: '100%' }} value={date} onChange={e => setDate(e.target.value)} />
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn" style={{ flex:1, background:'#f1f5f9', color:'#374151' }} onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" style={{ flex:1 }} onClick={submit}>Log Receipt</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-const LBL = { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 };
-
-/* ══════════════ MAIN ══════════════ */
 export default function Inventory() {
-  const [showModal,     setShowModal]     = useState(false);
-  const [extraReceived, setExtraReceived] = useState({});
+  const { stock, setStock } = useSite();
+  const { showToast } = useToast();
 
-  const rows = useMemo(() => stockData.map(s => {
-    const totalRecv = s.recv + (extraReceived[s.sr] ?? 0);
-    const netUsed   = s.issued - s.ret;
-    const status    = getStatus(s.onSite, s.inStore, s.open, totalRecv);
-    const onSitePct = (s.open + totalRecv) > 0 ? (s.onSite / (s.open + totalRecv)) * 100 : 0;
-    return { ...s, recv: totalRecv, netUsed, status, onSitePct };
-  }), [extraReceived]);
+  const [showModal, setShowModal] = useState(false);
 
-  function handleReceive({ mat, qty }) {
-    const found = stockData.find(s => s.mat === mat);
-    if (found) setExtraReceived(prev => ({ ...prev, [found.sr]: (prev[found.sr] ?? 0) + qty }));
+  // Form State
+  const [challan, setChallan] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [site, setSite] = useState('');
+  const [receivedQtys, setReceivedQtys] = useState({});
+  const [notes, setNotes] = useState('');
+  const [errors, setErrors] = useState({});
+
+  function resetForm() {
+    setChallan('');
+    setDate(new Date().toISOString().split('T')[0]);
+    setSite('');
+    setReceivedQtys({});
+    setNotes('');
+    setErrors({});
   }
+
+  const rows = useMemo(() => {
+    return stock.map(s => {
+      const netUsed   = s.issued - s.ret;
+      const status    = getStatus(s.onSite, s.inStore, s.open, s.recv);
+      const onSitePct = (s.open + s.recv) > 0 ? (s.onSite / (s.open + s.recv)) * 100 : 0;
+      return { ...s, netUsed, status, onSitePct };
+    });
+  }, [stock]);
 
   /* Totals row */
-  const totals = useMemo(() => rows.reduce((acc, r) => ({
-    open:    acc.open    + r.open,
-    recv:    acc.recv    + r.recv,
-    issued:  acc.issued  + r.issued,
-    ret:     acc.ret     + r.ret,
-    netUsed: acc.netUsed + r.netUsed,
-    onSite:  acc.onSite  + r.onSite,
-    inStore: acc.inStore + r.inStore,
-    req:     acc.req     + r.req,
-  }), { open:0, recv:0, issued:0, ret:0, netUsed:0, onSite:0, inStore:0, req:0 }), [rows]);
+  const totals = useMemo(() => {
+    return rows.reduce((acc, r) => ({
+      open:    acc.open    + r.open,
+      recv:    acc.recv    + r.recv,
+      issued:  acc.issued  + r.issued,
+      ret:     acc.ret     + r.ret,
+      netUsed: acc.netUsed + r.netUsed,
+      onSite:  acc.onSite  + r.onSite,
+      inStore: acc.inStore + r.inStore,
+      req:     acc.req     + r.req,
+    }), { open:0, recv:0, issued:0, ret:0, netUsed:0, onSite:0, inStore:0, req:0 });
+  }, [rows]);
 
   function onSiteColor(r) {
     if (r.onSitePct < 20) return '#dc2626';
     if (r.onSitePct < 40) return '#d97706';
     return '#1e293b';
+  }
+
+  function handleQtyChange(sr, val) {
+    setReceivedQtys(prev => ({
+      ...prev,
+      [sr]: val
+    }));
+  }
+
+  function handleSave() {
+    const newErrors = {};
+    if (!challan.trim()) newErrors.challan = 'Challan / DC Number is required';
+    if (!date) newErrors.date = 'Date Received is required';
+    if (!site) newErrors.site = 'Site is required';
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      showToast('⚠️ Please fill in all required fields');
+      return;
+    }
+
+    // Update global stock
+    setStock(prevStock => prevStock.map(item => {
+      const qty = Number(receivedQtys[item.sr] || 0);
+      if (qty > 0) {
+        return {
+          ...item,
+          recv: item.recv + qty,
+          inStore: item.inStore + qty
+        };
+      }
+      return item;
+    }));
+
+    showToast('✓ Stock received and updated');
+    resetForm();
+    setShowModal(false);
   }
 
   return (
@@ -213,7 +197,96 @@ export default function Inventory() {
         ℹ️ Materials used per house entry are automatically deducted from Issued Qty.
       </p>
 
-      {showModal && <ReceiveModal onClose={() => setShowModal(false)} onAdd={handleReceive} />}
+      {/* Slide-in panel for Receive Stock */}
+      <SlidePanel
+        isOpen={showModal}
+        onClose={() => { resetForm(); setShowModal(false); }}
+        title="Receive New Stock"
+      >
+        <div>
+          <div className="panel-section-title">Log Receipt Details</div>
+          <div className="panel-field">
+            <label className="panel-label">Challan / DC Number*</label>
+            <input
+              type="text"
+              className={`panel-input${errors.challan ? ' error' : ''}`}
+              placeholder="Enter Challan/DC Number"
+              value={challan}
+              onChange={e => setChallan(e.target.value)}
+            />
+            {errors.challan && <p className="panel-error-text">{errors.challan}</p>}
+          </div>
+
+          <div className="panel-field">
+            <label className="panel-label">Date Received*</label>
+            <input
+              type="date"
+              className={`panel-input${errors.date ? ' error' : ''}`}
+              value={date}
+              onChange={e => setDate(e.target.value)}
+            />
+            {errors.date && <p className="panel-error-text">{errors.date}</p>}
+          </div>
+
+          <div className="panel-field">
+            <label className="panel-label">Site*</label>
+            <select
+              className={`panel-select${errors.site ? ' error' : ''}`}
+              value={site}
+              onChange={e => setSite(e.target.value)}
+            >
+              <option value="">Select Site</option>
+              {['Khanna', 'UE-II', 'PLA', 'Kohara'].map(s => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+            {errors.site && <p className="panel-error-text">{errors.site}</p>}
+          </div>
+        </div>
+
+        <div>
+          <div className="panel-section-title">Material Quantities</div>
+          {stock.map(item => (
+            <div className="panel-field" key={item.sr} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+              <div style={{ flex: 1 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.mat}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>({item.unit})</span>
+              </div>
+              <input
+                type="number"
+                className="panel-input"
+                style={{ width: 100 }}
+                min={0}
+                value={receivedQtys[item.sr] || 0}
+                onChange={e => handleQtyChange(item.sr, Number(e.target.value))}
+              />
+            </div>
+          ))}
+        </div>
+
+        <div>
+          <div className="panel-section-title">Additional Info</div>
+          <div className="panel-field">
+            <label className="panel-label">Notes / Remarks</label>
+            <textarea
+              className="panel-input"
+              style={{ height: 60, padding: '8px 10px', resize: 'vertical' }}
+              placeholder="Notes or remarks..."
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="panel-footer" style={{ margin: '0 -20px -20px', padding: '14px 20px' }}>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>* Required fields</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => { resetForm(); setShowModal(false); }} className="panel-btn-cancel">Cancel</button>
+            <button onClick={handleSave} className="panel-btn-save">Receive Stock</button>
+          </div>
+        </div>
+      </SlidePanel>
     </div>
   );
 }
