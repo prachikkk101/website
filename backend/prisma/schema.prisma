@@ -1,0 +1,357 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  SUPERVISOR
+  WORKER
+  VIEWER
+}
+
+enum AccountType {
+  DOMESTIC
+  COMMERCIAL
+  INDUSTRIAL
+  CNG
+}
+
+enum PEStatus {
+  LAYING
+  HDD
+  JOINT
+}
+
+enum ICStatus {
+  Done
+  Pending
+}
+
+model User {
+  id                 String                 @id @default(uuid())
+  email              String                 @unique
+  name               String
+  passwordHash       String
+  role               Role                   @default(WORKER)
+  emailVerified      Boolean                @default(false)
+  verificationCode   String?                // For email verification OTP
+  verificationExpiry DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+  
+  // Relations
+  assignedSites      SiteUser[]
+  markedAttendance   Attendance[]           @relation("MarkedBy")
+  userAttendance     Attendance[]           @relation("UserAttendance")
+  consumptionLogs    ConsumptionLog[]
+  peReturnLogs       PEReturnLog[]
+  giReturnLogs       GIReturnLog[]
+  loggedTransactions InventoryTransaction[]
+  pngSupervised      PNGConnection[]        @relation("Supervisor")
+  meterInstallations MeterInstallation[]
+  auditLogs          AuditLog[]
+}
+
+model AdminWhitelist {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Site {
+  id           String                 @id @default(uuid())
+  name         String                 @unique // e.g. "Khanna — CA-09"
+  location     String
+  gaName       String                 // Gas Authority Name
+  chargeArea   String
+  zone         String
+  district     String
+  status       String                 @default("Active")
+  targetConns  Int                    @default(0)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  
+  // Relations
+  users        SiteUser[]
+  stock        SiteStock[]
+  consumption  ConsumptionLog[]
+  peReturns    PEReturnLog[]
+  giReturns    GIReturnLog[]
+  transactions InventoryTransaction[]
+  connections  PNGConnection[]
+  peLaying     PELaying[]
+  lmcWork      LMCWork[]
+  icWork       ICWork[]
+  toolReturns  ToolReturn[]
+  attendance   Attendance[]
+  meterRegisters MeterRegister[]
+}
+
+model SiteUser {
+  userId        String
+  siteId        String
+  roleOverride  Role?
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site          Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+
+  @@id([userId, siteId])
+}
+
+model MaterialItem {
+  id           String                 @id @default(uuid())
+  category     String                 // e.g. "PE", "GI", "METER", "TOOL"
+  name         String                 @unique // e.g. "25mm MDPE Pipe"
+  code         String?                @unique
+  unit         String                 // e.g. "Mtr", "Pcs", "Set"
+  createdAt    DateTime               @default(now())
+  
+  // Relations
+  siteStocks   SiteStock[]
+  transactions InventoryTransaction[]
+}
+
+model SiteStock {
+  siteId       String
+  materialId   String
+  openingQty   Decimal                @db.Decimal(10, 3) @default(0)
+  receivedQty  Decimal                @db.Decimal(10, 3) @default(0)
+  issuedQty    Decimal                @db.Decimal(10, 3) @default(0)
+  returnedQty  Decimal                @db.Decimal(10, 3) @default(0)
+  onSiteQty    Decimal                @db.Decimal(10, 3) @default(0)
+  inStoreQty   Decimal                @db.Decimal(10, 3) @default(0)
+  requiredQty  Decimal                @db.Decimal(10, 3) @default(0)
+  
+  site         Site                   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  material     MaterialItem           @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@id([siteId, materialId])
+}
+
+model ConsumptionLog {
+  id           String                 @id @default(uuid())
+  siteId       String
+  userId       String
+  date         DateTime               @db.Date
+  locationDesc String
+  workerName   String
+  quantities   Json                   // JSON mapping of consumed MaterialItem IDs and decimal quantities
+  createdAt    DateTime               @default(now())
+  
+  site         Site                   @relation(fields: [siteId], references: [id])
+  user         User                   @relation(fields: [userId], references: [id])
+}
+
+model PEReturnLog {
+  id         String                 @id @default(uuid())
+  siteId     String
+  userId     String
+  date       DateTime               @db.Date
+  bookRef    String?
+  quantities Json                   // JSON returns mapping
+  createdAt  DateTime               @default(now())
+  
+  site       Site                   @relation(fields: [siteId], references: [id])
+  user       User                   @relation(fields: [userId], references: [id])
+}
+
+model GIReturnLog {
+  id         String                 @id @default(uuid())
+  siteId     String
+  userId     String
+  date       DateTime               @db.Date
+  bookRef    String?
+  quantities Json                   // JSON returns mapping
+  createdAt  DateTime               @default(now())
+  
+  site       Site                   @relation(fields: [siteId], references: [id])
+  user       User                   @relation(fields: [userId], references: [id])
+}
+
+model InventoryTransaction {
+  id              String                 @id @default(uuid())
+  siteId          String
+  materialId      String
+  transactionType String                 // e.g. "RECEIVE", "ISSUE", "RETURN", "ADJUSTMENT"
+  qty             Decimal                @db.Decimal(10, 3)
+  date            DateTime               @db.Date
+  supplier        String?
+  invoiceNo       String?
+  loggedByUserId  String
+  createdAt       DateTime               @default(now())
+  
+  site            Site                   @relation(fields: [siteId], references: [id])
+  material        MaterialItem           @relation(fields: [materialId], references: [id])
+  user            User                   @relation(fields: [loggedByUserId], references: [id])
+}
+
+model PNGConnection {
+  id                String                 @id @default(uuid())
+  siteId            String
+  appNo             String                 @unique
+  bpNo              String?                @unique
+  accountType       AccountType            @default(DOMESTIC)
+  customerName      String
+  mobile            String
+  altMobile         String?
+  houseNo           String
+  address1          String
+  address2          String?
+  city              String
+  society           String?
+  supervisorId      String?
+  assignDateAgency  DateTime?              @db.Date
+  assignDateSuper   DateTime?              @db.Date
+  bpCreationDate    DateTime?              @db.Date
+  status            String                 @default("Pending")
+  plumbingDate      DateTime?              @db.Date
+  gcLength          Decimal?               @db.Decimal(10, 3)
+  giPipeMtr         Decimal?               @db.Decimal(10, 3)
+  tfCount           Int?                   @default(0)
+  ivCount           Int?                   @default(0)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  site              Site                   @relation(fields: [siteId], references: [id])
+  supervisor        User?                  @relation("Supervisor", fields: [supervisorId], references: [id])
+  meterInstallation MeterInstallation?
+  meterRegister     MeterRegister?
+}
+
+model MeterInstallation {
+  id                String                 @id @default(uuid())
+  pngConnectionId   String                 @unique
+  siteId            String
+  meterPhotoUrl     String?
+  meterMake         String
+  serialNo          String                 @unique
+  meterReading      Decimal                @db.Decimal(10, 3)
+  lhsRhs            String
+  installationDate  DateTime               @db.Date
+  installedByUserId String
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  connection        PNGConnection          @relation(fields: [pngConnectionId], references: [id], onDelete: Cascade)
+  user              User                   @relation(fields: [installedByUserId], references: [id])
+}
+
+model PELaying {
+  id           String                 @id @default(uuid())
+  siteId       String
+  layingDate   DateTime               @db.Date
+  testingDate  DateTime?              @db.Date
+  chargingDate DateTime?              @db.Date
+  raBillNo     String?
+  reportNo     String?
+  status       PEStatus               @default(LAYING)
+  area         String
+  coilNo       String
+  d32oc        Decimal                @db.Decimal(10, 3) @default(0)
+  d32b         Decimal                @db.Decimal(10, 3) @default(0)
+  d63oc        Decimal                @db.Decimal(10, 3) @default(0)
+  d63b         Decimal                @db.Decimal(10, 3) @default(0)
+  d63hdd       Decimal                @db.Decimal(10, 3) @default(0)
+  d90tot       Decimal                @db.Decimal(10, 3) @default(0)
+  d125tot      Decimal                @db.Decimal(10, 3) @default(0)
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  
+  site         Site                   @relation(fields: [siteId], references: [id])
+}
+
+model LMCWork {
+  id            String                 @id @default(uuid())
+  siteId        String
+  appNo         String                 @unique
+  bpNo          String?
+  customerName  String
+  address       String
+  lmcDate       DateTime?              @db.Date
+  regulatorNo   String?
+  meterSerialNo String?
+  remarks       String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  
+  site          Site                   @relation(fields: [siteId], references: [id])
+}
+
+model ICWork {
+  id                String                 @id @default(uuid())
+  siteId            String
+  customerName      String
+  address           String
+  icDate            DateTime?              @db.Date
+  regulatorPoutMbar Decimal                @db.Decimal(10, 2)
+  flowRateScmh      Decimal                @db.Decimal(10, 2)
+  regulatorNo       String?
+  meterSerialNo     String?
+  status            ICStatus               @default(Pending)
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  
+  site              Site                   @relation(fields: [siteId], references: [id])
+}
+
+model ToolReturn {
+  id             String                 @id @default(uuid())
+  siteId         String
+  date           DateTime               @db.Date
+  dcNo           String?
+  contractorName String
+  quantities     Json
+  createdAt      DateTime               @default(now())
+  
+  site           Site                   @relation(fields: [siteId], references: [id])
+}
+
+model Attendance {
+  id             String                 @id @default(uuid())
+  userId         String
+  siteId         String
+  date           DateTime               @db.Date
+  status         String
+  markedByUserId String
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  
+  user           User                   @relation("UserAttendance", fields: [userId], references: [id], onDelete: Cascade)
+  site           Site                   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  markedBy       User                   @relation("MarkedBy", fields: [markedByUserId], references: [id])
+
+  @@unique([userId, siteId, date])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  tableName String
+  recordId  String
+  action    String
+  oldValues Json?
+  newValues Json?
+  timestamp DateTime @default(now())
+  
+  user      User?    @relation(fields: [userId], references: [id])
+}
+
+model MeterRegister {
+  id                String         @id @default(uuid())
+  siteId            String
+  serialNo          String         @unique
+  source            String         // e.g. "AGP", "Plumber"
+  issuedToName      String?
+  status            String         // e.g. "Available", "Issued", "Installed", "Defective"
+  pngConnectionId   String?        @unique
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  site              Site           @relation(fields: [siteId], references: [id])
+  pngConnection     PNGConnection? @relation(fields: [pngConnectionId], references: [id])
+}
+
