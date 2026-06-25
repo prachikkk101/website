@@ -26,7 +26,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ── Health Check ──────────────────────────────────────────
-app.get('/health', (_req, res) => {
+app.get('/health', (_req: import('express').Request, res: import('express').Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 

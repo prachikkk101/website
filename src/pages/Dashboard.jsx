@@ -1,25 +1,25 @@
 // src/pages/Dashboard.jsx
-import { useState, useMemo } from 'react';
-import { kpiData, sitesData, housesDoneThisMonth, dailyEntries, activeWorkers, lowStockAlerts } from '../data/dashboard';
+import { useState, useEffect, useMemo } from 'react';
+import { adminService } from '../api/adminService';
 import { useSite } from '../context/SiteContext';
+import { useAuth } from '../context/AuthContext';
 
 const ACCT_TABS = ['Domestic', 'Commercial', 'Industrial'];
 const DATE_RANGES = ['Last 30 Days', 'Last 90 Days', 'Last 6 Months', 'Custom'];
 
 /* ── KPI Tiles ── */
 const KPI_KEYS = [
-  { key: 'applicationNo',   label: 'Application No.'  },
-  { key: 'bpNumber',        label: 'BP Number'        },
-  { key: 'feasibilityDone', label: 'Feasibility Done' },
-  { key: 'meterInstalled',  label: 'Meter Installed'  },
-  { key: 'giInstalled',     label: 'GI Installed'     },
-  { key: 'lmcDone',         label: 'LMC Done'         },
-  { key: 'jmrGasIn',        label: 'JMR & Gas-In'     },
+  { key: 'totalConns',       label: 'Total Connections' },
+  { key: 'doneConns',        label: 'Completed'         },
+  { key: 'rfcConns',         label: 'RFC'               },
+  { key: 'metersInstalled',  label: 'Meters Installed'  },
+  { key: 'lmcDone',          label: 'LMC Done'          },
+  { key: 'icDone',           label: 'I&C Done'          },
 ];
 
 function KpiGrid({ data }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 16 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: `repeat(${KPI_KEYS.length}, 1fr)`, gap: 8, marginBottom: 16 }}>
       {KPI_KEYS.map((k, i) => (
         <div
           key={k.key}
@@ -36,105 +36,46 @@ function KpiGrid({ data }) {
 
 /* ── Site Progress Bar ── */
 function SiteRow({ site }) {
-  const pct = Math.round((site.done / site.total) * 100);
-  const isLow = site.status === 'Low Stock';
-  const fillColor = isLow ? '#c0440a' : '#2d6a27';
+  const pct = site.targetConns > 0 ? Math.round((site.doneConns / site.targetConns) * 100) : 0;
+  const hasAlerts = site.lowStockAlerts && site.lowStockAlerts.length > 0;
+  const fillColor = hasAlerts ? '#c0440a' : '#2d6a27';
 
   return (
     <div style={{ padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
         <div>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', margin: 0 }}>{site.name}</p>
-          <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>{site.subtitle}</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', margin: 0 }}>{site.siteName}</p>
+          <p style={{ fontSize: 11, color: '#64748b', margin: 0 }}>{site.status}</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span className={`badge badge-${isLow ? 'critical' : 'done'}`} style={{ fontSize: 10, padding: '2px 7px' }}>
-            {site.status}
+          <span className={`badge badge-${hasAlerts ? 'critical' : 'done'}`} style={{ fontSize: 10, padding: '2px 7px' }}>
+            {hasAlerts ? 'Low Stock' : site.status}
           </span>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: isLow ? '#c0440a' : '#22c55e', display: 'inline-block' }} />
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: hasAlerts ? '#c0440a' : '#22c55e', display: 'inline-block' }} />
         </div>
       </div>
       <div className="progress-wrap">
         <div className="progress-fill" style={{ width: `${pct}%`, background: fillColor }} />
       </div>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 2 }}>
-        <span style={{ fontSize: 11, color: '#64748b' }}>{site.done}/{site.total}</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        <span style={{ fontSize: 11, color: '#64748b' }}>{pct}% complete</span>
+        <span style={{ fontSize: 11, color: '#64748b' }}>{site.doneConns}/{site.targetConns}</span>
       </div>
     </div>
   );
 }
 
-/* ── Houses Done This Month ── */
-function HousesDoneRow({ item }) {
-  const isLow = item.pct < 25;
-  const barColor = isLow ? '#c0440a' : '#2d6a27';
+/* ── Loading skeleton ── */
+function LoadingSkeleton() {
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize: 12, color: '#374151' }}>{item.site}</span>
-        <span style={{ fontSize: 12, fontWeight: 700, color: barColor }}>{item.pct}%</span>
-      </div>
-      <div className="progress-wrap" style={{ height: 8 }}>
-        <div className="progress-fill" style={{ width: `${item.pct}%`, background: barColor }} />
-      </div>
-    </div>
-  );
-}
-
-/* ── Bar Chart ── */
-function BarChart({ data }) {
-  const max = Math.max(...data.map(d => d.count));
-  const weekdayColors = ['#2d6a27','#2d6a27','#2d6a27','#2d6a27','#2d6a27'];
-  const weekendColors = ['#c0440a','#c0440a'];
-  const colors = [...weekdayColors, ...weekendColors];
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 90, marginTop: 8 }}>
-      {data.map((d, i) => {
-        const h = Math.round((d.count / max) * 78);
-        return (
-          <div key={d.day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-            <span style={{ fontSize: 10, color: '#64748b' }}>{d.count}</span>
-            <div
-              style={{
-                height: h, width: '100%',
-                background: colors[i] ?? '#2d6a27',
-                borderRadius: '3px 3px 0 0',
-                minHeight: 6, cursor: 'pointer',
-                transition: 'opacity 0.15s',
-              }}
-              title={`${d.day}: ${d.count}`}
-              onMouseEnter={e => e.currentTarget.style.opacity = '0.75'}
-              onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-            />
-            <span style={{ fontSize: 10, color: '#64748b' }}>{d.day}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ── Worker Card ── */
-const ROLE_COLORS = {
-  Supervisor: '#1f4e1a',
-  Plumber:    '#2d6a27',
-  Welder:     '#4a7c2f',
-  Labour:     '#64748b',
-};
-const LAST_SEEN_COLOR = { Today: '#2d6a27', Yesterday: '#94a3b8' };
-
-function WorkerCard({ worker }) {
-  const bg = ROLE_COLORS[worker.role] ?? '#64748b';
-  const lsColor = LAST_SEEN_COLOR[worker.lastSeen] ?? '#cbd5e1';
-  return (
-    <div className="worker-card">
-      <div className="worker-avatar" style={{ background: bg }}>{worker.initials}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: 13, fontWeight: 600, margin: 0, color: '#1e293b' }}>{worker.name}</p>
-        <p style={{ fontSize: 11.5, color: '#64748b', margin: 0 }}>{worker.role} · {worker.site}</p>
-      </div>
-      <span style={{ fontSize: 11, color: lsColor, flexShrink: 0 }}>{worker.lastSeen}</span>
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <div style={{
+        width: 40, height: 40, border: '4px solid #e2e8f0',
+        borderTopColor: '#2d6a27', borderRadius: '50%',
+        animation: 'spin 0.8s linear infinite', margin: '0 auto 16px',
+      }} />
+      <p style={{ color: '#64748b', fontSize: 14 }}>Loading dashboard data...</p>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   );
 }
@@ -143,36 +84,107 @@ function WorkerCard({ worker }) {
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('Domestic');
   const [dateRange, setDateRange] = useState('Last 90 Days');
-  const { selectedSite } = useSite();
+  const { selectedSite, siteOptions } = useSite();
+  const { user } = useAuth();
 
-  const data = kpiData[activeTab.toLowerCase()] ?? kpiData.domestic;
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  // Fetch dashboard data
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError('');
+
+    adminService.getDashboard()
+      .then((data) => {
+        if (!cancelled && data.success !== false) {
+          setDashboardData(data);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          // If not admin, try to still show something
+          const msg = err.response?.data?.error || 'Failed to load dashboard';
+          setError(msg);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => { cancelled = true; };
+  }, []);
 
   /* Filter sites by selected */
   const filteredSites = useMemo(() => {
-    if (selectedSite === 'all') return sitesData;
-    const siteMap = { khanna: 'Khanna', uenii: 'UE-II', pla: 'PLA', kohara: 'Kohara' };
-    const match = siteMap[selectedSite] ?? '';
-    return sitesData.filter(s => s.name.toLowerCase().includes(match.toLowerCase()));
-  }, [selectedSite]);
+    if (!dashboardData?.sites) return [];
+    if (selectedSite === 'all') return dashboardData.sites;
+    return dashboardData.sites.filter(s => s.siteId === selectedSite);
+  }, [selectedSite, dashboardData]);
+
+  /* Aggregate KPIs across filtered sites */
+  const aggregatedKpis = useMemo(() => {
+    if (!filteredSites.length) return { totalConns: 0, doneConns: 0, rfcConns: 0, metersInstalled: 0, lmcDone: 0, icDone: 0 };
+    return filteredSites.reduce((acc, s) => ({
+      totalConns: acc.totalConns + (s.totalConns || 0),
+      doneConns: acc.doneConns + (s.doneConns || 0),
+      rfcConns: acc.rfcConns + (s.rfcConns || 0),
+      metersInstalled: acc.metersInstalled + (s.metersInstalled || 0),
+      lmcDone: acc.lmcDone + (s.lmcDone || 0),
+      icDone: acc.icDone + (s.icDone || 0),
+    }), { totalConns: 0, doneConns: 0, rfcConns: 0, metersInstalled: 0, lmcDone: 0, icDone: 0 });
+  }, [filteredSites]);
+
+  /* Low stock alerts */
+  const lowStockAlerts = useMemo(() => {
+    if (!filteredSites.length) return [];
+    return filteredSites
+      .filter(s => s.lowStockAlerts?.length > 0)
+      .flatMap(s => s.lowStockAlerts.map(a => ({ site: s.siteName, ...a })));
+  }, [filteredSites]);
+
+  /* PE Laying totals */
+  const peTotals = dashboardData?.totals?.peLaying || {};
+
+  const selectedLabel = siteOptions.find(s => s.value === selectedSite)?.label || 'All Sites';
+
+  if (loading) return <LoadingSkeleton />;
+
+  if (error) {
+    return (
+      <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+        <p style={{ fontSize: 48, marginBottom: 8 }}>📊</p>
+        <h2 style={{ color: '#c0440a', marginBottom: 8 }}>Dashboard Unavailable</h2>
+        <p style={{ color: '#64748b', fontSize: 13 }}>{error}</p>
+        <p style={{ color: '#94a3b8', fontSize: 12, marginTop: 12 }}>
+          {user?.role !== 'ADMIN' ? 'The admin dashboard requires Admin privileges.' : 'Make sure the backend is running and the database is seeded.'}
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div>
       {/* Alert Strip */}
-      <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0 }}>
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <span>
-          <strong>Low stock: </strong>
-          {lowStockAlerts.map((a, i) => (
-            <span key={i}>
-              <strong>{a.site}</strong> — {a.material} ({a.qty})
-              {i < lowStockAlerts.length - 1 ? ' | ' : ''}
-            </span>
-          ))}
-        </span>
-      </div>
+      {lowStockAlerts.length > 0 && (
+        <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>
+            <strong>Low stock: </strong>
+            {lowStockAlerts.map((a, i) => (
+              <span key={i}>
+                <strong>{a.site}</strong> — {a.material} (In Store: {Number(a.inStore).toLocaleString()})
+                {i < lowStockAlerts.length - 1 ? ' | ' : ''}
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
 
       {/* Filter row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingBottom: 4, marginBottom: 12 }}>
@@ -183,16 +195,12 @@ export default function Dashboard() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               style={{
-                padding: '5px 16px',
-                borderRadius: 5,
-                fontSize: 12,
-                fontWeight: 500,
+                padding: '5px 16px', borderRadius: 5, fontSize: 12, fontWeight: 500,
                 fontFamily: 'Inter,sans-serif',
                 border: activeTab === tab ? 'none' : '1px solid #d1d5db',
                 background: activeTab === tab ? '#2d6a27' : '#fff',
                 color: activeTab === tab ? '#fff' : '#64748b',
-                cursor: 'pointer',
-                transition: 'all 0.15s',
+                cursor: 'pointer', transition: 'all 0.15s',
               }}
             >
               {tab}
@@ -201,11 +209,7 @@ export default function Dashboard() {
         </div>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <select
-            className="gp-select"
-            value={dateRange}
-            onChange={e => setDateRange(e.target.value)}
-          >
+          <select className="gp-select" value={dateRange} onChange={e => setDateRange(e.target.value)}>
             {DATE_RANGES.map(r => <option key={r}>{r}</option>)}
           </select>
         </div>
@@ -213,82 +217,63 @@ export default function Dashboard() {
 
       {/* Sub-label */}
       <p style={{ fontSize: 12, color: '#64748b', marginBottom: 10 }}>
-        Consolidated on-boarding — {dateRange.toLowerCase()} ({SITE_OPTIONS_LABEL[selectedSite] ?? 'All Sites'})
+        Consolidated on-boarding — {dateRange.toLowerCase()} ({selectedLabel})
       </p>
 
       {/* KPI Tiles */}
-      <KpiGrid data={data} />
+      <KpiGrid data={aggregatedKpis} />
 
-      {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-        {/* Active Sites */}
-        <div className="card" style={{ padding: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-            <h3 className="card-heading" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6a27" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-              </svg>
-              Active sites
-            </h3>
-            <span className="badge badge-done">{filteredSites.filter(s => s.status === 'Active').length} Active</span>
-          </div>
-          {filteredSites.map(s => <SiteRow key={s.name} site={s} />)}
+      {/* PE Laying summary */}
+      {dashboardData?.totals && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+          {[
+            { label: 'Total Ø32mm Laid', value: `${(Number(peTotals.d32oc || 0) + Number(peTotals.d32b || 0)).toLocaleString()} mtr` },
+            { label: 'Total Ø63mm Laid', value: `${(Number(peTotals.d63oc || 0) + Number(peTotals.d63b || 0) + Number(peTotals.d63hdd || 0)).toLocaleString()} mtr` },
+            { label: 'Total Ø90mm Laid', value: `${Number(peTotals.d90tot || 0).toLocaleString()} mtr` },
+            { label: 'Total Ø125mm Laid', value: `${Number(peTotals.d125tot || 0).toLocaleString()} mtr` },
+          ].map(k => (
+            <div key={k.label} className="kpi-tile" style={{ background: '#1f4e1a' }}>
+              <p className="kpi-label">{k.label}</p>
+              <p className="kpi-value" style={{ fontSize: 20 }}>{k.value}</p>
+            </div>
+          ))}
         </div>
+      )}
 
-        {/* Right column */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Houses done this month */}
-          <div className="card" style={{ padding: 16 }}>
-            <h3 className="card-heading" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6a27" strokeWidth="2">
-                <rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
-              </svg>
-              Houses done this month
-            </h3>
-            {housesDoneThisMonth.map(item => <HousesDoneRow key={item.site} item={item} />)}
-          </div>
-
-          {/* Daily entries chart */}
-          <div className="card" style={{ padding: 16 }}>
-            <h3 className="card-heading" style={{ marginBottom: 4 }}>Daily entries — last 7 days (Khanna)</h3>
-            <BarChart data={dailyEntries} />
-          </div>
+      {/* Active Sites */}
+      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+          <h3 className="card-heading" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6a27" strokeWidth="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+            </svg>
+            Active sites
+          </h3>
+          <span className="badge badge-done">
+            {filteredSites.filter(s => s.status === 'Active').length} Active
+          </span>
         </div>
+        {filteredSites.length === 0 ? (
+          <p style={{ color: '#94a3b8', fontSize: 13, padding: '20px 0', textAlign: 'center' }}>No sites found.</p>
+        ) : (
+          filteredSites.map(s => <SiteRow key={s.siteId} site={s} />)
+        )}
       </div>
 
-      {/* Workers section */}
-      <div className="card" style={{ padding: 16 }}>
-        <h3 className="card-heading" style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6a27" strokeWidth="2">
-            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
-            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
-          </svg>
-          Active workers — all sites
-        </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {activeWorkers.map(w => <WorkerCard key={w.id} worker={w} />)}
-        </div>
-        <div style={{
-          marginTop: 12, padding: '8px 12px',
-          background: '#eff6ff', border: '1px solid #bfdbfe',
-          borderRadius: 6, fontSize: 12, color: '#1d4ed8',
-          display: 'flex', alignItems: 'center', gap: 6,
-        }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-          Export downloads all visible table data as a formatted Excel file
-        </div>
+      {/* Platform totals footer */}
+      <div style={{
+        marginTop: 12, padding: '8px 12px',
+        background: '#eff6ff', border: '1px solid #bfdbfe',
+        borderRadius: 6, fontSize: 12, color: '#1d4ed8',
+        display: 'flex', alignItems: 'center', gap: 6,
+      }}>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        Total Applications: {dashboardData?.totals?.totalApplications?.toLocaleString() || 0} |
+        Total Meters: {dashboardData?.totals?.totalMeters?.toLocaleString() || 0} |
+        Data is live from the database
       </div>
     </div>
   );
 }
-
-/* label lookup for sub-heading */
-const SITE_OPTIONS_LABEL = {
-  all:    'All Sites',
-  khanna: 'Khanna — CA-09',
-  uenii:  'UE-II — Hisar',
-  pla:    'PLA — Hisar',
-  kohara: 'Kohara — CA-07',
-};

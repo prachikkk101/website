@@ -1,106 +1,160 @@
 // src/pages/Inventory.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useToast } from '../components/Toast';
 import SlidePanel from '../components/SlidePanel';
-import { exportStockData } from '../utils/exportExcel';
+import { siteService } from '../api/siteService';
 
 /* ── Status logic ── */
-function getStatus(onSite, inStore, open, recv) {
-  const total = open + recv;
-  const pct = total > 0 ? Math.round(((onSite + inStore) / total) * 100) : 0;
+function getStatus(row) {
+  const inStore = Number(row.inStoreQty || 0);
+  const required = Number(row.requiredQty || 0);
+  const total = Number(row.openingQty || 0) + Number(row.receivedQty || 0);
+  const pct = total > 0 ? Math.round(((Number(row.onSiteQty || 0) + inStore) / total) * 100) : 0;
   if (pct > 60) return { label: 'OK',       cls: 'badge-ok',       bar: '#16a34a', pct };
   if (pct >= 20) return { label: 'Low',      cls: 'badge-low',      bar: '#d97706', pct };
   return             { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
 }
 
 export default function Inventory() {
-  const { stock, setStock } = useSite();
+  const { selectedSite, sites, siteOptions } = useSite();
   const { showToast } = useToast();
 
+  const [stock, setStock] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [showModal, setShowModal] = useState(false);
 
   // Form State
-  const [challan, setChallan] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [site, setSite] = useState('');
   const [receivedQtys, setReceivedQtys] = useState({});
-  const [notes, setNotes] = useState('');
+  const [invoiceNo, setInvoiceNo] = useState('');
+  const [supplier, setSupplier] = useState('');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  // Fetch stock data
+  const fetchStock = useCallback(async () => {
+    if (selectedSite === 'all') {
+      // Show first site's stock or aggregate
+      if (sites.length === 0) return;
+      setLoading(true);
+      try {
+        const data = await siteService.getSiteStock(sites[0].id);
+        const stockList = data.stock || data || [];
+        setStock(Array.isArray(stockList) ? stockList : []);
+      } catch (err) {
+        console.error('Failed to fetch stock:', err);
+        setStock([]);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setLoading(true);
+      try {
+        const data = await siteService.getSiteStock(selectedSite);
+        const stockList = data.stock || data || [];
+        setStock(Array.isArray(stockList) ? stockList : []);
+      } catch (err) {
+        console.error('Failed to fetch stock:', err);
+        setStock([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [selectedSite, sites]);
+
+  useEffect(() => {
+    if (sites.length > 0 || selectedSite !== 'all') {
+      fetchStock();
+    }
+  }, [fetchStock, sites.length, selectedSite]);
 
   function resetForm() {
-    setChallan('');
-    setDate(new Date().toISOString().split('T')[0]);
-    setSite('');
     setReceivedQtys({});
-    setNotes('');
+    setInvoiceNo('');
+    setSupplier('');
+    setDate(new Date().toISOString().split('T')[0]);
     setErrors({});
   }
 
   const rows = useMemo(() => {
-    return stock.map(s => {
-      const netUsed   = s.issued - s.ret;
-      const status    = getStatus(s.onSite, s.inStore, s.open, s.recv);
-      const onSitePct = (s.open + s.recv) > 0 ? (s.onSite / (s.open + s.recv)) * 100 : 0;
-      return { ...s, netUsed, status, onSitePct };
+    return stock.map((s, i) => {
+      const open = Number(s.openingQty || 0);
+      const recv = Number(s.receivedQty || 0);
+      const issued = Number(s.issuedQty || 0);
+      const ret = Number(s.returnedQty || 0);
+      const onSite = Number(s.onSiteQty || 0);
+      const inStore = Number(s.inStoreQty || 0);
+      const req = Number(s.requiredQty || 0);
+      const netUsed = issued - ret;
+      const status = getStatus(s);
+      const matName = s.material?.name || s.materialName || `Material ${i + 1}`;
+      const matUnit = s.material?.unit || s.unit || 'Pcs';
+      const matId = s.materialId || s.material?.id || i;
+      return { ...s, sr: i + 1, matName, matUnit, matId, open, recv, issued, ret, netUsed, onSite, inStore, req, status };
     });
   }, [stock]);
 
   /* Totals row */
   const totals = useMemo(() => {
     return rows.reduce((acc, r) => ({
-      open:    acc.open    + r.open,
-      recv:    acc.recv    + r.recv,
-      issued:  acc.issued  + r.issued,
-      ret:     acc.ret     + r.ret,
+      open: acc.open + r.open,
+      recv: acc.recv + r.recv,
+      issued: acc.issued + r.issued,
+      ret: acc.ret + r.ret,
       netUsed: acc.netUsed + r.netUsed,
-      onSite:  acc.onSite  + r.onSite,
+      onSite: acc.onSite + r.onSite,
       inStore: acc.inStore + r.inStore,
-      req:     acc.req     + r.req,
-    }), { open:0, recv:0, issued:0, ret:0, netUsed:0, onSite:0, inStore:0, req:0 });
+      req: acc.req + r.req,
+    }), { open: 0, recv: 0, issued: 0, ret: 0, netUsed: 0, onSite: 0, inStore: 0, req: 0 });
   }, [rows]);
 
-  function onSiteColor(r) {
-    if (r.onSitePct < 20) return '#dc2626';
-    if (r.onSitePct < 40) return '#d97706';
-    return '#1e293b';
-  }
-
-  function handleQtyChange(sr, val) {
-    setReceivedQtys(prev => ({
-      ...prev,
-      [sr]: val
-    }));
-  }
-
-  function handleSave() {
-    const newErrors = {};
-    if (!challan.trim()) newErrors.challan = 'Challan / DC Number is required';
-    if (!date) newErrors.date = 'Date Received is required';
-    if (!site) newErrors.site = 'Site is required';
-
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) {
-      showToast('⚠️ Please fill in all required fields');
+  async function handleSave() {
+    const targetSiteId = selectedSite === 'all' ? sites[0]?.id : selectedSite;
+    if (!targetSiteId) {
+      showToast('⚠️ Please select a site first');
       return;
     }
 
-    // Update global stock
-    setStock(prevStock => prevStock.map(item => {
-      const qty = Number(receivedQtys[item.sr] || 0);
-      if (qty > 0) {
-        return {
-          ...item,
-          recv: item.recv + qty,
-          inStore: item.inStore + qty
-        };
-      }
-      return item;
-    }));
+    // Build items array from receivedQtys
+    const items = Object.entries(receivedQtys)
+      .filter(([, qty]) => Number(qty) > 0)
+      .map(([materialId, qty]) => ({ materialId, qty: Number(qty) }));
 
-    showToast('✓ Stock received and updated');
-    resetForm();
-    setShowModal(false);
+    if (items.length === 0) {
+      showToast('⚠️ Enter at least one quantity');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      await siteService.receiveStock(targetSiteId, {
+        items,
+        invoiceNo: invoiceNo || undefined,
+        supplier: supplier || undefined,
+        date,
+      });
+
+      showToast('✓ Stock received and updated');
+      resetForm();
+      setShowModal(false);
+      fetchStock(); // Refresh
+    } catch (err) {
+      const msg = err.response?.data?.error || 'Failed to receive stock';
+      showToast(`⚠️ ${msg}`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <div style={{ width: 36, height: 36, border: '4px solid #e2e8f0', borderTopColor: '#2d6a27', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 12px' }} />
+        <p style={{ color: '#64748b', fontSize: 13 }}>Loading stock data...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      </div>
+    );
   }
 
   return (
@@ -112,13 +166,6 @@ export default function Inventory() {
           <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0' }}>{rows.length} materials tracked</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="btn btn-outline" onClick={() => exportStockData(rows)}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export
-          </button>
           <button className="btn btn-primary" onClick={() => setShowModal(true)}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -152,14 +199,14 @@ export default function Inventory() {
               {rows.map(r => (
                 <tr key={r.sr}>
                   <td style={{ textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>{r.sr}</td>
-                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.mat}</td>
-                  <td style={{ color: '#64748b' }}>{r.unit}</td>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.matName}</td>
+                  <td style={{ color: '#64748b' }}>{r.matUnit}</td>
                   <td style={{ textAlign: 'right' }}>{r.open.toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: '#2d6a27', fontWeight: 600 }}>{r.recv.toLocaleString()}</td>
                   <td style={{ textAlign: 'right' }}>{r.issued.toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: '#2d6a27' }}>{r.ret.toLocaleString()}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700 }}>{r.netUsed.toLocaleString()}</td>
-                  <td style={{ textAlign: 'right', color: onSiteColor(r) }}>{r.onSite.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{r.onSite.toLocaleString()}</td>
                   <td style={{ textAlign: 'right' }}>{r.inStore.toLocaleString()}</td>
                   <td style={{ textAlign: 'right', color: r.req > 0 ? '#c0440a' : '#94a3b8', fontWeight: r.req > 0 ? 600 : 400 }}>
                     {r.req > 0 ? r.req.toLocaleString() : '—'}
@@ -174,19 +221,25 @@ export default function Inventory() {
                   </td>
                 </tr>
               ))}
-              {/* Totals row */}
-              <tr style={{ background: '#f0f7ee', fontWeight: 700 }}>
-                <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#1f4e1a' }}>TOTAL</td>
-                <td style={{ textAlign: 'right' }}>{totals.open.toLocaleString()}</td>
-                <td style={{ textAlign: 'right', color: '#2d6a27' }}>{totals.recv.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{totals.issued.toLocaleString()}</td>
-                <td style={{ textAlign: 'right', color: '#2d6a27' }}>{totals.ret.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{totals.netUsed.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{totals.onSite.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{totals.inStore.toLocaleString()}</td>
-                <td style={{ textAlign: 'right' }}>{totals.req.toLocaleString()}</td>
-                <td />
-              </tr>
+              {rows.length === 0 && (
+                <tr><td colSpan={12} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                  No stock data. Select a site or ensure the database has materials seeded.
+                </td></tr>
+              )}
+              {rows.length > 0 && (
+                <tr style={{ background: '#f0f7ee', fontWeight: 700 }}>
+                  <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#1f4e1a' }}>TOTAL</td>
+                  <td style={{ textAlign: 'right' }}>{totals.open.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right', color: '#2d6a27' }}>{totals.recv.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.issued.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right', color: '#2d6a27' }}>{totals.ret.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.netUsed.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.onSite.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.inStore.toLocaleString()}</td>
+                  <td style={{ textAlign: 'right' }}>{totals.req.toLocaleString()}</td>
+                  <td />
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -194,96 +247,50 @@ export default function Inventory() {
 
       {/* Note */}
       <p style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
-        ℹ️ Materials used per house entry are automatically deducted from Issued Qty.
+        ℹ️ Stock quantities are managed server-side. All transactions are permanently logged.
       </p>
 
       {/* Slide-in panel for Receive Stock */}
-      <SlidePanel
-        isOpen={showModal}
-        onClose={() => { resetForm(); setShowModal(false); }}
-        title="Receive New Stock"
-      >
+      <SlidePanel isOpen={showModal} onClose={() => { resetForm(); setShowModal(false); }} title="Receive New Stock">
         <div>
-          <div className="panel-section-title">Log Receipt Details</div>
+          <div className="panel-section-title">Receipt Details</div>
           <div className="panel-field">
-            <label className="panel-label">Challan / DC Number*</label>
-            <input
-              type="text"
-              className={`panel-input${errors.challan ? ' error' : ''}`}
-              placeholder="Enter Challan/DC Number"
-              value={challan}
-              onChange={e => setChallan(e.target.value)}
-            />
-            {errors.challan && <p className="panel-error-text">{errors.challan}</p>}
+            <label className="panel-label">Invoice / Challan No.</label>
+            <input type="text" className="panel-input" placeholder="Enter Invoice/Challan Number" value={invoiceNo} onChange={e => setInvoiceNo(e.target.value)} />
           </div>
-
           <div className="panel-field">
-            <label className="panel-label">Date Received*</label>
-            <input
-              type="date"
-              className={`panel-input${errors.date ? ' error' : ''}`}
-              value={date}
-              onChange={e => setDate(e.target.value)}
-            />
-            {errors.date && <p className="panel-error-text">{errors.date}</p>}
+            <label className="panel-label">Supplier</label>
+            <input type="text" className="panel-input" placeholder="Supplier name" value={supplier} onChange={e => setSupplier(e.target.value)} />
           </div>
-
           <div className="panel-field">
-            <label className="panel-label">Site*</label>
-            <select
-              className={`panel-select${errors.site ? ' error' : ''}`}
-              value={site}
-              onChange={e => setSite(e.target.value)}
-            >
-              <option value="">Select Site</option>
-              {['Khanna', 'UE-II', 'PLA', 'Kohara'].map(s => (
-                <option key={s} value={s}>{s}</option>
-              ))}
-            </select>
-            {errors.site && <p className="panel-error-text">{errors.site}</p>}
+            <label className="panel-label">Date Received</label>
+            <input type="date" className="panel-input" value={date} onChange={e => setDate(e.target.value)} />
           </div>
         </div>
 
         <div>
           <div className="panel-section-title">Material Quantities</div>
-          {stock.map(item => (
-            <div className="panel-field" key={item.sr} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          {rows.map(item => (
+            <div className="panel-field" key={item.matId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
               <div style={{ flex: 1 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.mat}</span>
-                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>({item.unit})</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#374151' }}>{item.matName}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 6 }}>({item.matUnit})</span>
               </div>
-              <input
-                type="number"
-                className="panel-input"
-                style={{ width: 100 }}
-                min={0}
-                value={receivedQtys[item.sr] || 0}
-                onChange={e => handleQtyChange(item.sr, Number(e.target.value))}
-              />
+              <input type="number" className="panel-input" style={{ width: 100 }} min={0}
+                value={receivedQtys[item.matId] || 0}
+                onChange={e => setReceivedQtys(prev => ({ ...prev, [item.matId]: Number(e.target.value) }))} />
             </div>
           ))}
         </div>
 
-        <div>
-          <div className="panel-section-title">Additional Info</div>
-          <div className="panel-field">
-            <label className="panel-label">Notes / Remarks</label>
-            <textarea
-              className="panel-input"
-              style={{ height: 60, padding: '8px 10px', resize: 'vertical' }}
-              placeholder="Notes or remarks..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-            />
-          </div>
-        </div>
-
         {/* Footer */}
         <div className="panel-footer" style={{ margin: '0 -20px -20px', padding: '14px 20px' }}>
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>* Required fields</span>
+          <span style={{ fontSize: 12, color: '#94a3b8' }}>Enter quantities received</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { resetForm(); setShowModal(false); }} className="panel-btn-cancel">Cancel</button>
-            <button onClick={handleSave} className="panel-btn-save">Receive Stock</button>
+            <button onClick={handleSave} className="panel-btn-save" disabled={saving}>
+              {saving ? 'Processing...' : 'Receive Stock'}
+            </button>
           </div>
         </div>
       </SlidePanel>

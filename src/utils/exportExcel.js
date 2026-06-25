@@ -189,3 +189,49 @@ export function exportPELaying(data) {
   XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Data');
   download(wb, `GP_PMS_PELaying_${today()}.xlsx`);
 }
+
+export function exportLMCData(data) {
+  const headers = [['Sr.','Application No.','BP No.','Customer Name','Address','LMC Date','Regulator No.','Meter Serial No.','Remarks']];
+  const rows = data.map((r, i) => [
+    i + 1,
+    r.appNo || '—',
+    r.bpNo || '—',
+    r.customerName || '—',
+    r.address || '—',
+    r.lmcDate ? r.lmcDate.split('T')[0] : '—',
+    r.regulatorNo || '—',
+    r.meterSerialNo || '—',
+    r.remarks || 'PENDING',
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
+  ws['!cols'] = [
+    { wch: 5 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 25 },
+    { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'LMC Work');
+  download(wb, `GP_PMS_LMC_${today()}.xlsx`);
+}
+
+export function exportICData(data) {
+  const headers = [['Sr.','Customer Name','Address','I&C Date','Regulator No.','Meter Serial No.','Pressure (mbar)','Flow Rate (SCMH)','Status']];
+  const rows = data.map((r, i) => [
+    i + 1,
+    r.customerName || '—',
+    r.address || '—',
+    r.icDate ? r.icDate.split('T')[0] : '—',
+    r.regulatorNo || '—',
+    r.meterSerialNo || '—',
+    r.regulatorPoutMbar || 0,
+    r.flowRateScmh || 0,
+    r.status || 'Pending',
+  ]);
+  const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
+  ws['!cols'] = [
+    { wch: 5 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 15 },
+    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'I&C Work');
+  download(wb, `GP_PMS_IC_${today()}.xlsx`);
+}

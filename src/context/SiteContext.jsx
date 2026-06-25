@@ -1,55 +1,74 @@
 // src/context/SiteContext.jsx
-import { createContext, useContext, useState } from 'react';
-import { houses as initialHouses } from '../data/houses';
-import initialStockData from '../data/stockData';
-import initialPeLaying from '../data/peLaying';
-
-export const SITE_OPTIONS = [
-  { value: 'all',    label: 'All Sites' },
-  { value: 'khanna', label: 'Khanna — CA-09' },
-  { value: 'uenii',  label: 'UE-II — Hisar' },
-  { value: 'pla',    label: 'PLA — Hisar' },
-  { value: 'kohara', label: 'Kohara — CA-07' },
-];
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { siteService } from '../api/siteService';
+import { useAuth } from './AuthContext';
 
 const SiteContext = createContext({
   selectedSite: 'all',
   setSelectedSite: () => {},
-  houses: [],
-  setHouses: () => {},
-  stock: [],
-  setStock: () => {},
-  peLayingList: [],
-  setPeLayingList: () => {},
+  sites: [],
+  sitesLoading: false,
+  refreshSites: () => {},
   toasts: [],
   showToast: () => {},
 });
 
 export function SiteProvider({ children }) {
+  const { isAuthenticated } = useAuth();
   const [selectedSite, setSelectedSite] = useState('all');
-  const [houses, setHouses] = useState(initialHouses);
-  const [stock, setStock] = useState(initialStockData);
-  const [peLayingList, setPeLayingList] = useState(initialPeLaying);
+  const [sites, setSites] = useState([]);
+  const [sitesLoading, setSitesLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
 
-  const showToast = (message) => {
+  const showToast = useCallback((message) => {
     const id = Date.now() + Math.random().toString();
     setToasts((prev) => [...prev, { id, message }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
-  };
+  }, []);
+
+  const refreshSites = useCallback(async () => {
+    if (!isAuthenticated) return;
+    setSitesLoading(true);
+    try {
+      const data = await siteService.getSites();
+      if (data.success !== false) {
+        // API may return { success: true, sites: [...] } or directly an array
+        const siteList = Array.isArray(data) ? data : (data.sites || []);
+        setSites(siteList);
+      }
+    } catch (err) {
+      console.error('Failed to fetch sites:', err);
+    } finally {
+      setSitesLoading(false);
+    }
+  }, [isAuthenticated]);
+
+  // Fetch sites when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      refreshSites();
+    } else {
+      setSites([]);
+      setSelectedSite('all');
+    }
+  }, [isAuthenticated, refreshSites]);
+
+  // Build site options for dropdowns
+  const siteOptions = [
+    { value: 'all', label: 'All Sites' },
+    ...sites.map((s) => ({ value: s.id, label: s.name })),
+  ];
 
   return (
     <SiteContext.Provider value={{
       selectedSite,
       setSelectedSite,
-      houses,
-      setHouses,
-      stock,
-      setStock,
-      peLayingList,
-      setPeLayingList,
+      sites,
+      siteOptions,
+      sitesLoading,
+      refreshSites,
       toasts,
       showToast,
     }}>
@@ -62,3 +81,8 @@ export function useSite() {
   return useContext(SiteContext);
 }
 
+// Helper: get current site ID (returns null if "all")
+export function useSelectedSiteId() {
+  const { selectedSite } = useSite();
+  return selectedSite === 'all' ? null : selectedSite;
+}

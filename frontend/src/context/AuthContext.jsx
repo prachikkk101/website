@@ -10,7 +10,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     const token = localStorage.getItem('token');
-    
+
     if (storedUser && token) {
       setUser(JSON.parse(storedUser));
     }
@@ -21,23 +21,25 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.post('/auth/login', { email, password });
       if (response.data.success) {
-        const { user, accessToken } = response.data;
+        const { user, accessToken, refreshToken } = response.data;
         localStorage.setItem('token', accessToken);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
         localStorage.setItem('user', JSON.stringify(user));
         setUser(user);
         return { success: true };
       }
       return { success: false, error: 'Login failed' };
     } catch (error) {
-      return { 
-        success: false, 
-        error: error.response?.data?.error || 'An error occurred during login'
+      return {
+        success: false,
+        error: error.response?.data?.error || 'An error occurred during login',
       };
     }
   };
 
   const logout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('refreshToken');
     localStorage.removeItem('user');
     setUser(null);
   };

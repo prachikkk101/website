@@ -4,15 +4,15 @@
   "description": "Gas Pipeline Project Management System — Express/Prisma/PostgreSQL API",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "nodemon --exec \"npx ts-node\" src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "ts-node prisma/seed.ts",
+    "db:seed": "npx ts-node prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force && ts-node prisma/seed.ts",
+    "db:reset": "prisma migrate reset --force && npx ts-node prisma/seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [],

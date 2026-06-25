@@ -1,7 +1,8 @@
 // src/components/Layout.jsx
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { useSite, SITE_OPTIONS } from '../context/SiteContext';
+import { useSite } from '../context/SiteContext';
+import { useAuth } from '../context/AuthContext';
 import ToastContainer from './Toast';
 
 const navItems = [
@@ -48,12 +49,26 @@ function ChevronDown() {
   );
 }
 
+const ROLE_BADGE_COLORS = {
+  ADMIN:      { bg: '#fee2e2', color: '#b91c1c' },
+  SUPERVISOR: { bg: '#dbeafe', color: '#1d4ed8' },
+  WORKER:     { bg: '#dcfce7', color: '#15803d' },
+  VIEWER:     { bg: '#f1f5f9', color: '#64748b' },
+};
+
 export default function Layout() {
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { selectedSite, setSelectedSite } = useSite();
+  const { selectedSite, setSelectedSite, siteOptions } = useSite();
+  const { user, logout } = useAuth();
 
   const breadcrumb = breadcrumbs[location.pathname] || 'GP-PMS';
+
+  // Get user initials
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : '??';
+
+  const roleBadge = ROLE_BADGE_COLORS[user?.role] || ROLE_BADGE_COLORS.VIEWER;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f4f0' }}>
@@ -136,22 +151,54 @@ export default function Layout() {
                   borderRadius: 4,
                 }}
               >
-                {SITE_OPTIONS.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
+                {siteOptions.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
               </select>
             </div>
 
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>|</span>
 
-            {/* User */}
+            {/* User info + role badge */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
                 background: '#4a7c2f', border: '1.5px solid rgba(126,197,111,0.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0,
-              }}>AK</div>
-              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>ATUL KU</span>
+              }}>{initials}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ color: '#fff', fontSize: 12, fontWeight: 600, lineHeight: 1.2 }}>
+                  {user?.name || 'User'}
+                </span>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                  background: roleBadge.bg, color: roleBadge.color, lineHeight: 1.3,
+                  display: 'inline-block', width: 'fit-content',
+                }}>
+                  {user?.role || 'WORKER'}
+                </span>
+              </div>
             </div>
+
+            {/* Logout button */}
+            <button
+              onClick={logout}
+              title="Logout"
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none', borderRadius: 4,
+                padding: '5px 8px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(192,68,10,0.6)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         </div>
 

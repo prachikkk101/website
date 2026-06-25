@@ -1,7 +1,19 @@
-import { PrismaClient, Role, AccountType, PEStatus } from '@prisma/client';
+import { PrismaClient, Role, AccountType, PEStatus, ICStatus } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
+import dotenv from 'dotenv';
 import * as bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+dotenv.config();
+
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not set');
+}
+
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
   console.log('Seeding database...');
@@ -10,16 +22,16 @@ async function main() {
   await prisma.auditLog.deleteMany({});
   await prisma.attendance.deleteMany({});
   await prisma.toolReturn.deleteMany({});
-  await prisma.icWork.deleteMany({});
-  await prisma.lmcWork.deleteMany({});
+  await prisma.iCWork.deleteMany({});
+  await prisma.lMCWork.deleteMany({});
   await prisma.meterInstallation.deleteMany({});
-  await prisma.pngConnection.deleteMany({});
-  await prisma.peLaying.deleteMany({});
+  await prisma.pNGConnection.deleteMany({});
+  await prisma.pELaying.deleteMany({});
   await prisma.siteStock.deleteMany({});
   await prisma.inventoryTransaction.deleteMany({});
   await prisma.consumptionLog.deleteMany({});
-  await prisma.peReturnLogs.deleteMany({});
-  await prisma.giReturnLogs.deleteMany({});
+  await prisma.pEReturnLog.deleteMany({});
+  await prisma.gIReturnLog.deleteMany({});
   await prisma.materialItem.deleteMany({});
   await prisma.siteUser.deleteMany({});
   await prisma.user.deleteMany({});
@@ -274,7 +286,7 @@ async function main() {
   ];
 
   for (const conn of pngConnections) {
-    const png = await prisma.pngConnection.create({
+    const png = await prisma.pNGConnection.create({
       data: {
         siteId: khanna.id,
         supervisorId: supervisor.id,
@@ -340,7 +352,7 @@ async function main() {
   ];
 
   for (const pe of peLayingData) {
-    await prisma.peLaying.create({
+    await prisma.pELaying.create({
       data: {
         siteId: khanna.id,
         ...pe,
@@ -384,7 +396,7 @@ async function main() {
   ];
 
   for (const ic of icWorkData) {
-    await prisma.icWork.create({
+    await prisma.iCWork.create({
       data: {
         siteId: khanna.id,
         ...ic,

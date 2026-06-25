@@ -1,7 +1,8 @@
 // src/components/Layout.jsx
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useState, useContext } from 'react';
 import { useSite, SITE_OPTIONS } from '../context/SiteContext';
+import { AuthContext } from '../context/AuthContext';
 
 const navItems = [
   { label: 'GA Dashboard',     to: '/dashboard' },
@@ -42,10 +43,26 @@ function ChevronDown() {
 
 export default function Layout() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const { selectedSite, setSelectedSite } = useSite();
+  const { user, logout } = useContext(AuthContext);
 
   const breadcrumb = breadcrumbs[location.pathname] || 'GP-PMS';
+
+  // Derive display name & initials from logged-in user
+  const displayName = user?.name || user?.email?.split('@')[0] || 'User';
+  const initials = displayName
+    .split(' ')
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f4f0' }}>
@@ -101,17 +118,38 @@ export default function Layout() {
 
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>|</span>
 
-            {/* User */}
+            {/* User + Logout */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
                 background: '#4a7c2f', border: '1.5px solid rgba(126,197,111,0.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0,
-              }}>AK</div>
+              }}>{initials}</div>
               <span style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>
-                ATUL KU
+                {displayName}
               </span>
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                style={{
+                  marginLeft: 4,
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: 6,
+                  color: 'rgba(255,255,255,0.75)',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: '3px 9px',
+                  cursor: 'pointer',
+                  letterSpacing: '0.2px',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,53,69,0.25)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              >
+                Logout
+              </button>
             </div>
           </div>
         </div>

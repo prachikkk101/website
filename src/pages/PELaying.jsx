@@ -1,14 +1,13 @@
 // src/pages/PELaying.jsx
-import { useState, useMemo } from 'react';
-import { useSite } from '../context/SiteContext';
+import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useSite, useSelectedSiteId } from '../context/SiteContext';
 import { useToast } from '../components/Toast';
 import SlidePanel from '../components/SlidePanel';
+import { peLayingService } from '../api/peLayingService';
 import { exportPELaying } from '../utils/exportExcel';
 
-const SITES       = ['All Sites','Khanna CA-09','UE-II Hisar','PLA Hisar','Kohara CA-07'];
-const DATE_RANGES = ['All Time','Last 30 Days','Last 90 Days','Custom'];
-const STATUSES    = ['All','LAYING','HDD','JOINT'];
-
+const DATE_RANGES = ['All Time', 'Last 30 Days', 'Last 90 Days'];
+const STATUSES    = ['All', 'LAYING', 'HDD', 'JOINT'];
 const STATUS_CLS = { LAYING: 'badge-laying', HDD: 'badge-hdd', JOINT: 'badge-joint' };
 
 const initialForm = {
@@ -31,23 +30,24 @@ const initialForm = {
   d125tot: 0
 };
 
-function formatDateToSlash(dateStr) {
-  if (!dateStr) return '';
-  const parts = dateStr.split('-');
-  if (parts.length === 3) {
-    const year = parts[0].slice(2);
-    const month = parts[1];
-    const day = parts[2];
-    return `${day}/${month}/${year}`;
-  }
-  return dateStr;
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return '—';
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = String(d.getFullYear()).slice(2);
+  return `${day}/${month}/${year}`;
 }
 
 export default function PELaying() {
-  const { peLayingList, setPeLayingList } = useSite();
+  const { selectedSite, sites } = useSite();
   const { showToast } = useToast();
 
-  const [site,      setSite]      = useState('All Sites');
+  const [peLayingList, setPeLayingList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [dateRange, setDateRange] = useState('All Time');
   const [raBill,    setRaBill]    = useState('');
   const [status,    setStatus]    = useState('All');
@@ -57,6 +57,28 @@ export default function PELaying() {
   const [formData, setFormData] = useState(initialForm);
   const [errors, setErrors] = useState({});
 
+  // Get active site ID
+  const activeSiteId = useSelectedSiteId() || (sites.length > 0 ? sites[0].id : null);
+
+  const fetchPELaying = useCallback(async () => {
+    if (!activeSiteId) return;
+    setLoading(true);
+    try {
+      const data = await peLayingService.getPELaying(activeSiteId);
+      const records = data.records || data || [];
+      setPeLayingList(Array.isArray(records) ? records : []);
+    } catch (err) {
+      console.error('Failed to fetch PE laying records:', err);
+      setPeLayingList([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeSiteId]);
+
+  useEffect(() => {
+    fetchPELaying();
+  }, [fetchPELaying]);
+
   function resetForm() {
     setFormData(initialForm);
     setErrors({});
@@ -65,10 +87,24 @@ export default function PELaying() {
   const filtered = useMemo(() => {
     return peLayingList.filter(r => {
       if (status !== 'All' && r.status !== status) return false;
-      if (raBill && !r.raBill.toLowerCase().includes(raBill.toLowerCase())) return false;
+      const rBill = r.raBillNo || r.raBill || '';
+      if (raBill && !rBill.toLowerCase().includes(raBill.toLowerCase())) return false;
+
+      // Date range filtering
+      if (dateRange !== 'All Time') {
+        const date = new Date(r.layingDate);
+        const now = new Date();
+        if (dateRange === 'Last 30 Days') {
+          const limit = new Date(now.setDate(now.getDate() - 30));
+          if (date < limit) return false;
+        } else if (dateRange === 'Last 90 Days') {
+          const limit = new Date(now.setDate(now.getDate() - 90));
+          if (date < limit) return false;
+        }
+      }
       return true;
     });
-  }, [peLayingList, status, raBill]);
+  }, [peLayingList, status, raBill, dateRange]);
 
   /* Totals */
   const totals = useMemo(() => {
@@ -82,7 +118,7 @@ export default function PELaying() {
       d63t:  acc.d63t  + Number(r.d63oc || 0) + Number(r.d63b || 0) + Number(r.d63hdd || 0),
       d90:   acc.d90   + Number(r.d90tot || 0),
       d125:  acc.d125  + Number(r.d125tot || 0),
-    }), { d32oc:0,d32b:0,d32t:0,d63oc:0,d63b:0,d63h:0,d63t:0,d90:0,d125:0 });
+    }), { d32oc: 0, d32b: 0, d32t: 0, d63oc: 0, d63b: 0, d63h: 0, d63t: 0, d90: 0, d125: 0 });
   }, [filtered]);
 
   /* Dynamic KPI Cards */
@@ -108,7 +144,12 @@ export default function PELaying() {
     { label: 'Total Ø125mm Laid', value: `${(510 + kpiTotals.d125).toLocaleString()} mtr`   },
   ];
 
-  function handleSave() {
+  async function handleSave() {
+    if (!activeSiteId) {
+      showToast('⚠️ No site selected');
+      return;
+    }
+
     const newErrors = {};
     if (!formData.layDate) newErrors.layDate = 'Laying Date is required';
     if (!formData.status) newErrors.status = 'Work Status is required';
@@ -120,18 +161,15 @@ export default function PELaying() {
       return;
     }
 
-    const newEntry = {
-      sr: peLayingList.length + 1,
-      layDate: formatDateToSlash(formData.layDate),
-      testDate: formatDateToSlash(formData.testDate) || '-',
-      chargeDate: formatDateToSlash(formData.chargeDate) || '-',
-      raBill: formData.raBill || '-',
-      reportNo: formData.reportNo || '-',
+    const payload = {
+      layingDate: formData.layDate,
+      testingDate: formData.testDate || undefined,
+      chargingDate: formData.chargeDate || undefined,
+      raBillNo: formData.raBill || undefined,
+      reportNo: formData.reportNo || undefined,
       status: formData.status,
       area: formData.area,
-      landmark: formData.landmark || '-',
-      coil: formData.coil || '-',
-      location: formData.location || '-',
+      coilNo: formData.coil || 'N/A',
       d32oc: Number(formData.d32oc || 0),
       d32b: Number(formData.d32b || 0),
       d63oc: Number(formData.d63oc || 0),
@@ -141,10 +179,19 @@ export default function PELaying() {
       d125tot: Number(formData.d125tot || 0)
     };
 
-    setPeLayingList([newEntry, ...peLayingList]);
-    showToast('✓ Laying entry saved successfully');
-    resetForm();
-    setPanelOpen(false);
+    setSaving(true);
+    try {
+      await peLayingService.createPELaying(activeSiteId, payload);
+      showToast('✓ Laying entry saved successfully');
+      resetForm();
+      setPanelOpen(false);
+      fetchPELaying();
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message || 'Failed to save entry';
+      showToast(`⚠️ ${msg}`);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -163,9 +210,6 @@ export default function PELaying() {
 
       {/* Filter bar */}
       <div className="card section-block" style={{ padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-        <select className="gp-select" value={site} onChange={e => setSite(e.target.value)}>
-          {SITES.map(s => <option key={s}>{s}</option>)}
-        </select>
         <select className="gp-select" value={dateRange} onChange={e => setDateRange(e.target.value)}>
           {DATE_RANGES.map(d => <option key={d}>{d}</option>)}
         </select>
@@ -179,7 +223,7 @@ export default function PELaying() {
         <select className="gp-select" value={status} onChange={e => setStatus(e.target.value)}>
           {STATUSES.map(s => <option key={s}>{s}</option>)}
         </select>
-        <button className="btn btn-primary">Search</button>
+        <button className="btn btn-primary" onClick={fetchPELaying}>Search</button>
         <button className="btn btn-outline" onClick={() => exportPELaying(filtered)} style={{ marginLeft: 'auto' }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -201,75 +245,87 @@ export default function PELaying() {
 
       {/* Table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="gp-table">
-            <thead>
-              <tr>
-                <th style={{ width: 40 }}>Sr.</th>
-                <th>Laying Date</th>
-                <th>Testing Date</th>
-                <th>Charging Date</th>
-                <th>RA Bill No.</th>
-                <th>Report No.</th>
-                <th>Status</th>
-                <th>Area/Society</th>
-                <th>Coil/Batch No.</th>
-                <th style={{ textAlign: 'right' }}>Ø32 OC</th>
-                <th style={{ textAlign: 'right' }}>Ø32 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø32 Total</th>
-                <th style={{ textAlign: 'right' }}>Ø63 OC</th>
-                <th style={{ textAlign: 'right' }}>Ø63 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø63 HDD</th>
-                <th style={{ textAlign: 'right' }}>Ø63 Total</th>
-                <th style={{ textAlign: 'right' }}>Ø90 Total</th>
-                <th style={{ textAlign: 'right' }}>Ø125 Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(r => {
-                const d32t = r.d32oc + r.d32b;
-                const d63t = r.d63oc + r.d63b + r.d63hdd;
-                const num  = v => v > 0 ? v : <span style={{ color: '#cbd5e1' }}>—</span>;
-                return (
-                  <tr key={r.sr}>
-                    <td style={{ textAlign: 'center', color: '#94a3b8' }}>{r.sr}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.testDate}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.chargeDate}</td>
-                    <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{r.raBill}</td>
-                    <td style={{ textAlign: 'center' }}>{r.reportNo}</td>
-                    <td><span className={`badge ${STATUS_CLS[r.status]}`}>{r.status}</span></td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coil}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{num(d32t)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{num(d63t)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90tot)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125tot)}</td>
-                  </tr>
-                );
-              })}
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 48, color: '#64748b' }}>Loading records...</div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table className="gp-table">
+              <thead>
+                <tr>
+                  <th style={{ width: 40 }}>Sr.</th>
+                  <th>Laying Date</th>
+                  <th>Testing Date</th>
+                  <th>Charging Date</th>
+                  <th>RA Bill No.</th>
+                  <th>Report No.</th>
+                  <th>Status</th>
+                  <th>Area/Society</th>
+                  <th>Coil/Batch No.</th>
+                  <th style={{ textAlign: 'right' }}>Ø32 OC</th>
+                  <th style={{ textAlign: 'right' }}>Ø32 Boring</th>
+                  <th style={{ textAlign: 'right' }}>Ø32 Total</th>
+                  <th style={{ textAlign: 'right' }}>Ø63 OC</th>
+                  <th style={{ textAlign: 'right' }}>Ø63 Boring</th>
+                  <th style={{ textAlign: 'right' }}>Ø63 HDD</th>
+                  <th style={{ textAlign: 'right' }}>Ø63 Total</th>
+                  <th style={{ textAlign: 'right' }}>Ø90 Total</th>
+                  <th style={{ textAlign: 'right' }}>Ø125 Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r, i) => {
+                  const d32t = Number(r.d32oc || 0) + Number(r.d32b || 0);
+                  const d63t = Number(r.d63oc || 0) + Number(r.d63b || 0) + Number(r.d63hdd || 0);
+                  const num  = v => Number(v) > 0 ? Number(v) : <span style={{ color: '#cbd5e1' }}>—</span>;
+                  return (
+                    <tr key={r.id || i}>
+                      <td style={{ textAlign: 'center', color: '#94a3b8' }}>{i + 1}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{formatDate(r.layingDate)}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{formatDate(r.testingDate)}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{formatDate(r.chargingDate)}</td>
+                      <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{r.raBillNo || '—'}</td>
+                      <td style={{ textAlign: 'center' }}>{r.reportNo || '—'}</td>
+                      <td><span className={`badge ${STATUS_CLS[r.status]}`}>{r.status}</span></td>
+                      <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>
+                      <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coilNo || '—'}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{num(d32t)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600 }}>{num(d63t)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90tot)}</td>
+                      <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125tot)}</td>
+                    </tr>
+                  );
+                })}
 
-              {/* Totals row */}
-              <tr style={{ background: '#f0f7ee' }}>
-                <td colSpan={9} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32t}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63oc}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63b}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63h}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63t}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90}</td>
-                <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={18} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                      No records found.
+                    </td>
+                  </tr>
+                )}
+
+                {/* Totals row */}
+                <tr style={{ background: '#f0f7ee' }}>
+                  <td colSpan={9} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32t}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63oc}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63b}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63h}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63t}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* ── SlidePanel for PE Laying Entry ── */}
@@ -364,17 +420,6 @@ export default function PELaying() {
           </div>
 
           <div className="panel-field">
-            <label className="panel-label">Landmark</label>
-            <input
-              type="text"
-              className="panel-input"
-              placeholder="Landmark"
-              value={formData.landmark}
-              onChange={e => setFormData({ ...formData, landmark: e.target.value })}
-            />
-          </div>
-
-          <div className="panel-field">
             <label className="panel-label">Coil / Batch No.</label>
             <input
               type="text"
@@ -382,17 +427,6 @@ export default function PELaying() {
               placeholder="e.g. 96-2220607041"
               value={formData.coil}
               onChange={e => setFormData({ ...formData, coil: e.target.value })}
-            />
-          </div>
-
-          <div className="panel-field">
-            <label className="panel-label">Location</label>
-            <input
-              type="text"
-              className="panel-input"
-              placeholder="Location details"
-              value={formData.location}
-              onChange={e => setFormData({ ...formData, location: e.target.value })}
             />
           </div>
         </div>
@@ -431,7 +465,7 @@ export default function PELaying() {
                 type="number"
                 className="panel-input"
                 style={{ width: 120, borderColor: '#16a34a', color: '#16a34a', fontWeight: 600, background: '#f0fdf4' }}
-                value={formData.d32oc + formData.d32b}
+                value={Number(formData.d32oc || 0) + Number(formData.d32b || 0)}
                 readOnly
               />
             </div>
@@ -479,7 +513,7 @@ export default function PELaying() {
                 type="number"
                 className="panel-input"
                 style={{ width: 120, borderColor: '#16a34a', color: '#16a34a', fontWeight: 600, background: '#f0fdf4' }}
-                value={formData.d63oc + formData.d63b + formData.d63hdd}
+                value={Number(formData.d63oc || 0) + Number(formData.d63b || 0) + Number(formData.d63hdd || 0)}
                 readOnly
               />
             </div>
@@ -516,7 +550,9 @@ export default function PELaying() {
           <span style={{ fontSize: 12, color: '#94a3b8' }}>* Required fields</span>
           <div style={{ display: 'flex', gap: 8 }}>
             <button onClick={() => { resetForm(); setPanelOpen(false); }} className="panel-btn-cancel">Cancel</button>
-            <button onClick={handleSave} className="panel-btn-save">Save Entry</button>
+            <button onClick={handleSave} disabled={saving} className="panel-btn-save">
+              {saving ? 'Saving...' : 'Save Entry'}
+            </button>
           </div>
         </div>
       </SlidePanel>
