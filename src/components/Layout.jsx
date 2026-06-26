@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
 import { useSite } from '../context/SiteContext';
 import { useAuth } from '../context/AuthContext';
+import api from '../api/api';
 import ToastContainer from './Toast';
 
 const navItems = [
@@ -20,6 +21,7 @@ const navItems = [
   { label: 'PE Laying',        to: '/pe-laying' },
   { label: 'Reports',          to: '/reports' },
   { label: 'Masters',          to: '/masters' },
+  { label: 'Access Requests',  to: '/admin/requests', adminOnly: true },
 ];
 
 const breadcrumbs = {
@@ -30,6 +32,7 @@ const breadcrumbs = {
   '/ic-work':   'I&C Work — Installation & Commissioning',
   '/reports':   'Reports — Analytics & Export',
   '/masters':   'Masters — Configuration',
+  '/admin/requests': 'Admin — Site Access Requests',
 };
 
 function FlameIcon() {
@@ -63,6 +66,21 @@ export default function Layout() {
 
   const breadcrumb = breadcrumbs[location.pathname] || 'GP-PMS';
 
+  const handleRequestAccess = async () => {
+    if (selectedSite === 'all') {
+      alert('Please select a specific site first.');
+      return;
+    }
+    try {
+      const res = await api.post('/sites/request-access', { siteId: selectedSite });
+      if (res.data.success) {
+        alert('Access request submitted successfully!');
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit access request.');
+    }
+  };
+
   // Get user initials
   const initials = user?.name
     ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
@@ -84,7 +102,7 @@ export default function Layout() {
 
           {/* Nav tabs */}
           <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'visible' }}>
-            {navItems.map(item => {
+            {navItems.filter(item => !item.adminOnly || user?.role === 'ADMIN').map(item => {
               if (item.submenu) {
                 const isSubActive = item.submenu.some(sub => location.pathname === sub.to);
                 return (
@@ -154,6 +172,25 @@ export default function Layout() {
                 {siteOptions.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
               </select>
             </div>
+
+            {user?.role !== 'ADMIN' && selectedSite !== 'all' && (
+              <button
+                onClick={handleRequestAccess}
+                style={{
+                  background: '#c0440a',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  marginLeft: 4,
+                }}
+              >
+                Request Access
+              </button>
+            )}
 
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>|</span>
 

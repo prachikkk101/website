@@ -44,8 +44,28 @@ export function AuthProvider({ children }) {
     setUser(null);
   };
 
+  const register = async (name, email, password) => {
+    try {
+      const response = await api.post('/auth/register', { name, email, password });
+      if (response.data.success) {
+        const { user, accessToken, refreshToken } = response.data;
+        localStorage.setItem('token', accessToken);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+        localStorage.setItem('user', JSON.stringify(user));
+        setUser(user);
+        return { success: true };
+      }
+      return { success: false, error: 'Registration failed' };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.response?.data?.error || 'An error occurred during registration',
+      };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, register }}>
       {children}
     </AuthContext.Provider>
   );

@@ -12,6 +12,7 @@ import ICWork from './pages/ICWork';
 import Placeholder from './pages/Placeholder';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import AccessRequests from './pages/Admin/AccessRequests';
 
 export default function App() {
   return (
@@ -37,6 +38,7 @@ export default function App() {
               <Route path="/ic-work"    element={<ICWork />} />
               <Route path="/reports"    element={<Placeholder title="Reports"  icon="📊" />} />
               <Route path="/masters"    element={<Placeholder title="Masters"  icon="⚙️" />} />
+              <Route path="/admin/requests" element={<AccessRequests />} />
             </Route>
 
             {/* Catch-all */}

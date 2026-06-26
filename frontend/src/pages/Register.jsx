@@ -2,13 +2,14 @@ import { useState, useContext } from 'react';
 import { useNavigate, Navigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 
-export default function Login() {
+export default function Register() {
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [focusedField, setFocusedField] = useState(null);
-  const { login, user } = useContext(AuthContext);
+  const { register, user } = useContext(AuthContext);
   const navigate = useNavigate();
 
   // Already logged in — go straight to dashboard
@@ -18,7 +19,7 @@ export default function Login() {
     e.preventDefault();
     setError('');
     setLoading(true);
-    const result = await login(email, password);
+    const result = await register(name, email, password);
     if (result.success) {
       navigate('/dashboard');
     } else {
@@ -58,14 +59,8 @@ export default function Login() {
         background: 'radial-gradient(circle, rgba(45,106,39,0.15) 0%, transparent 70%)',
         borderRadius: '50%', filter: 'blur(60px)', pointerEvents: 'none',
       }} />
-      <div style={{
-        position: 'fixed', bottom: '10%', right: '10%',
-        width: '350px', height: '350px',
-        background: 'radial-gradient(circle, rgba(74,124,47,0.10) 0%, transparent 70%)',
-        borderRadius: '50%', filter: 'blur(80px)', pointerEvents: 'none',
-      }} />
-
-      {/* Login Card */}
+      
+      {/* Register Card */}
       <div style={{
         width: '100%', maxWidth: '420px',
         background: 'linear-gradient(180deg, #112211 0%, #0D1E0D 100%)',
@@ -74,6 +69,7 @@ export default function Login() {
         boxShadow: '0 25px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.04)',
         overflow: 'hidden',
         position: 'relative',
+        zIndex: 10,
       }}>
 
         {/* Top accent bar */}
@@ -84,33 +80,16 @@ export default function Login() {
 
         {/* Header */}
         <div style={{ padding: '40px 40px 28px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          {/* Logo */}
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '64px', height: '64px', borderRadius: '18px',
-            background: 'linear-gradient(135deg, #1F4E1A, #2D6A27)',
-            boxShadow: '0 8px 20px rgba(45,106,39,0.4), inset 0 1px 0 rgba(255,255,255,0.1)',
-            marginBottom: '18px',
-          }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C12 2 7 8 7 13C7 15.76 9.24 18 12 18C14.76 18 17 15.76 17 13C17 8 12 2 12 2Z" fill="#7ec56f"/>
-              <path d="M12 10C12 10 10 13 10 14.5C10 15.33 10.67 16 11.5 16C12.33 16 13 15.33 13 14.5C13 13 12 10 12 10Z" fill="#F97316"/>
-            </svg>
-          </div>
           <h1 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '700', color: '#E8F5E8', letterSpacing: '-0.3px' }}>
-            GP-PMS Portal
+            Create an Account
           </h1>
           <p style={{ margin: 0, fontSize: '13px', color: '#6A8F6A', fontWeight: '500' }}>
-            Oxygen Protech Pvt. Ltd.
+            GP-PMS Portal Access
           </p>
         </div>
 
         {/* Form Body */}
         <div style={{ padding: '32px 40px 36px' }}>
-          <h2 style={{ margin: '0 0 24px', fontSize: '16px', fontWeight: '600', color: '#B5D4B5', letterSpacing: '0.2px' }}>
-            Sign in to your account
-          </h2>
-
           {error && (
             <div style={{
               display: 'flex', alignItems: 'flex-start', gap: '10px',
@@ -125,6 +104,25 @@ export default function Login() {
           )}
 
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            {/* Name */}
+            <div>
+              <label style={{ display: 'block', marginBottom: '7px', fontSize: '13px', fontWeight: '600', color: '#8AAF8A', letterSpacing: '0.1px' }}>
+                Full Name
+              </label>
+              <input
+                id="name"
+                type="text"
+                autoComplete="name"
+                required
+                value={name}
+                placeholder="John Doe"
+                onChange={(e) => setName(e.target.value)}
+                onFocus={() => setFocusedField('name')}
+                onBlur={() => setFocusedField(null)}
+                style={inputStyle('name')}
+              />
+            </div>
+
             {/* Email */}
             <div>
               <label style={{ display: 'block', marginBottom: '7px', fontSize: '13px', fontWeight: '600', color: '#8AAF8A', letterSpacing: '0.1px' }}>
@@ -146,21 +144,17 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '7px' }}>
-                <label style={{ fontSize: '13px', fontWeight: '600', color: '#8AAF8A', letterSpacing: '0.1px' }}>
-                  Password
-                </label>
-                <a href="#" style={{ fontSize: '12px', color: '#4A7C2F', textDecoration: 'none', fontWeight: '600' }}>
-                  Forgot password?
-                </a>
-              </div>
+              <label style={{ display: 'block', marginBottom: '7px', fontSize: '13px', fontWeight: '600', color: '#8AAF8A', letterSpacing: '0.1px' }}>
+                Password
+              </label>
               <input
                 id="password"
                 type="password"
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
+                minLength={6}
                 value={password}
-                placeholder="Enter your password"
+                placeholder="Create a password"
                 onChange={(e) => setPassword(e.target.value)}
                 onFocus={() => setFocusedField('password')}
                 onBlur={() => setFocusedField(null)}
@@ -194,44 +188,19 @@ export default function Login() {
                 gap: '8px',
               }}
             >
-              {loading ? (
-                <>
-                  <span style={{
-                    display: 'inline-block', width: '16px', height: '16px',
-                    border: '2px solid rgba(255,255,255,0.3)',
-                    borderTopColor: 'white', borderRadius: '50%',
-                    animation: 'spin 0.7s linear infinite',
-                  }} />
-                  Authenticating...
-                </>
-              ) : (
-                'Sign In →'
-              )}
+              {loading ? 'Validating...' : 'Register →'}
             </button>
           </form>
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: '14px 40px',
-          background: 'rgba(0,0,0,0.2)',
-          borderTop: '1px solid rgba(255,255,255,0.05)',
-          textAlign: 'center',
-        }}>
-          <p style={{ margin: '0 0 10px', fontSize: '11px', color: '#3D5C3D', letterSpacing: '0.2px' }}>
-            🔒 Secure enterprise login — activity is monitored & logged
-          </p>
-          <div style={{ textAlign: 'center' }}>
-            <span style={{ fontSize: '13px', color: '#8AAF8A' }}>Don't have an account? </span>
-            <Link to="/register" style={{ fontSize: '13px', color: '#4A7C2F', textDecoration: 'none', fontWeight: '600' }}>
-              Register Here
+          
+          <div style={{ marginTop: '20px', textAlign: 'center' }}>
+            <span style={{ fontSize: '13px', color: '#8AAF8A' }}>Already have an account? </span>
+            <Link to="/login" style={{ fontSize: '13px', color: '#4A7C2F', textDecoration: 'none', fontWeight: '600' }}>
+              Sign In
             </Link>
           </div>
         </div>
       </div>
-
       <style>{`
-        @keyframes spin { to { transform: rotate(360deg); } }
         input::placeholder { color: #3D5C3D; }
         input:-webkit-autofill {
           -webkit-box-shadow: 0 0 0 1000px #1A2E1A inset !important;

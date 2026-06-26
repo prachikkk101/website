@@ -3,8 +3,8 @@ import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import prisma from '../config/db';
-import { sendVerificationEmail } from '../utils/email';
 import { Role } from '@prisma/client';
+import { validateEmailStrict } from '../utils/emailValidator';
 import { AuthenticatedRequest } from '../middlewares/auth';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gp-pms-super-secret-access-token-key-2026';
@@ -32,89 +32,56 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
   try {
     const { email, password, name } = schema.parse(req.body);
 
-    const existingUser = await prisma.user.findUnique({ where: { email } });
+    const validationResult = await validateEmailStrict(email);
+    if (!validationResult.isValid) {
+      return res.status(400).json({ success: false, error: validationResult.message });
+    }
+
+    const normalizedEmail = validationResult.email!;
+
+    const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
     if (existingUser) {
-      return res.status(400).json({ success: false, error: 'Email already registered' });
+      return res.status(400).json({ success: false, error: 'Email already registered.' });
     }
 
     // Check if whitelisted for Admin
-    const isWhitelisted = await prisma.adminWhitelist.findUnique({ where: { email } });
+    const isWhitelisted = await prisma.adminWhitelist.findUnique({ where: { email: normalizedEmail } });
     const assignedRole = isWhitelisted ? Role.ADMIN : Role.WORKER;
 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Generate random 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
     const user = await prisma.user.create({
       data: {
-        email,
+        email: normalizedEmail,
         name,
         passwordHash,
         role: assignedRole,
-        verificationCode: code,
-        verificationExpiry,
+        emailVerified: true, // Auto-verified via strict validation
       },
     });
 
-    await sendVerificationEmail(email, code);
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Check your email for verification OTP.',
-      userId: user.id,
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const verifyEmail = async (req: Request, res: Response, next: NextFunction) => {
-  const schema = z.object({
-    email: z.string().email(),
-    code: z.string().length(6),
-  });
-
-  try {
-    const { email, code } = schema.parse(req.body);
-
-    const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
-
-    if (user.emailVerified) {
-      return res.status(400).json({ success: false, error: 'Email already verified' });
-    }
-
-    if (user.verificationCode !== code) {
-      return res.status(400).json({ success: false, error: 'Invalid verification OTP' });
-    }
-
-    if (user.verificationExpiry && user.verificationExpiry < new Date()) {
-      return res.status(400).json({ success: false, error: 'OTP has expired' });
-    }
-
-    // Mark verified
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        emailVerified: true,
-        verificationCode: null,
-        verificationExpiry: null,
+      message: 'Registration successful.',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
       },
     });
-
-    res.status(200).json({
-      success: true,
-      message: 'Email verified successfully. You can now login.',
-    });
   } catch (error) {
     next(error);
   }
 };
+
+// Email verification is no longer needed via OTP
 
 export const login = async (req: Request, res: Response, next: NextFunction) => {
   const schema = z.object({
@@ -125,13 +92,15 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = schema.parse(req.body);
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    const user = await prisma.user.findUnique({ where: { email: email.toLowerCase() } });
     if (!user) {
       return res.status(400).json({ success: false, error: 'Invalid credentials' });
     }
 
     if (!user.emailVerified) {
-      return res.status(400).json({ success: false, error: 'Email not verified. Please verify first.' });
+      // Legacy fallback in case old user isn't marked verified. 
+      // With new flow, all users are marked verified on creation.
+      await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);

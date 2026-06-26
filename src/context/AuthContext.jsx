@@ -62,6 +62,12 @@ export function AuthProvider({ children }) {
 
   const register = useCallback(async (name, email, password) => {
     const data = await authService.register(name, email, password);
+    if (data.success) {
+      localStorage.setItem('gp_access_token', data.accessToken);
+      localStorage.setItem('gp_refresh_token', data.refreshToken);
+      localStorage.setItem('gp_user', JSON.stringify(data.user));
+      setUser(data.user);
+    }
     return data;
   }, []);
 

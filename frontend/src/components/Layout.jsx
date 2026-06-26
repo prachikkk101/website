@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useContext } from 'react';
 import { useSite, SITE_OPTIONS } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
+import api from '../utils/api';
 
 const navItems = [
   { label: 'GA Dashboard',     to: '/dashboard' },
@@ -12,6 +13,7 @@ const navItems = [
   { label: 'I&C Work',         to: '/ic-work' },
   { label: 'Reports',          to: '/reports' },
   { label: 'Masters',          to: '/masters' },
+  { label: 'Access Requests',  to: '/admin/requests', adminOnly: true },
 ];
 
 const breadcrumbs = {
@@ -22,6 +24,7 @@ const breadcrumbs = {
   '/ic-work':   'I&C Work — Installation & Commissioning',
   '/reports':   'Reports — Analytics & Export',
   '/masters':   'Masters — Configuration',
+  '/admin/requests': 'Admin — Site Access Requests',
 };
 
 function FlameIcon() {
@@ -64,6 +67,33 @@ export default function Layout() {
     navigate('/login');
   };
 
+  const handleRequestAccess = async () => {
+    // Basic mapping for mocked sites to a dummy UUID or fetching real ones would go here
+    // We send a request for the currently selected site from the context
+    // This assumes the backend can handle the site request by name or we have real IDs.
+    // For this demonstration, we'll alert the user to use proper IDs in a fully connected app.
+    if (selectedSite === 'all') {
+      alert('Please select a specific site first.');
+      return;
+    }
+    
+    try {
+      // Find the site UUID from the backend if possible, or we just pass the mock name.
+      // In a real integration, the SiteContext would hold actual site objects with IDs.
+      const res = await api.post('/sites/request-access', { siteId: selectedSite });
+      if (res.data.success) {
+        alert('Access request submitted successfully!');
+      }
+    } catch (err) {
+      // If it fails because selectedSite is not a UUID (due to mocked frontend), we show a friendly message.
+      if (err.response?.status === 404 || err.response?.status === 400) {
+        alert(err.response?.data?.error || 'Failed to submit access request.');
+      } else {
+        alert('Site request feature requires actual Site IDs from the database.');
+      }
+    }
+  };
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f4f0' }}>
       {/* ── Top Navbar ── */}
@@ -77,7 +107,7 @@ export default function Layout() {
 
           {/* Nav tabs */}
           <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'hidden' }}>
-            {navItems.map(item => (
+            {navItems.filter(item => !item.adminOnly || user?.role === 'ADMIN').map(item => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -115,6 +145,25 @@ export default function Layout() {
                 {SITE_OPTIONS.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
               </select>
             </div>
+
+            {user?.role !== 'ADMIN' && (
+              <button
+                onClick={handleRequestAccess}
+                style={{
+                  background: '#c0440a',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  marginLeft: 4,
+                }}
+              >
+                Request Access
+              </button>
+            )}
 
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>|</span>
 

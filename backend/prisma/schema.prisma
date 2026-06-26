@@ -38,8 +38,6 @@ model User {
   passwordHash       String
   role               Role                   @default(WORKER)
   emailVerified      Boolean                @default(false)
-  verificationCode   String?                // For email verification OTP
-  verificationExpiry DateTime?
   createdAt          DateTime               @default(now())
   updatedAt          DateTime               @updatedAt
   
@@ -54,6 +52,7 @@ model User {
   pngSupervised      PNGConnection[]        @relation("Supervisor")
   meterInstallations MeterInstallation[]
   auditLogs          AuditLog[]
+  siteAccessRequests SiteAccessRequest[]
 }
 
 model AdminWhitelist {
@@ -89,6 +88,7 @@ model Site {
   toolReturns  ToolReturn[]
   attendance   Attendance[]
   meterRegisters MeterRegister[]
+  accessRequests SiteAccessRequest[]
 }
 
 model SiteUser {
@@ -100,6 +100,20 @@ model SiteUser {
   createdAt     DateTime @default(now())
 
   @@id([userId, siteId])
+}
+
+model SiteAccessRequest {
+  id        String   @id @default(uuid())
+  userId    String
+  siteId    String
+  status    String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId])
 }
 
 model MaterialItem {

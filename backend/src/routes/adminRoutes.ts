@@ -4,6 +4,7 @@ import {
   getUsers, createUser, updateUser,
   getWhitelist, addToWhitelist, removeFromWhitelist,
 } from '../controllers/adminController';
+import { listRequests, approveRequest, rejectRequest } from '../controllers/accessRequestController';
 import { authenticate, requireRole } from '../middlewares/auth';
 import { Role } from '@prisma/client';
 
@@ -23,5 +24,10 @@ router.patch('/users/:userId', ...adminOnly, updateUser);
 router.get('/whitelist', ...adminOnly, getWhitelist);
 router.post('/whitelist', ...adminOnly, addToWhitelist);
 router.delete('/whitelist/:id', ...adminOnly, removeFromWhitelist);
+
+// Access Requests
+router.get('/access-requests', ...adminOnly, listRequests);
+router.post('/access-requests/:id/approve', ...adminOnly, approveRequest);
+router.post('/access-requests/:id/reject', ...adminOnly, rejectRequest);
 
 export default router;
