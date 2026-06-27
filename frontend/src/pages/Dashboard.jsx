@@ -1,9 +1,9 @@
 // src/pages/Dashboard.jsx
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { kpiData, sitesData, housesDoneThisMonth, dailyEntries, activeWorkers, lowStockAlerts } from '../data/dashboard';
 import { useSite } from '../context/SiteContext';
 
-const ACCT_TABS = ['Domestic', 'Commercial', 'Industrial', 'CNG'];
+const ACCT_TABS = ['Domestic', 'Commercial', 'Industrial'];
 const DATE_RANGES = ['Last 30 Days', 'Last 90 Days', 'Last 6 Months', 'Custom'];
 
 /* ── KPI Tiles ── */
@@ -19,7 +19,7 @@ const KPI_KEYS = [
 
 function KpiGrid({ data }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 16 }}>
+    <div className="kpi-grid-7" style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 8, marginBottom: 16 }}>
       {KPI_KEYS.map((k, i) => (
         <div
           key={k.key}
@@ -145,6 +145,8 @@ export default function Dashboard() {
   const [dateRange, setDateRange] = useState('Last 90 Days');
   const { selectedSite } = useSite();
 
+  useEffect(() => { document.title = 'GP-PMS — GA Dashboard'; }, []);
+
   const data = kpiData[activeTab.toLowerCase()] ?? kpiData.domestic;
 
   /* Filter sites by selected */
@@ -220,7 +222,7 @@ export default function Dashboard() {
       <KpiGrid data={data} />
 
       {/* Two-column layout */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+      <div className="dash-two-col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
         {/* Active Sites */}
         <div className="card" style={{ padding: 16 }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -265,7 +267,7 @@ export default function Dashboard() {
           </svg>
           Active workers — all sites
         </h3>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+        <div className="worker-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
           {activeWorkers.map(w => <WorkerCard key={w.id} worker={w} />)}
         </div>
         <div style={{

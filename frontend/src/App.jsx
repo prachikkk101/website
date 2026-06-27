@@ -1,5 +1,6 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { SiteProvider } from './context/SiteContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -9,33 +10,42 @@ import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
 import PELaying from './pages/PELaying';
-import ICWork from './pages/ICWork';
-import Placeholder from './pages/Placeholder';
+import Reports from './pages/Reports';
+import Access from './pages/Access';
+
+// Scroll to top on every route change
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 
 export default function App() {
   return (
     <AuthProvider>
       <SiteProvider>
         <BrowserRouter>
+          <ScrollToTop />
           <Routes>
-            {/* Public routes */}
+            {/* Public */}
             <Route path="/login" element={<Login />} />
 
-            {/* Protected routes — redirect to /login if not authenticated */}
+            {/* Protected */}
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard"  element={<Dashboard />} />
-                <Route path="/customers"  element={<Customers />} />
-                <Route path="/inventory"  element={<Inventory />} />
-                <Route path="/pe-laying"  element={<PELaying />} />
-                <Route path="/ic-work"    element={<ICWork />} />
-                <Route path="/reports"    element={<Placeholder title="Reports"  icon="📊" />} />
-                <Route path="/masters"    element={<Placeholder title="Masters"  icon="⚙️" />} />
+                <Route path="/"          element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/customers" element={<Customers />} />
+                <Route path="/inventory" element={<Inventory />} />
+                <Route path="/pe-laying" element={<PELaying />} />
+                <Route path="/reports"   element={<Reports />} />
+                <Route path="/access"    element={<Access />} />
+                {/* Legacy redirects */}
+                <Route path="/masters"   element={<Navigate to="/access" replace />} />
+                <Route path="/ic-work"   element={<Navigate to="/dashboard" replace />} />
               </Route>
             </Route>
 
-            {/* Catch-all fallback */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </BrowserRouter>
@@ -43,4 +53,3 @@ export default function App() {
     </AuthProvider>
   );
 }
-

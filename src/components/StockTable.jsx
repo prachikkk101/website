@@ -176,33 +176,50 @@ export default function StockTable() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
         <div>
-          <h2 className="font-bold text-gray-800 text-lg">Stock Statement</h2>
-          <p className="text-sm text-gray-400">{rows.length} materials tracked</p>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1e293b', margin: 0 }}>Stock Statement</h2>
+          <p style={{ fontSize: 13, color: '#94a3b8', margin: '2px 0 0' }}>{rows.length} materials tracked</p>
         </div>
-        <div className="flex gap-2">
+        <button
+          onClick={() => setShowModal(true)}
+          style={{
+            height: 36, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 6,
+            padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+          Receive Stock
+        </button>
+      </div>
+
+      {/* Export row with date inputs */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>Export as of</span>
+          <input
+            type="date"
+            value={new Date().toISOString().split('T')[0]}
+            readOnly
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12, background: '#f8fafc' }}
+          />
           <button
             onClick={() => exportStockData(rows)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold border transition-all hover:bg-green-50"
-            style={{ borderColor: '#2d6a27', color: '#2d6a27' }}
+            style={{
+              height: 32, background: '#2d6a27', color: 'white',
+              border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12,
+              fontWeight: 600, cursor: 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/>
-              <line x1="12" y1="15" x2="12" y2="3"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
             </svg>
-            Export
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
-            style={{ background: '#2d6a27' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Receive Stock
+            ↓ Export Excel
           </button>
         </div>
       </div>

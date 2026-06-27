@@ -2,8 +2,10 @@
 // Central Axios instance with JWT interceptors and silent token refresh
 import axios from 'axios';
 
+const BASE = (import.meta.env.VITE_API_URL || '') + '/api';
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: BASE,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -55,7 +57,6 @@ api.interceptors.response.use(
 
       const refreshToken = localStorage.getItem('gp_refresh_token');
       if (!refreshToken) {
-        // No refresh token → force logout
         localStorage.removeItem('gp_access_token');
         localStorage.removeItem('gp_refresh_token');
         localStorage.removeItem('gp_user');
@@ -64,7 +65,7 @@ api.interceptors.response.use(
       }
 
       try {
-        const { data } = await axios.post('/api/auth/refresh', { refreshToken });
+        const { data } = await axios.post(`${BASE}/auth/refresh`, { refreshToken });
         const newToken = data.accessToken;
         localStorage.setItem('gp_access_token', newToken);
         api.defaults.headers.Authorization = `Bearer ${newToken}`;
@@ -88,3 +89,9 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// ── Named convenience wrappers ──
+export const apiGet    = (path, config)       => api.get(path, config).then(r => r.data);
+export const apiPost   = (path, body, config) => api.post(path, body, config).then(r => r.data);
+export const apiPatch  = (path, body, config) => api.patch(path, body, config).then(r => r.data);
+export const apiDelete = (path, config)       => api.delete(path, config).then(r => r.data);

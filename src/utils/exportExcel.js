@@ -144,13 +144,26 @@ export function exportStockData(stock) {
 /* ══════════════════════════════════════
    3. Export PE Laying Data
    ══════════════════════════════════════ */
-export function exportPELaying(data) {
+export function exportPELaying(data, fromDate, toDate) {
+  let filteredData = data;
+  if (fromDate || toDate) {
+    filteredData = data.filter(r => {
+      const dateStr = r.layDate || r.layingDate || null;
+      if (!dateStr) return true;
+      const parsed = parseEntryDate(dateStr);
+      if (!parsed) return true;
+      if (fromDate && parsed < fromDate) return false;
+      if (toDate && parsed > toDate) return false;
+      return true;
+    });
+  }
+
   const headers = [[
     'Sr.','Laying Date','Testing Date','Charging Date','RA Bill No.','Report No.','Work Status','Area',
     'Coil No.','Ø32mm OC','Ø32mm Boring','Ø32mm Total','Ø63mm OC','Ø63mm Boring','Ø63mm HDD','Ø63mm Total','Ø90mm Total','Ø125mm Total',
   ]];
 
-  const rows = data.map(r => [
+  const rows = filteredData.map(r => [
     r.sr, r.layDate, r.testDate, r.chargeDate, r.raBill, r.reportNo, r.status, r.area, r.coil,
     r.d32oc, r.d32b, r.d32oc + r.d32b,
     r.d63oc, r.d63b, r.d63hdd, r.d63oc + r.d63b + r.d63hdd,
@@ -158,7 +171,7 @@ export function exportPELaying(data) {
   ]);
 
   /* Totals row */
-  const tot = data.reduce((acc, r) => ({
+  const tot = filteredData.reduce((acc, r) => ({
     d32oc: acc.d32oc + r.d32oc,
     d32b:  acc.d32b  + r.d32b,
     d63oc: acc.d63oc + r.d63oc,
@@ -187,7 +200,12 @@ export function exportPELaying(data) {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Data');
-  download(wb, `GP_PMS_PELaying_${today()}.xlsx`);
+
+  const filename = (fromDate && toDate)
+    ? `GP_PMS_PELaying_${fromDate}_to_${toDate}.xlsx`
+    : `GP_PMS_PELaying_${today()}.xlsx`;
+
+  download(wb, filename);
 }
 
 export function exportLMCData(data) {

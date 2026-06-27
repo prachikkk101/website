@@ -2,6 +2,9 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
+const ADMIN_ONLY_PATHS = ['/dashboard', '/masters', '/reports'];
+const NON_ADMIN_ROLES  = ['SUPERVISOR', 'WORKER'];
+
 export default function ProtectedRoute({ children, roles }) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const location = useLocation();
@@ -29,7 +32,16 @@ export default function ProtectedRoute({ children, roles }) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  // Optional role check
+  // Workers/Supervisors trying to access admin-only areas → send to /my-site
+  if (
+    user &&
+    NON_ADMIN_ROLES.includes(user.role) &&
+    ADMIN_ONLY_PATHS.some(p => location.pathname.startsWith(p))
+  ) {
+    return <Navigate to="/my-site" replace />;
+  }
+
+  // Optional explicit role check (for fine-grained route guards)
   if (roles && user && !roles.includes(user.role)) {
     return (
       <div style={{

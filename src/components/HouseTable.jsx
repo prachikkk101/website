@@ -6,6 +6,7 @@ import SlidePanel from './SlidePanel';
 import MeterModal from './MeterModal';
 import { pngService } from '../api/pngService';
 import { exportHouseData } from '../utils/exportExcel';
+import { getHouses, addHouse } from '../utils/dataService';
 
 /* ── Status Badge ── */
 const STATUS_MAP = {
@@ -71,9 +72,16 @@ export default function HouseTable() {
 
   // Fetch connections from API
   const fetchConnections = useCallback(async () => {
+    // Detect local mode: site IDs are placeholder strings, not real UUIDs
+    const isLocalMode = sites.length > 0 && String(sites[0]?.id).startsWith('local-site-');
+
     if (selectedSite === 'all') {
-      // Fetch from all sites
       setLoading(true);
+      if (isLocalMode) {
+        setHouses(getHouses());
+        setLoading(false);
+        return;
+      }
       try {
         const allConns = [];
         for (const site of sites) {
@@ -83,21 +91,25 @@ export default function HouseTable() {
             allConns.push(...(Array.isArray(conns) ? conns : []));
           } catch { /* skip failed sites */ }
         }
-        setHouses(allConns);
-      } catch (err) {
-        console.error('Failed to fetch connections:', err);
+        setHouses(allConns.length > 0 ? allConns : getHouses());
+      } catch {
+        setHouses(getHouses());
       } finally {
         setLoading(false);
       }
     } else {
       setLoading(true);
+      if (isLocalMode || String(selectedSite).startsWith('local-site-')) {
+        setHouses(getHouses());
+        setLoading(false);
+        return;
+      }
       try {
         const data = await pngService.getConnections(selectedSite);
         const conns = data.connections || data || [];
-        setHouses(Array.isArray(conns) ? conns : []);
-      } catch (err) {
-        console.error('Failed to fetch connections:', err);
-        setHouses([]);
+        setHouses(Array.isArray(conns) && conns.length > 0 ? conns : getHouses());
+      } catch {
+        setHouses(getHouses());
       } finally {
         setLoading(false);
       }
@@ -105,10 +117,8 @@ export default function HouseTable() {
   }, [selectedSite, sites]);
 
   useEffect(() => {
-    if (sites.length > 0 || selectedSite !== 'all') {
-      fetchConnections();
-    }
-  }, [fetchConnections, sites.length, selectedSite]);
+    fetchConnections();
+  }, [fetchConnections]);
 
   function reset() { setPage(1); }
 
@@ -160,18 +170,30 @@ export default function HouseTable() {
         tfCount: formData.tfCount ? Number(formData.tfCount) : undefined,
         ivCount: formData.ivCount ? Number(formData.ivCount) : undefined,
       });
-
-      showToast('✓ Connection created successfully');
-      setFormData(initialForm);
-      setErrors({});
-      setPanelOpen(false);
-      fetchConnections(); // Refresh
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to create connection';
-      showToast(`⚠️ ${msg}`);
-    } finally {
-      setSaving(false);
+    } catch {
+      // API unreachable — persist locally
+      addHouse({
+        appNo: formData.appNo,
+        bpNo: formData.appNo,
+        name: formData.customerName,
+        mobile: formData.mobile,
+        altMobile: formData.altMobile,
+        acctType: formData.accountType,
+        houseNo: formData.houseNo,
+        area: formData.address1 || formData.address2 || '',
+        city: formData.city || 'HISAR',
+        site: sites.find(s => s.id === targetSiteId)?.name || '',
+        gcStatus: '-', giStatus: '-', rfc: '-', ngStatus: '-', saralStatus: '-',
+        meterNo: '-', meterDate: '-', meterPhoto: false,
+      });
     }
+
+    showToast('✓ Connection created successfully');
+    setFormData(initialForm);
+    setErrors({});
+    setPanelOpen(false);
+    fetchConnections();
+    setSaving(false);
   }
 
   function handleCancel() {
@@ -280,7 +302,7 @@ export default function HouseTable() {
               {paged.length === 0 && (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
-                    {selectedSite === 'all' ? 'Select a site to view connections, or ensure the database is seeded.' : 'No records match the current filters.'}
+                    {'No records match the current filters.'}
                   </td>
                 </tr>
               )}

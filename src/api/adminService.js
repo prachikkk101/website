@@ -16,6 +16,19 @@ export const adminService = {
   updateUser: (userId, data) =>
     api.patch(`/admin/users/${userId}`, data).then((r) => r.data),
 
+  // Site access control
+  restrictUser: (userId) =>
+    api.patch(`/users/${userId}/restrict`).then((r) => r.data),
+
+  restoreUser: (userId) =>
+    api.patch(`/users/${userId}/restore`).then((r) => r.data),
+
+  getSiteUsers: () =>
+    api.get('/sites').then((r) => r.data),
+
+  assignUserToSite: (siteId, data) =>
+    api.post(`/sites/${siteId}/workers`, data).then((r) => r.data),
+
   // Admin whitelist
   getWhitelist: () =>
     api.get('/admin/whitelist').then((r) => r.data),

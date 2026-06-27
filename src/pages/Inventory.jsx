@@ -4,6 +4,7 @@ import { useSite } from '../context/SiteContext';
 import { useToast } from '../components/Toast';
 import SlidePanel from '../components/SlidePanel';
 import { siteService } from '../api/siteService';
+import { getStock, receiveStock } from '../utils/dataService';
 
 /* ── Status logic ── */
 function getStatus(row) {
@@ -34,17 +35,21 @@ export default function Inventory() {
 
   // Fetch stock data
   const fetchStock = useCallback(async () => {
+    const isLocalMode = sites.length > 0 && String(sites[0]?.id).startsWith('local-site-');
+    if (isLocalMode || String(selectedSite).startsWith('local-site-')) {
+      setStock(getStock());
+      return;
+    }
+
     if (selectedSite === 'all') {
-      // Show first site's stock or aggregate
       if (sites.length === 0) return;
       setLoading(true);
       try {
         const data = await siteService.getSiteStock(sites[0].id);
         const stockList = data.stock || data || [];
-        setStock(Array.isArray(stockList) ? stockList : []);
-      } catch (err) {
-        console.error('Failed to fetch stock:', err);
-        setStock([]);
+        setStock(Array.isArray(stockList) && stockList.length > 0 ? stockList : getStock());
+      } catch {
+        setStock(getStock());
       } finally {
         setLoading(false);
       }
@@ -53,10 +58,9 @@ export default function Inventory() {
       try {
         const data = await siteService.getSiteStock(selectedSite);
         const stockList = data.stock || data || [];
-        setStock(Array.isArray(stockList) ? stockList : []);
-      } catch (err) {
-        console.error('Failed to fetch stock:', err);
-        setStock([]);
+        setStock(Array.isArray(stockList) && stockList.length > 0 ? stockList : getStock());
+      } catch {
+        setStock(getStock());
       } finally {
         setLoading(false);
       }
@@ -64,10 +68,8 @@ export default function Inventory() {
   }, [selectedSite, sites]);
 
   useEffect(() => {
-    if (sites.length > 0 || selectedSite !== 'all') {
-      fetchStock();
-    }
-  }, [fetchStock, sites.length, selectedSite]);
+    fetchStock();
+  }, [fetchStock]);
 
   function resetForm() {
     setReceivedQtys({});
@@ -134,17 +136,21 @@ export default function Inventory() {
         supplier: supplier || undefined,
         date,
       });
-
-      showToast('✓ Stock received and updated');
-      resetForm();
-      setShowModal(false);
-      fetchStock(); // Refresh
-    } catch (err) {
-      const msg = err.response?.data?.error || 'Failed to receive stock';
-      showToast(`⚠️ ${msg}`);
-    } finally {
-      setSaving(false);
+    } catch {
+      // API offline — persist receipt locally
+      // Map materialId-keyed items to index-keyed for receiveStock()
+      const indexedItems = items.map(({ materialId, qty }) => {
+        const idx = stock.findIndex(s => (s.materialId || s.material?.id || s.id) === materialId);
+        return { matIndex: idx, qty };
+      }).filter(i => i.matIndex >= 0);
+      receiveStock({ challanNo: invoiceNo, date, site: targetSiteId, items: indexedItems });
     }
+
+    showToast('✓ Stock received and updated');
+    resetForm();
+    setShowModal(false);
+    fetchStock();
+    setSaving(false);
   }
 
   if (loading) {

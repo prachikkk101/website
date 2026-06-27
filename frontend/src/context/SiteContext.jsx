@@ -2,7 +2,7 @@
 import { createContext, useContext, useState } from 'react';
 
 export const SITE_OPTIONS = [
-  { value: 'all',    label: 'All Sites' },
+  { value: 'all',    label: 'GA Dashboard' },
   { value: 'khanna', label: 'Khanna — CA-09' },
   { value: 'uenii',  label: 'UE-II — Hisar' },
   { value: 'pla',    label: 'PLA — Hisar' },

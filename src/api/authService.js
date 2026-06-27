@@ -16,4 +16,17 @@ export const authService = {
 
   getMe: () =>
     api.get('/auth/me').then((r) => r.data),
+
+  // ── Access request flow ──
+  requestAccess: (data) =>
+    api.post('/auth/request-access', data).then((r) => r.data),
+
+  getAccessRequests: (status) =>
+    api.get('/auth/access-requests', { params: status ? { status } : {} }).then((r) => r.data),
+
+  approveAccess: (data) =>
+    api.post('/auth/approve-access', data).then((r) => r.data),
+
+  rejectAccess: (requestId) =>
+    api.post('/auth/reject-access', { requestId }).then((r) => r.data),
 };

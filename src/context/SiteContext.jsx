@@ -3,6 +3,14 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { siteService } from '../api/siteService';
 import { useAuth } from './AuthContext';
 
+// ── Static fallback sites for local / offline mode ──
+const LOCAL_SITES = [
+  { id: 'local-site-1', name: 'Khanna — CA-09',  location: 'Zone-02, Ludhiana' },
+  { id: 'local-site-2', name: 'UE-II — Hisar',   location: 'Urban Extension II' },
+  { id: 'local-site-3', name: 'PLA — Hisar',     location: 'PLA Colony' },
+  { id: 'local-site-4', name: 'Kohara — CA-07',  location: 'Kohara, Ludhiana' },
+];
+
 const SiteContext = createContext({
   selectedSite: 'all',
   setSelectedSite: () => {},
@@ -34,12 +42,13 @@ export function SiteProvider({ children }) {
     try {
       const data = await siteService.getSites();
       if (data.success !== false) {
-        // API may return { success: true, sites: [...] } or directly an array
         const siteList = Array.isArray(data) ? data : (data.sites || []);
-        setSites(siteList);
+        // If backend returned real sites, use them; otherwise fall back to local
+        setSites(siteList.length > 0 ? siteList : LOCAL_SITES);
       }
-    } catch (err) {
-      console.error('Failed to fetch sites:', err);
+    } catch {
+      // Backend offline — use local static sites so components can render
+      setSites(LOCAL_SITES);
     } finally {
       setSitesLoading(false);
     }

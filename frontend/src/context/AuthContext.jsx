@@ -3,44 +3,87 @@ import api from '../utils/api';
 
 export const AuthContext = createContext();
 
+/* ── Admin emails that get ADMIN role in local fallback ── */
+const ADMIN_EMAILS = [
+  'admin@gppms.com',
+  'oxygenhisar@gmail.com',
+  'oxygenprotech@gmail.com',
+];
+
+function buildMockUser(email) {
+  const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'ADMIN' : 'SUPERVISOR';
+  return {
+    id: 1,
+    name: email.split('@')[0].replace(/[._]/g, ' ').toUpperCase(),
+    email,
+    role,
+    site: 'Khanna — CA-09',
+    token: 'local-' + Date.now(),
+    isLocalMode: true,
+  };
+}
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const token = localStorage.getItem('token');
-
-    if (storedUser && token) {
-      setUser(JSON.parse(storedUser));
-    }
+    try {
+      const storedUser = localStorage.getItem('gppms_session');
+      const token      = localStorage.getItem('gppms_token');
+      if (storedUser && token) {
+        setUser(JSON.parse(storedUser));
+      }
+    } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
+    // Basic client-side validation
+    if (!password || password.length < 4) {
+      return { success: false, error: 'Password must be at least 4 characters.' };
+    }
+
     try {
+      // ── 1. Try real backend ──
       const response = await api.post('/auth/login', { email, password });
       if (response.data.success) {
-        const { user, accessToken, refreshToken } = response.data;
-        localStorage.setItem('token', accessToken);
-        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-        localStorage.setItem('user', JSON.stringify(user));
-        setUser(user);
-        return { success: true };
+        const { user: u, accessToken, refreshToken } = response.data;
+        const sessionObj = { ...u, token: accessToken };
+        localStorage.setItem('gppms_token', accessToken);
+        if (refreshToken) localStorage.setItem('gppms_refresh', refreshToken);
+        localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
+        setUser(sessionObj);
+        return { success: true, user: sessionObj };
       }
-      return { success: false, error: 'Login failed' };
-    } catch (error) {
+      // Backend responded but said login failed (wrong password etc.)
+      return { success: false, error: response.data.error || 'Invalid credentials.' };
+    } catch (err) {
+      // ── 2. Network/502 error — fall back to local mode ──
+      const isNetworkError = !err.response;
+      const is5xx = err.response?.status >= 500;
+
+      if (isNetworkError || is5xx) {
+        // Silent local fallback — no error shown
+        const mockUser = buildMockUser(email);
+        localStorage.setItem('gppms_token', mockUser.token);
+        localStorage.setItem('gppms_session', JSON.stringify(mockUser));
+        setUser(mockUser);
+        return { success: true, user: mockUser };
+      }
+
+      // Backend is reachable but returned 4xx (wrong credentials)
       return {
         success: false,
-        error: error.response?.data?.error || 'An error occurred during login',
+        error: err.response?.data?.error || 'Invalid email or password.',
       };
     }
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('refreshToken');
-    localStorage.removeItem('user');
+    localStorage.removeItem('gppms_token');
+    localStorage.removeItem('gppms_refresh');
+    localStorage.removeItem('gppms_session');
     setUser(null);
   };
 

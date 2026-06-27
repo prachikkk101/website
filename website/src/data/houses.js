@@ -21,5 +21,5 @@ export const houses = [
 
 export const areas = ['PLA', 'UE-II', 'Sector 12', 'Market', 'Sector 3', 'Block A', 'Industrial', 'Sector 9', 'Block C', 'Highway', 'Sector 14'];
 export const societies = ['Oxygen Protech Pvt Ltd', 'Green Valley Society', 'Shiv Enclave', 'Urban Homes'];
-export const acctTypes = ['DOMESTIC', 'COMMERCIAL', 'INDUSTRIAL', 'CNG'];
+export const acctTypes = ['DOMESTIC', 'COMMERCIAL', 'INDUSTRIAL'];
 export const sites = ['All Sites', 'Khanna CA-09', 'UE-II Hisar', 'PLA Hisar', 'Kohara CA-07'];

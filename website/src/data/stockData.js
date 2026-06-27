@@ -15,5 +15,15 @@ const stockData = [
   { sr:13, mat:'Pressure Regulator',      unit:'Pcs', open:60,   recv:40,   issued:55,   ret:3,  onSite:37,  inStore:5,   req:30   },
   { sr:14, mat:'Gas Hose Pipe (1mtr)',    unit:'Pcs', open:300,  recv:100,  issued:260,  ret:5,  onSite:110, inStore:25,  req:150  },
   { sr:15, mat:'Isolation Valve 63mm',    unit:'Pcs', open:80,   recv:40,   issued:75,   ret:5,  onSite:40,  inStore:10,  req:40   },
+  { sr:16, mat:'20mm PE Pipe (mtr)',       unit:'Mtr', open:800,  recv:400,  issued:600,  ret:10, onSite:150, inStore:60,  req:500  },
+  { sr:17, mat:"½'' GI Pipe (mtr)",        unit:'Mtr', open:500,  recv:250,  issued:400,  ret:5,  onSite:80,  inStore:65,  req:300  },
+  { sr:18, mat:'TF Fitting',               unit:'Pcs', open:300,  recv:150,  issued:200,  ret:2,  onSite:98,  inStore:48,  req:200  },
+  { sr:19, mat:'Isolation Ball Valve',     unit:'Pcs', open:250,  recv:100,  issued:180,  ret:4,  onSite:66,  inStore:16,  req:150  },
+  { sr:20, mat:'32mm Coupler',             unit:'Pcs', open:150,  recv:80,   issued:100,  ret:2,  onSite:48,  inStore:32,  req:100  },
+  { sr:21, mat:'63mm Coupler',             unit:'Pcs', open:100,  recv:50,   issued:80,   ret:1,  onSite:19,  inStore:19,  req:80   },
+  { sr:22, mat:'Teflon Tape (rolls)',      unit:'Rolls', open:600, recv:300,  issued:450,  ret:15, onSite:135, inStore:35,  req:400  },
+  { sr:23, mat:'Gas Tap',                  unit:'Pcs', open:200,  recv:100,  issued:150,  ret:3,  onSite:47,  inStore:7,   req:150  },
+  { sr:24, mat:'Rubber Tube (mtr)',        unit:'Mtr', open:400,  recv:200,  issued:300,  ret:8,  onSite:92,  inStore:12,  req:250  },
+  { sr:25, mat:'Hose Clamp',               unit:'Pcs', open:500,  recv:250,  issued:400,  ret:12, onSite:88,  inStore:52,  req:300  }
 ];
 export default stockData;

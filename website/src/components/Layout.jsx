@@ -1,16 +1,27 @@
 // src/components/Layout.jsx
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useState } from 'react';
-import { useSite, SITE_OPTIONS } from '../context/SiteContext';
+import { useSite } from '../context/SiteContext';
+import { useAuth } from '../context/AuthContext';
+import api from '../api/api';
+import ToastContainer from './Toast';
 
 const navItems = [
   { label: 'GA Dashboard',     to: '/dashboard' },
-  { label: 'Customer On-Board',to: '/customers', dropdown: true },
-  { label: 'Inventory',        to: '/inventory', dropdown: true },
+  {
+    label: 'Customer On-Board',
+    to: '/customers',
+    dropdown: true,
+    submenu: [
+      { label: 'House Connections', to: '/customers' },
+      { label: 'I&C Work',         to: '/ic-work' },
+    ]
+  },
+  { label: 'Inventory',        to: '/inventory' },
   { label: 'PE Laying',        to: '/pe-laying' },
-  { label: 'I&C Work',         to: '/ic-work' },
   { label: 'Reports',          to: '/reports' },
   { label: 'Masters',          to: '/masters' },
+  { label: 'Access Requests',  to: '/admin/requests', adminOnly: true },
 ];
 
 const breadcrumbs = {
@@ -21,6 +32,7 @@ const breadcrumbs = {
   '/ic-work':   'I&C Work — Installation & Commissioning',
   '/reports':   'Reports — Analytics & Export',
   '/masters':   'Masters — Configuration',
+  '/admin/requests': 'Admin — Site Access Requests',
 };
 
 function FlameIcon() {
@@ -40,15 +52,45 @@ function ChevronDown() {
   );
 }
 
+const ROLE_BADGE_COLORS = {
+  ADMIN:      { bg: '#fee2e2', color: '#b91c1c' },
+  SUPERVISOR: { bg: '#dbeafe', color: '#1d4ed8' },
+  WORKER:     { bg: '#dcfce7', color: '#15803d' },
+  VIEWER:     { bg: '#f1f5f9', color: '#64748b' },
+};
+
 export default function Layout() {
   const location = useLocation();
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const { selectedSite, setSelectedSite } = useSite();
+  const { selectedSite, setSelectedSite, siteOptions } = useSite();
+  const { user, logout } = useAuth();
 
   const breadcrumb = breadcrumbs[location.pathname] || 'GP-PMS';
 
+  const handleRequestAccess = async () => {
+    if (selectedSite === 'all') {
+      alert('Please select a specific site first.');
+      return;
+    }
+    try {
+      const res = await api.post('/sites/request-access', { siteId: selectedSite });
+      if (res.data.success) {
+        alert('Access request submitted successfully!');
+      }
+    } catch (err) {
+      alert(err.response?.data?.error || 'Failed to submit access request.');
+    }
+  };
+
+  // Get user initials
+  const initials = user?.name
+    ? user.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2)
+    : '??';
+
+  const roleBadge = ROLE_BADGE_COLORS[user?.role] || ROLE_BADGE_COLORS.VIEWER;
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', background: '#f0f4f0' }}>
+      <ToastContainer />
       {/* ── Top Navbar ── */}
       <header style={{ background: '#1f4e1a', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
         <div style={{ display: 'flex', alignItems: 'center', height: 48 }}>
@@ -59,17 +101,49 @@ export default function Layout() {
           </div>
 
           {/* Nav tabs */}
-          <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'hidden' }}>
-            {navItems.map(item => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
-              >
-                {item.label}
-                {item.dropdown && <ChevronDown />}
-              </NavLink>
-            ))}
+          <nav style={{ display: 'flex', alignItems: 'stretch', height: '100%', gap: 0, flex: 1, overflow: 'visible' }}>
+            {navItems.filter(item => !item.adminOnly || user?.role === 'ADMIN').map(item => {
+              if (item.submenu) {
+                const isSubActive = item.submenu.some(sub => location.pathname === sub.to);
+                return (
+                  <div
+                    key={item.label}
+                    className="nav-tab-container"
+                    style={{ position: 'relative', display: 'flex', alignItems: 'stretch' }}
+                  >
+                    <NavLink
+                      to={item.to}
+                      className={() => `nav-tab${isSubActive ? ' active' : ''}`}
+                    >
+                      {item.label}
+                      <ChevronDown />
+                    </NavLink>
+                    <div className="nav-dropdown-menu">
+                      {item.submenu.map(sub => (
+                        <NavLink
+                          key={sub.to}
+                          to={sub.to}
+                          className={({ isActive }) => `nav-dropdown-item${isActive ? ' active' : ''}`}
+                        >
+                          {sub.label}
+                        </NavLink>
+                      ))}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) => `nav-tab${isActive ? ' active' : ''}`}
+                >
+                  {item.label}
+                  {item.dropdown && <ChevronDown />}
+                </NavLink>
+              );
+            })}
           </nav>
 
           {/* Right side */}
@@ -95,22 +169,73 @@ export default function Layout() {
                   borderRadius: 4,
                 }}
               >
-                {SITE_OPTIONS.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
+                {siteOptions.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
               </select>
             </div>
 
+            {user?.role !== 'ADMIN' && selectedSite !== 'all' && (
+              <button
+                onClick={handleRequestAccess}
+                style={{
+                  background: '#c0440a',
+                  border: 'none',
+                  borderRadius: 4,
+                  color: '#fff',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  padding: '4px 8px',
+                  cursor: 'pointer',
+                  marginLeft: 4,
+                }}
+              >
+                Request Access
+              </button>
+            )}
+
             <span style={{ color: 'rgba(255,255,255,0.3)', fontSize: 16 }}>|</span>
 
-            {/* User */}
+            {/* User info + role badge */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{
                 width: 32, height: 32, borderRadius: '50%',
                 background: '#4a7c2f', border: '1.5px solid rgba(126,197,111,0.5)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 fontSize: 12, fontWeight: 700, color: '#fff', flexShrink: 0,
-              }}>AK</div>
-              <span style={{ color: '#fff', fontSize: 13, fontWeight: 500 }}>ATUL KU</span>
+              }}>{initials}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <span style={{ color: '#fff', fontSize: 12, fontWeight: 600, lineHeight: 1.2 }}>
+                  {user?.name || 'User'}
+                </span>
+                <span style={{
+                  fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                  background: roleBadge.bg, color: roleBadge.color, lineHeight: 1.3,
+                  display: 'inline-block', width: 'fit-content',
+                }}>
+                  {user?.role || 'WORKER'}
+                </span>
+              </div>
             </div>
+
+            {/* Logout button */}
+            <button
+              onClick={logout}
+              title="Logout"
+              style={{
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none', borderRadius: 4,
+                padding: '5px 8px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = 'rgba(192,68,10,0.6)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                <polyline points="16 17 21 12 16 7"/>
+                <line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
           </div>
         </div>
 

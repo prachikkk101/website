@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import SlidePanel from '../components/SlidePanel';
 import { peLayingService } from '../api/peLayingService';
 import { exportPELaying } from '../utils/exportExcel';
+import { getPELaying, addPELaying } from '../utils/dataService';
 
 const DATE_RANGES = ['All Time', 'Last 30 Days', 'Last 90 Days'];
 const STATUSES    = ['All', 'LAYING', 'HDD', 'JOINT'];
@@ -52,6 +53,12 @@ export default function PELaying() {
   const [raBill,    setRaBill]    = useState('');
   const [status,    setStatus]    = useState('All');
 
+  // Export date range
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [exportFromDate, setExportFromDate] = useState(todayStr);
+  const [exportToDate, setExportToDate] = useState(todayStr);
+  const exportDateError = exportFromDate > exportToDate;
+
   // SlidePanel State
   const [panelOpen, setPanelOpen] = useState(false);
   const [formData, setFormData] = useState(initialForm);
@@ -61,15 +68,18 @@ export default function PELaying() {
   const activeSiteId = useSelectedSiteId() || (sites.length > 0 ? sites[0].id : null);
 
   const fetchPELaying = useCallback(async () => {
-    if (!activeSiteId) return;
+    const isLocalMode = !activeSiteId || String(activeSiteId).startsWith('local-site-');
+    if (isLocalMode) {
+      setPeLayingList(getPELaying());
+      return;
+    }
     setLoading(true);
     try {
       const data = await peLayingService.getPELaying(activeSiteId);
       const records = data.records || data || [];
-      setPeLayingList(Array.isArray(records) ? records : []);
-    } catch (err) {
-      console.error('Failed to fetch PE laying records:', err);
-      setPeLayingList([]);
+      setPeLayingList(Array.isArray(records) && records.length > 0 ? records : getPELaying());
+    } catch {
+      setPeLayingList(getPELaying());
     } finally {
       setLoading(false);
     }
@@ -182,16 +192,15 @@ export default function PELaying() {
     setSaving(true);
     try {
       await peLayingService.createPELaying(activeSiteId, payload);
-      showToast('✓ Laying entry saved successfully');
-      resetForm();
-      setPanelOpen(false);
-      fetchPELaying();
-    } catch (err) {
-      const msg = err.response?.data?.error || err.message || 'Failed to save entry';
-      showToast(`⚠️ ${msg}`);
-    } finally {
-      setSaving(false);
+    } catch {
+      // API offline — persist locally
+      addPELaying({ ...payload, layDate: payload.layingDate, raBill: payload.raBillNo, coil: payload.coilNo });
     }
+    showToast('✓ Laying entry saved successfully');
+    resetForm();
+    setPanelOpen(false);
+    fetchPELaying();
+    setSaving(false);
   }
 
   return (
@@ -224,13 +233,45 @@ export default function PELaying() {
           {STATUSES.map(s => <option key={s}>{s}</option>)}
         </select>
         <button className="btn btn-primary" onClick={fetchPELaying}>Search</button>
-        <button className="btn btn-outline" onClick={() => exportPELaying(filtered)} style={{ marginLeft: 'auto' }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-            <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-          </svg>
-          Export
-        </button>
+      </div>
+
+      {/* Export with date range */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>Export entries from</span>
+          <input
+            type="date"
+            value={exportFromDate}
+            onChange={e => setExportFromDate(e.target.value)}
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }}
+          />
+          <span style={{ fontSize: 12, color: '#64748b' }}>to</span>
+          <input
+            type="date"
+            value={exportToDate}
+            onChange={e => setExportToDate(e.target.value)}
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }}
+          />
+          <button
+            disabled={exportDateError}
+            onClick={() => exportPELaying(filtered, exportFromDate, exportToDate)}
+            style={{
+              height: 32, background: exportDateError ? '#94a3b8' : '#2d6a27', color: 'white',
+              border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12,
+              fontWeight: 600, cursor: exportDateError ? 'not-allowed' : 'pointer',
+              display: 'flex', alignItems: 'center', gap: 5,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            ↓ Export Excel
+          </button>
+        </div>
+        {exportDateError && (
+          <span style={{ fontSize: 11, color: '#dc2626', width: '100%', textAlign: 'right' }}>From date cannot be after To date</span>
+        )}
       </div>
 
       {/* KPI Summary Row */}

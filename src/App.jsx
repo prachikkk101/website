@@ -11,7 +11,19 @@ import PELaying from './pages/PELaying';
 import ICWork from './pages/ICWork';
 import Placeholder from './pages/Placeholder';
 import Login from './pages/Login';
-import Register from './pages/Register';
+import Masters from './pages/Masters';
+import MySite from './pages/MySite';
+
+/* Redirect already-logged-in users away from /login */
+function LoginOrRedirect() {
+  try {
+    const session = JSON.parse(localStorage.getItem('gppms_session') || 'null');
+    if (session?.token) {
+      return <Navigate to={session.role === 'ADMIN' ? '/dashboard' : '/my-site'} replace />;
+    }
+  } catch { /* ignore */ }
+  return <Login />;
+}
 
 export default function App() {
   return (
@@ -20,8 +32,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+            <Route path="/login" element={<LoginOrRedirect />} />
 
             {/* Protected routes */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -30,13 +41,17 @@ export default function App() {
                 <Layout />
               </ProtectedRoute>
             }>
-              <Route path="/dashboard"  element={<Dashboard />} />
-              <Route path="/customers"  element={<Customers />} />
-              <Route path="/inventory"  element={<Inventory />} />
-              <Route path="/pe-laying"  element={<PELaying />} />
-              <Route path="/ic-work"    element={<ICWork />} />
-              <Route path="/reports"    element={<Placeholder title="Reports"  icon="📊" />} />
-              <Route path="/masters"    element={<Placeholder title="Masters"  icon="⚙️" />} />
+              <Route path="/dashboard"               element={<Dashboard />} />
+              <Route path="/customers"               element={<Customers />} />
+              <Route path="/inventory"               element={<Inventory />} />
+              <Route path="/pe-laying"               element={<PELaying />} />
+              <Route path="/ic-work"                 element={<ICWork />} />
+              <Route path="/reports"                 element={<Placeholder title="Reports"  icon="📊" />} />
+              {/* Masters — two sub-paths both handled by Masters.jsx via defaultTab prop */}
+              <Route path="/masters"                 element={<Masters />} />
+              <Route path="/masters/access-requests" element={<Masters defaultTab="access-requests" />} />
+              {/* Worker/Supervisor view */}
+              <Route path="/my-site"                 element={<MySite />} />
             </Route>
 
             {/* Catch-all */}
