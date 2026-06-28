@@ -10,14 +10,20 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 export default function Login() {
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
+  const [name,     setName]     = useState('');
+  const [isRegister, setIsRegister] = useState(false);
+  const [successMsg, setSuccessMsg] = useState('');
+  const [showOtp,    setShowOtp]    = useState(false);
+  const [otpCode,    setOtpCode]    = useState('');
+
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [focused,  setFocused]  = useState(null);
   const [showForgot, setShowForgot] = useState(false);
-  const { login, user } = useContext(AuthContext);
+  const { login, registerUser, verifyEmail, user } = useContext(AuthContext);
   const navigate = useNavigate();
 
-  useEffect(() => { document.title = 'GP-PMS — Login'; }, []);
+  useEffect(() => { document.title = isRegister ? 'GP-PMS — Register' : 'GP-PMS — Login'; }, [isRegister]);
 
   if (user) {
     return <Navigate to={user.role === 'ADMIN' ? '/dashboard' : '/customers'} replace />;
@@ -26,20 +32,60 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    setSuccessMsg('');
     setLoading(true);
-    const result = await login(email, password);
-    if (result.success) {
-      navigate(result.user?.role === 'ADMIN' ? '/dashboard' : '/customers', { replace: true });
-    } else {
-      setError(result.error || 'Login failed. Please try again.');
+
+    if (isRegister) {
+      if (!name.trim()) {
+        setError('Please enter your full name.');
+        setLoading(false);
+        return;
+      }
+      const result = await registerUser(name, email, password);
+      if (result.success) {
+        if (result.isLocalMode) {
+          setSuccessMsg('Registration successful (Local Mode). You can now sign in!');
+          setIsRegister(false);
+          setName('');
+        } else {
+          setSuccessMsg('Registration submitted. Check your corporate email for verification OTP.');
+          setShowOtp(true);
+        }
+      } else {
+        setError(result.error || 'Registration failed. Please try again.');
+      }
       setLoading(false);
+    } else {
+      const result = await login(email, password);
+      if (result.success) {
+        navigate(result.user?.role === 'ADMIN' ? '/dashboard' : '/customers', { replace: true });
+      } else {
+        setError(result.error || 'Login failed. Please try again.');
+        setLoading(false);
+      }
     }
+  };
+
+  const handleOtpVerify = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    const result = await verifyEmail(email, otpCode);
+    if (result.success) {
+      setSuccessMsg('Email verified successfully! You can now sign in.');
+      setShowOtp(false);
+      setIsRegister(false);
+      setName('');
+      setOtpCode('');
+    } else {
+      setError(result.error || 'Verification failed. Please check the code.');
+    }
+    setLoading(false);
   };
 
   const handleGoogleSuccess = (credentialResponse) => {
     try {
       const decoded = jwtDecode(credentialResponse.credential);
-      // Google users are always SUPERVISOR with view-only access — must request site access
       const googleUser = {
         id: decoded.sub,
         name: decoded.name,
@@ -98,7 +144,31 @@ export default function Login() {
 
         {/* Form body */}
         <div style={{ padding:'32px 40px 36px' }}>
-          <h2 style={{ margin:'0 0 24px',fontSize:16,fontWeight:600,color:'#B5D4B5',letterSpacing:'0.2px' }}>Sign in to your account</h2>
+          {/* Sign In / Register Toggle Tabs */}
+          <div style={{ display: 'flex', borderBottom: '1px solid rgba(255,255,255,0.08)', marginBottom: 24, gap: 16 }}>
+            <button
+              onClick={() => { setIsRegister(false); setError(''); setSuccessMsg(''); }}
+              style={{
+                background: 'none', border: 'none', borderBottom: !isRegister ? '2px solid #7ec56f' : 'none',
+                color: !isRegister ? '#fff' : '#6A8F6A', paddingBottom: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer'
+              }}
+            >
+              Sign In
+            </button>
+            <button
+              onClick={() => { setIsRegister(true); setError(''); setSuccessMsg(''); }}
+              style={{
+                background: 'none', border: 'none', borderBottom: isRegister ? '2px solid #7ec56f' : 'none',
+                color: isRegister ? '#fff' : '#6A8F6A', paddingBottom: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer'
+              }}
+            >
+              Register
+            </button>
+          </div>
+
+          <h2 style={{ margin:'0 0 20px',fontSize:15,fontWeight:600,color:'#B5D4B5',letterSpacing:'0.2px' }}>
+            {isRegister ? 'Create your new account' : 'Sign in to your account'}
+          </h2>
 
           {error && (
             <div style={{ display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',marginBottom:20,background:'rgba(220,53,69,0.12)',border:'1px solid rgba(220,53,69,0.3)',borderRadius:10 }}>
@@ -106,7 +176,21 @@ export default function Login() {
             </div>
           )}
 
+          {successMsg && (
+            <div style={{ display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',marginBottom:20,background:'rgba(34,197,94,0.12)',border:'1px solid rgba(34,197,94,0.3)',borderRadius:10 }}>
+              <span style={{ color:'#4ade80',fontSize:13,lineHeight:1.5,fontWeight:500 }}>✓ {successMsg}</span>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit} style={{ display:'flex',flexDirection:'column',gap:18 }}>
+            {isRegister && (
+              <div>
+                <label style={{ display:'block',marginBottom:7,fontSize:13,fontWeight:600,color:'#8AAF8A' }}>Full Name</label>
+                <input id="regName" type="text" required value={name}
+                  placeholder="John Doe" onChange={e => setName(e.target.value)}
+                  onFocus={() => setFocused('regName')} onBlur={() => setFocused(null)} style={inp('regName')} />
+              </div>
+            )}
             <div>
               <label style={{ display:'block',marginBottom:7,fontSize:13,fontWeight:600,color:'#8AAF8A' }}>Corporate Email</label>
               <input id="email" type="email" autoComplete="email" required value={email}
@@ -116,12 +200,14 @@ export default function Login() {
             <div>
               <label style={{ display:'block',marginBottom:7,fontSize:13,fontWeight:600,color:'#8AAF8A' }}>Password</label>
               <input id="password" type="password" autoComplete="current-password" required value={password}
-                placeholder="Enter your password" onChange={e => setPassword(e.target.value)}
+                placeholder={isRegister ? 'At least 6 characters' : 'Enter your password'} onChange={e => setPassword(e.target.value)}
                 onFocus={() => setFocused('password')} onBlur={() => setFocused(null)} style={inp('password')} />
-              <button type="button" onClick={() => setShowForgot(true)}
-                style={{ background:'none',border:'none',color:'#4A7C2F',fontSize:11,cursor:'pointer',marginTop:5,padding:0,textDecoration:'underline' }}>
-                Forgot password?
-              </button>
+              {!isRegister && (
+                <button type="button" onClick={() => setShowForgot(true)}
+                  style={{ background:'none',border:'none',color:'#4A7C2F',fontSize:11,cursor:'pointer',marginTop:5,padding:0,textDecoration:'underline' }}>
+                  Forgot password?
+                </button>
+              )}
             </div>
             <button type="submit" disabled={loading} style={{
               marginTop:8,width:'100%',padding:13,
@@ -134,56 +220,60 @@ export default function Login() {
               {loading ? (
                 <>
                   <span style={{ display:'inline-block',width:16,height:16,border:'2px solid rgba(255,255,255,0.3)',borderTopColor:'#fff',borderRadius:'50%',animation:'spin 0.7s linear infinite' }} />
-                  Signing in...
+                  Processing...
                 </>
-              ) : 'Sign In →'}
+              ) : isRegister ? 'Register Account →' : 'Sign In →'}
             </button>
           </form>
 
           {/* Google Sign-In divider + button */}
-          {GOOGLE_CLIENT_ID ? (
+          {!isRegister && (
             <>
-              <div style={{ display:'flex',alignItems:'center',gap:12,margin:'20px 0' }}>
-                <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
-                <span style={{ fontSize:12,color:'#4A6A4A' }}>or</span>
-                <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
-              </div>
-              <div style={{ borderRadius:8,overflow:'hidden' }}>
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={() => setError('Google sign-in unavailable. Please use email login. Contact admin if this persists.')}
-                  width="100%"
-                  text="signin_with_google"
-                  shape="rectangular"
-                  theme="outline"
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div style={{ display:'flex',alignItems:'center',gap:12,margin:'20px 0' }}>
-                <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
-                <span style={{ fontSize:12,color:'#4A6A4A' }}>or</span>
-                <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
-              </div>
-              <button disabled style={{
-                width:'100%',padding:12,
-                background:'rgba(255,255,255,0.05)',
-                border:'1px solid rgba(255,255,255,0.12)',
-                borderRadius:8,color:'rgba(255,255,255,0.35)',
-                fontSize:13,fontWeight:600,cursor:'not-allowed',
-                opacity:0.5,
-              }}>
-                🔑 Google Sign-In (Setup Required)
-              </button>
-              <p style={{ textAlign:'center',fontSize:11,color:'#3D5C3D',marginTop:6 }}>
-                Set VITE_GOOGLE_CLIENT_ID in .env to enable
-              </p>
+              {GOOGLE_CLIENT_ID ? (
+                <>
+                  <div style={{ display:'flex',alignItems:'center',gap:12,margin:'20px 0' }}>
+                    <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
+                    <span style={{ fontSize:12,color:'#4A6A4A' }}>or</span>
+                    <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
+                  </div>
+                  <div style={{ borderRadius:8,overflow:'hidden' }}>
+                    <GoogleLogin
+                      onSuccess={handleGoogleSuccess}
+                      onError={() => setError('Google sign-in unavailable. Please use email login. Contact admin if this persists.')}
+                      width="100%"
+                      text="signin_with_google"
+                      shape="rectangular"
+                      theme="outline"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ display:'flex',alignItems:'center',gap:12,margin:'20px 0' }}>
+                    <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
+                    <span style={{ fontSize:12,color:'#4A6A4A' }}>or</span>
+                    <div style={{ flex:1,height:1,background:'rgba(255,255,255,0.1)' }} />
+                  </div>
+                  <button disabled style={{
+                    width:'100%',padding:12,
+                    background:'rgba(255,255,255,0.05)',
+                    border:'1px solid rgba(255,255,255,0.12)',
+                    borderRadius:8,color:'rgba(255,255,255,0.35)',
+                    fontSize:13,fontWeight:600,cursor:'not-allowed',
+                    opacity:0.5,
+                  }}>
+                    🔑 Google Sign-In (Setup Required)
+                  </button>
+                  <p style={{ textAlign:'center',fontSize:11,color:'#3D5C3D',marginTop:6 }}>
+                    Set VITE_GOOGLE_CLIENT_ID in .env to enable
+                  </p>
+                </>
+              )}
             </>
           )}
 
           <p style={{ margin:'20px 0 0',textAlign:'center',fontSize:12,color:'#4A6A4A' }}>
-            Contact your administrator to get access.
+            {isRegister ? 'Existing supervisor? Switch to Sign In tab.' : 'Contact your administrator to get access.'}
           </p>
         </div>
 
@@ -230,6 +320,37 @@ export default function Login() {
                 OK, I Understand
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── OTP Verification Modal ── */}
+      {showOtp && (
+        <div style={{ position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.4)',overflow:'hidden' }}>
+            <div style={{ background:'#1f4e1a',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Verify Email OTP</span>
+              <button onClick={() => setShowOtp(false)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
+            </div>
+            <form onSubmit={handleOtpVerify} style={{ padding:24 }}>
+              <p style={{ fontSize:13,color:'#475569',lineHeight:1.7,marginBottom:16 }}>
+                Please enter the 6-digit verification code sent to <strong>{email}</strong>.
+              </p>
+              <div style={{ marginBottom:20 }}>
+                <input
+                  type="text" required maxLength={6} pattern="[0-9]{6}" value={otpCode}
+                  placeholder="e.g. 123456" onChange={e => setOtpCode(e.target.value)}
+                  style={{
+                    width:'100%',padding:'12px 14px',border:'1.5px solid #d1d5db',borderRadius:10,
+                    fontSize:16,textAlign:'center',letterSpacing:4,fontWeight:700,outline:'none'
+                  }}
+                />
+              </div>
+              <button type="submit" disabled={loading}
+                style={{ width:'100%',padding:'12px 0',background:'#2d6a27',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer' }}>
+                {loading ? 'Verifying...' : 'Verify OTP'}
+              </button>
+            </form>
           </div>
         </div>
       )}
