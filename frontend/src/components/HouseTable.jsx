@@ -120,8 +120,8 @@ export default function HouseTable() {
   const [page,       setPage]       = useState(1);
   const [modalHouse, setModalHouse] = useState(null);
 
-  // Export state
-  const [exportFrom,   setExportFrom]   = useState(todayStr());
+  // Export state — default from 2020 to capture all historical data
+  const [exportFrom,   setExportFrom]   = useState('2020-01-01');
   const [exportTo,     setExportTo]     = useState(todayStr());
   const [exportFilter, setExportFilter] = useState('all');
 
@@ -146,44 +146,58 @@ export default function HouseTable() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
   const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  /* ── isDone / isPending helpers ── */
+  function isDone(h) {
+    const gc    = (h.gc    || h.gcStatus    || '').toLowerCase();
+    const gi    = (h.gi    || h.giStatus    || '').toLowerCase();
+    const rfc   = (h.rfc   || h.rfcStatus   || '').toLowerCase();
+    const ng    = (h.ng    || h.ngStatus    || '').toLowerCase();
+    const saral = (h.saral || h.saralStatus || '').toLowerCase();
+    const meter = String(h.meter || h.meterNo || h.meterNumber || '');
+    return (
+      gc.includes('done') &&
+      gi.includes('done') &&
+      rfc.includes('done') &&
+      ng.includes('done') &&
+      saral === 'done' &&
+      meter !== '' && meter !== '-' && meter !== '–' && meter !== 'null'
+    );
+  }
+
+  /* ── Date-match helper — lenient (include if no date field) ── */
+  function dateMatches(h) {
+    const dateStr = h.createdAt || h.meterDate || h.plumbingDate || h.date || null;
+    if (!dateStr) return true; // no date → always include
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return true;
+      const from = new Date(exportFrom); from.setHours(0,0,0,0);
+      const to   = new Date(exportTo);   to.setHours(23,59,59,999);
+      return d >= from && d <= to;
+    } catch { return true; }
+  }
+
+  /* ── Compute export-preview counts ── */
+  const exportPreview = useMemo(() => {
+    const inRange = (allHouses || []).filter(dateMatches);
+    const doneCount    = inRange.filter(isDone).length;
+    const pendingCount = inRange.length - doneCount;
+    return { total: inRange.length, done: doneCount, pending: pendingCount };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allHouses, exportFrom, exportTo]);
+
   /* ── Export with Done/Pending filter ── */
   function handleExport() {
-    let data = [...(allHouses || [])];
+    let data = (allHouses || []).filter(dateMatches);
 
-    // Date range
-    const from = new Date(exportFrom); from.setHours(0,0,0,0);
-    const to   = new Date(exportTo);   to.setHours(23,59,59,999);
-    data = data.filter(h => {
-      const d = new Date(h.createdAt || h.meterDate || h.plumbingDate || Date.now());
-      return d >= from && d <= to;
-    });
+    if (exportFilter === 'done')    data = data.filter(isDone);
+    else if (exportFilter === 'pending') data = data.filter(h => !isDone(h));
 
-    // Done/Pending filter
-    if (exportFilter === 'done') {
-      data = data.filter(h =>
-        h.gcStatus   && h.gcStatus.toLowerCase().includes('done') &&
-        h.giStatus   && h.giStatus.toLowerCase().includes('done') &&
-        h.rfc        && h.rfc.toLowerCase().includes('done') &&
-        h.ngStatus   && h.ngStatus.toLowerCase().includes('done') &&
-        h.saralStatus&& h.saralStatus.toLowerCase() === 'done' &&
-        h.meterNo    && h.meterNo !== '-' && h.meterNo !== '–'
-      );
-    } else if (exportFilter === 'pending') {
-      data = data.filter(h =>
-        !h.gcStatus   || h.gcStatus.toLowerCase().includes('pending') ||
-        !h.giStatus   || h.giStatus.toLowerCase().includes('pending') ||
-        !h.rfc        || h.rfc.toLowerCase() === 'rfc' ||
-        !h.ngStatus   || h.ngStatus.toLowerCase().includes('pending') ||
-        !h.saralStatus|| h.saralStatus.toLowerCase().includes('pending') ||
-        h.saralStatus.toLowerCase().includes('not update') ||
-        !h.meterNo    || h.meterNo === '-' || h.meterNo === '–'
-      );
-    }
+    console.log('Exporting', data.length, 'rows with filter:', exportFilter);
 
-    // Build filename
-    let suffix = exportFilter === 'all'
+    const suffix = exportFilter === 'all'
       ? `All_${exportFrom}_to_${exportTo}`
-      : `${exportFilter.charAt(0).toUpperCase() + exportFilter.slice(1)}_${exportFrom}`;
+      : `${exportFilter.charAt(0).toUpperCase() + exportFilter.slice(1)}_${exportFrom}_to_${exportTo}`;
 
     exportHouseData(data, exportFrom, exportTo, exportFilter, suffix);
   }
@@ -415,11 +429,10 @@ export default function HouseTable() {
 
   return (
     <div>
-      {/* Toggle row */}
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
         {/* Export bar */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: '#64748b' }}>Export entries from</span>
+          <span style={{ fontSize: 12, color: '#64748b' }}>From</span>
           <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
             style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
           <span style={{ fontSize: 12, color: '#64748b' }}>to</span>
@@ -444,7 +457,12 @@ export default function HouseTable() {
           )}
         </div>
       </div>
-
+      <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10, textAlign: 'right' }}>
+        Default shows all historical data &nbsp;|&nbsp;
+        <span style={{ color: '#16a34a', fontWeight: 600 }}>{exportPreview.done} Done</span>&nbsp;
+        / <span style={{ color: '#dc2626', fontWeight: 600 }}>{exportPreview.pending} Pending</span>&nbsp;
+        / {exportPreview.total} Total in selected range
+      </p>
       {/* Filter bar — Account Type, Area, BP Number only */}
       <div className="card section-block" style={{ padding: '10px 14px' }}>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
@@ -465,8 +483,8 @@ export default function HouseTable() {
         Showing page {page} of {totalPages} — {filtered.length} entries
       </p>
 
-      {/* Site data label — only when a specific site is selected */}
-      {selectedSite && selectedSite !== 'all' && (
+      {/* Site data label — only when a specific site is selected, NOT GA Dashboard */}
+      {selectedSite && selectedSite !== 'all' && selectedSite !== 'ga_dashboard' && (
         <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#fff0f3', border:'1px solid #f9a8d4', borderRadius:6, padding:'4px 10px', fontSize:11, color:'#be185d', fontWeight:600, marginBottom:8 }}>
           📍 Site data — {SITE_OPTIONS_LABELS[selectedSite] || selectedSite}
         </div>

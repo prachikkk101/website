@@ -45,9 +45,21 @@ export function exportHouseData(houses, fromDate, toDate, filterLabel, filenameS
   ];
 
   const rows = data.map(h => [
-    h.acctType, h.bpNo, h.name, h.mobile, h.houseNo, h.area, h.city,
-    h.meterNo, h.meterDate, h.gcStatus, h.giStatus, h.rfc, h.ngStatus, h.saralStatus,
-    h.meterPhoto ? 'Yes' : 'No',
+    h.acct        || h.acctType    || h.accountType  || '',
+    h.bp          || h.bpNo        || h.bpNumber      || '',
+    h.name        || h.customerName || '',
+    h.mobile      || h.mobileNo    || '',
+    h.house       || h.houseNo     || h.houseNumber   || '',
+    h.area        || '',
+    h.city        || '',
+    h.meter       || h.meterNo     || h.meterNumber   || '',
+    h.meterDate   || h.mdate       || '',
+    h.gc          || h.gcStatus    || '',
+    h.gi          || h.giStatus    || '',
+    h.rfc         || h.rfcStatus   || '',
+    h.ng          || h.ngStatus    || '',
+    h.saral       || h.saralStatus || '',
+    (h.meterPhoto || h.photo) ? 'Yes' : 'No',
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);

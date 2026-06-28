@@ -194,9 +194,18 @@ export default function Layout() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ color: '#fff', fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{displayName}</span>
-                <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: roleBadge.bg, color: roleBadge.color, lineHeight: 1.3, display: 'inline-block' }}>
-                  {user?.role || 'USER'}
-                </span>
+                {user?.role === 'SUPERVISOR' ? (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                    background: siteAccess && siteAccess !== 'none' ? '#dbeafe' : '#fef3c7',
+                    color:      siteAccess && siteAccess !== 'none' ? '#1d4ed8' : '#92400e',
+                    lineHeight: 1.3, display: 'inline-block', whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {siteAccess && siteAccess !== 'none' ? siteAccess : 'No Site Assigned'}
+                  </span>
+                ) : (
+                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: roleBadge.bg, color: roleBadge.color, lineHeight: 1.3, display: 'inline-block' }}>
+                    {user?.role || 'USER'}
+                  </span>
+                )}
               </div>
               <button onClick={handleLogout} title="Sign out"
                 style={{ marginLeft: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: 600, padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.2px', transition: 'background 0.15s', whiteSpace: 'nowrap' }}

@@ -13,13 +13,14 @@ export default function Login() {
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
   const [focused,  setFocused]  = useState(null);
+  const [showForgot, setShowForgot] = useState(false);
   const { login, user } = useContext(AuthContext);
   const navigate = useNavigate();
 
   useEffect(() => { document.title = 'GP-PMS — Login'; }, []);
 
   if (user) {
-    return <Navigate to={user.role === 'ADMIN' ? '/dashboard' : '/my-site'} replace />;
+    return <Navigate to={user.role === 'ADMIN' ? '/dashboard' : '/customers'} replace />;
   }
 
   const handleSubmit = async (e) => {
@@ -28,7 +29,7 @@ export default function Login() {
     setLoading(true);
     const result = await login(email, password);
     if (result.success) {
-      navigate(result.user?.role === 'ADMIN' ? '/dashboard' : '/my-site', { replace: true });
+      navigate(result.user?.role === 'ADMIN' ? '/dashboard' : '/customers', { replace: true });
     } else {
       setError(result.error || 'Login failed. Please try again.');
       setLoading(false);
@@ -38,21 +39,20 @@ export default function Login() {
   const handleGoogleSuccess = (credentialResponse) => {
     try {
       const decoded = jwtDecode(credentialResponse.credential);
-      const role = ADMIN_EMAILS.includes(decoded.email.toLowerCase()) ? 'ADMIN' : 'SUPERVISOR';
+      // Google users are always SUPERVISOR with view-only access — must request site access
       const googleUser = {
         id: decoded.sub,
         name: decoded.name,
         email: decoded.email,
         picture: decoded.picture,
-        role,
-        site: 'Khanna — CA-09',
+        role: 'SUPERVISOR',
+        siteAccess: 'none',
         token: 'local-google-' + Date.now(),
         isLocalMode: true,
       };
       localStorage.setItem('gppms_session', JSON.stringify(googleUser));
       localStorage.setItem('gppms_token',   googleUser.token);
-      // Force a page reload so AuthContext picks up the new session
-      window.location.href = role === 'ADMIN' ? '/dashboard' : '/my-site';
+      window.location.href = '/customers';
     } catch {
       setError('Google sign-in failed. Please try again.');
     }
@@ -117,6 +117,10 @@ export default function Login() {
               <input id="password" type="password" autoComplete="current-password" required value={password}
                 placeholder="Enter your password" onChange={e => setPassword(e.target.value)}
                 onFocus={() => setFocused('password')} onBlur={() => setFocused(null)} style={inp('password')} />
+              <button type="button" onClick={() => setShowForgot(true)}
+                style={{ background:'none',border:'none',color:'#4A7C2F',fontSize:11,cursor:'pointer',marginTop:5,padding:0,textDecoration:'underline' }}>
+                Forgot password?
+              </button>
             </div>
             <button type="submit" disabled={loading} style={{
               marginTop:8,width:'100%',padding:13,
@@ -146,7 +150,7 @@ export default function Login() {
               <div style={{ borderRadius:8,overflow:'hidden' }}>
                 <GoogleLogin
                   onSuccess={handleGoogleSuccess}
-                  onError={() => setError('Google sign-in failed. Use email login instead.')}
+                  onError={() => setError('Google sign-in unavailable. Please use email login. Contact admin if this persists.')}
                   width="100%"
                   text="signin_with_google"
                   shape="rectangular"
@@ -196,6 +200,38 @@ export default function Login() {
           -webkit-text-fill-color: #E2F0E2 !important;
         }
       `}</style>
+
+      {/* ── Forgot Password Modal ── */}
+      {showForgot && (
+        <div style={{ position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.7)',display:'flex',alignItems:'center',justifyContent:'center',padding:24 }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.4)',overflow:'hidden' }}>
+            <div style={{ background:'#1f4e1a',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Forgot Password?</span>
+              <button onClick={() => setShowForgot(false)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding:24 }}>
+              <p style={{ fontSize:13,color:'#475569',lineHeight:1.7,marginBottom:16 }}>
+                This is an internal system. Password reset is handled by your administrator.
+              </p>
+              <div style={{ background:'#f0fdf4',border:'1px solid #bbf7d0',borderRadius:8,padding:'14px 16px',marginBottom:20 }}>
+                <p style={{ margin:'0 0 8px',fontSize:12,fontWeight:700,color:'#166534' }}>To regain access:</p>
+                <ol style={{ margin:0,paddingLeft:18,fontSize:12,color:'#374151',lineHeight:1.8 }}>
+                  <li>Contact your site administrator</li>
+                  <li>Your old account will be removed</li>
+                  <li>Request fresh access from the Access tab after logging in with your new credentials</li>
+                </ol>
+              </div>
+              <p style={{ fontSize:11,color:'#94a3b8',marginBottom:20 }}>
+                Your site data and entries will <strong>NOT</strong> be affected — only your login credentials change.
+              </p>
+              <button onClick={() => setShowForgot(false)}
+                style={{ width:'100%',padding:'11px 0',background:'#2d6a27',border:'none',borderRadius:8,color:'#fff',fontSize:13,fontWeight:700,cursor:'pointer' }}>
+                OK, I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

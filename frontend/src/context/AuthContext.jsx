@@ -3,21 +3,40 @@ import api from '../utils/api';
 
 export const AuthContext = createContext();
 
-/* ── Admin emails that get ADMIN role in local fallback ── */
+/* ── Hardcoded admin credentials (local / offline mode) ── */
 const ADMIN_EMAILS = [
   'admin@gppms.com',
   'oxygenhisar@gmail.com',
   'oxygenprotech@gmail.com',
 ];
 
-function buildMockUser(email) {
-  const role = ADMIN_EMAILS.includes(email.toLowerCase()) ? 'ADMIN' : 'SUPERVISOR';
+// admin@gppms.com + admin123 always works as admin.
+// The two Google emails also get ADMIN in local fallback (any password).
+function buildMockUser(email, password) {
+  const em = email.toLowerCase();
+  const isHardcodedAdmin =
+    (em === 'admin@gppms.com' && password === 'admin123') ||
+    ADMIN_EMAILS.includes(em);
+
+  if (isHardcodedAdmin) {
+    return {
+      id: 1,
+      name: em === 'admin@gppms.com' ? 'Admin' : email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      email,
+      role: 'ADMIN',
+      siteAccess: 'all',
+      token: 'local-admin-' + Date.now(),
+      isLocalMode: true,
+    };
+  }
+
+  // Everyone else → SUPERVISOR, view-only until approved
   return {
-    id: 1,
-    name: email.split('@')[0].replace(/[._]/g, ' ').toUpperCase(),
+    id: Date.now(),
+    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
     email,
-    role,
-    site: 'Khanna — CA-09',
+    role: 'SUPERVISOR',
+    siteAccess: 'none',
     token: 'local-' + Date.now(),
     isLocalMode: true,
   };
@@ -64,8 +83,8 @@ export function AuthProvider({ children }) {
       const is5xx = err.response?.status >= 500;
 
       if (isNetworkError || is5xx) {
-        // Silent local fallback — no error shown
-        const mockUser = buildMockUser(email);
+        // Silent local fallback — check hardcoded admin creds first
+        const mockUser = buildMockUser(email, password);
         localStorage.setItem('gppms_token', mockUser.token);
         localStorage.setItem('gppms_session', JSON.stringify(mockUser));
         setUser(mockUser);

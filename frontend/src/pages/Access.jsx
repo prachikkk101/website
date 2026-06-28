@@ -4,122 +4,171 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 
-const ALL_SITES = ['Khanna \u2014 CA-09', 'UE-II \u2014 Hisar', 'PLA \u2014 Hisar', 'Kohara \u2014 CA-07'];
+const DEFAULT_SITES = [
+  { id: 'khanna', name: 'Khanna \u2014 CA-09', zone: 'Zone-02, Ludhiana',   areas: ['Uttam Nagar','Guru Nanak Nagar','Kishangar Village','Sector 12'], status: 'Active' },
+  { id: 'uenii',  name: 'UE-II \u2014 Hisar',  zone: 'Urban Extension II', areas: ['UE-II'],                                                             status: 'Active' },
+  { id: 'pla',    name: 'PLA \u2014 Hisar',    zone: 'P.L.A Colony',       areas: ['PLA'],                                                               status: 'Active' },
+  { id: 'kohara', name: 'Kohara \u2014 CA-07', zone: 'Kohara, Ludhiana',   areas: ['Kohara'],                                                            status: 'Active' },
+];
+
+function getSites() {
+  try {
+    const raw = localStorage.getItem('gppms_sites');
+    if (!raw) { localStorage.setItem('gppms_sites', JSON.stringify(DEFAULT_SITES)); return DEFAULT_SITES; }
+    const parsed = JSON.parse(raw);
+    const storedIds = parsed.map(s => s.id);
+    return [...DEFAULT_SITES.filter(d => !storedIds.includes(d.id)), ...parsed];
+  } catch { return DEFAULT_SITES; }
+}
 
 function getSession() {
   try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
 }
-
 function getRequests() {
   try { return JSON.parse(localStorage.getItem('gppms_access_requests') || '[]'); } catch { return []; }
 }
-
-function saveRequests(reqs) {
-  localStorage.setItem('gppms_access_requests', JSON.stringify(reqs));
-}
-
+function saveRequests(reqs) { localStorage.setItem('gppms_access_requests', JSON.stringify(reqs)); }
 function fmtDate(iso) {
   try { return new Date(iso).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
   catch { return iso; }
 }
 
-// Hardcoded registered users list (would come from backend in production)
-const REGISTERED_USERS = [
-  { name: 'Admin User',      email: 'admin@gppms.com',          role: 'ADMIN',      site: 'All Sites' },
-  { name: 'Atul Kumar',      email: 'atul@oxygenprotech.com',    role: 'SUPERVISOR', site: 'Khanna CA-09' },
-  { name: 'Ravi Sharma',     email: 'ravi@oxygenprotech.com',    role: 'SUPERVISOR', site: 'UE-II Hisar' },
-  { name: 'Gurpreet Singh',  email: 'gurpreet@oxygenprotech.com',role: 'WORKER',     site: 'PLA Hisar' },
-];
+const ADMIN_EMAILS = ['admin@gppms.com', 'oxygenhisar@gmail.com', 'oxygenprotech@gmail.com'];
 
 export default function Access() {
   const { user } = useContext(AuthContext);
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const [requests, setRequests]   = useState([]);
-  const [showModal, setShowModal] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
 
-  const session = getSession();
-  const isAdmin      = user?.role === 'ADMIN';
+  const session    = getSession();
+  const isAdmin    = user?.role === 'ADMIN' || ADMIN_EMAILS.includes(session.email?.toLowerCase());
   const isSupervisor = user?.role === 'SUPERVISOR';
   const siteAccess   = session.siteAccess;
   const isViewOnly   = isSupervisor && (!siteAccess || siteAccess === 'none');
 
+  const [requests,  setRequests]  = useState([]);
+  const [sites,     setSites]     = useState([]);
+  const [showModal, setShowModal] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  // GA Location form state
+  const [showLocModal, setShowLocModal] = useState(false);
+  const [locName,      setLocName]      = useState('');
+  const [locContract,  setLocContract]  = useState('');
+  const [locZone,      setLocZone]      = useState('');
+  const [locDistrict,  setLocDistrict]  = useState('Ludhiana');
+  const [locCity,      setLocCity]      = useState('');
+  const [locAreas,     setLocAreas]     = useState('');
+  const [locStatus,    setLocStatus]    = useState('Active');
+
+  // Request form state
+  const [rName,   setRName]   = useState(session.name  || '');
+  const [rEmail,  setREmail]  = useState(session.email || '');
+  const [rSite,   setRSite]   = useState('');
+  const [rReason, setRReason] = useState('');
+
   useEffect(() => {
     document.title = 'GP-PMS \u2014 Access Management';
     setRequests(getRequests());
+    setSites(getSites());
   }, []);
 
   const pendingRequests = requests.filter(r => r.status === 'pending');
+  const allSiteNames    = sites.map(s => s.name);
 
-  // Request modal form state
-  const [rName,   setRName]   = useState(session.name   || '');
-  const [rEmail,  setREmail]  = useState(session.email  || '');
-  const [rSite,   setRSite]   = useState(ALL_SITES[0]);
-  const [rReason, setRReason] = useState('');
-
+  // ── Request Access ──
   function handleSubmitRequest() {
-    const newReq = {
-      id: Date.now(),
-      name: rName, email: rEmail,
-      site: rSite, reason: rReason,
-      status: 'pending',
-      requestedAt: new Date().toISOString(),
-    };
+    if (!rName.trim() || !rSite) return;
+    const newReq = { id: Date.now(), name: rName, email: rEmail, site: rSite, reason: rReason, status: 'pending', requestedAt: new Date().toISOString() };
     const updated = [...requests, newReq];
-    setRequests(updated);
-    saveRequests(updated);
+    setRequests(updated); saveRequests(updated);
     setSubmitted(true);
   }
 
-  function handleApprove(req) {
-    const updated = requests.map(r =>
-      r.id === req.id ? { ...r, status: 'approved' } : r
-    );
-    setRequests(updated);
-    saveRequests(updated);
-    // Update gppms_users if exists
+  // ── Approve / Reject ──
+  function approveRequest(id) {
+    const req = requests.find(r => r.id === id);
+    const updated = requests.map(r => r.id === id ? { ...r, status: 'approved' } : r);
+    setRequests(updated); saveRequests(updated);
     try {
       const users = JSON.parse(localStorage.getItem('gppms_users') || '[]');
-      const updatedUsers = users.map(u =>
-        u.email === req.email ? { ...u, siteAccess: req.site } : u
-      );
-      if (!updatedUsers.find(u => u.email === req.email)) {
-        updatedUsers.push({ email: req.email, siteAccess: req.site });
-      }
-      localStorage.setItem('gppms_users', JSON.stringify(updatedUsers));
+      const upd = users.find(u => u.email === req?.email)
+        ? users.map(u => u.email === req?.email ? { ...u, siteAccess: req.site } : u)
+        : [...users, { email: req?.email, siteAccess: req?.site }];
+      localStorage.setItem('gppms_users', JSON.stringify(upd));
     } catch {}
-    showToast(`\u2713 Access granted to ${req.name} for ${req.site}`);
+    showToast('\u2713 Access granted to ' + (req?.name || 'user'));
   }
 
-  function handleReject(req) {
-    const updated = requests.map(r =>
-      r.id === req.id ? { ...r, status: 'rejected' } : r
-    );
-    setRequests(updated);
-    saveRequests(updated);
+  function rejectRequest(id) {
+    const updated = requests.map(r => r.id === id ? { ...r, status: 'rejected' } : r);
+    setRequests(updated); saveRequests(updated);
     showToast('Request rejected');
   }
 
+  // ── Remove User ──
+  function removeUser(email) {
+    const first = window.confirm(`Remove ${email} from the system?\n\nThis will revoke their access completely.`);
+    if (!first) return;
+    const second = window.confirm(`FINAL CONFIRMATION\n\nAre you absolutely sure you want to permanently remove ${email}?\n\nThis cannot be undone.`);
+    if (!second) return;
+    try {
+      const users = JSON.parse(localStorage.getItem('gppms_users') || '[]');
+      localStorage.setItem('gppms_users', JSON.stringify(users.filter(u => u.email !== email)));
+      const reqs = JSON.parse(localStorage.getItem('gppms_access_requests') || '[]');
+      const updatedReqs = reqs.filter(r => r.email !== email);
+      setRequests(updatedReqs); saveRequests(updatedReqs);
+    } catch {}
+    showToast(`${email} has been removed`);
+  }
+
+  // ── Add GA Location ──
+  function handleAddLocation() {
+    if (!locName.trim()) { showToast('\u26a0 Location name is required'); return; }
+    const areasArray = locAreas.split(',').map(a => a.trim()).filter(Boolean);
+    const newSite = {
+      id: 'site_' + Date.now(),
+      name: locName.trim() + (locContract ? ' \u2014 ' + locContract : ''),
+      zone: locZone, district: locDistrict, city: locCity,
+      areas: areasArray, status: locStatus,
+      createdAt: new Date().toISOString(), createdBy: session.name || 'Admin',
+    };
+    const updated = [...sites, newSite];
+    setSites(updated);
+    // Save only non-default sites to avoid duplication on reload
+    const customOnly = updated.filter(s => !DEFAULT_SITES.find(d => d.id === s.id));
+    localStorage.setItem('gppms_sites', JSON.stringify(customOnly));
+    setShowLocModal(false);
+    setLocName(''); setLocContract(''); setLocZone(''); setLocDistrict('Ludhiana'); setLocCity(''); setLocAreas(''); setLocStatus('Active');
+    showToast('\u2713 GA Location added \u2014 ' + newSite.name + ' is now available in the system');
+  }
+
+  // Registered users — pull from localStorage + hardcoded base
+  const baseUsers = [
+    { name: 'Admin',          email: 'admin@gppms.com',           role: 'ADMIN',      site: 'All Sites' },
+    { name: 'Oxygen Hisar',   email: 'oxygenhisar@gmail.com',     role: 'ADMIN',      site: 'All Sites' },
+    { name: 'Oxygen Protech', email: 'oxygenprotech@gmail.com',   role: 'ADMIN',      site: 'All Sites' },
+  ];
+
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: '#1f4e1a', margin: 0 }}>Access Management</h1>
-          <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0' }}>Manage user roles, site access, and permissions</p>
+          <h1 style={{ fontSize:22, fontWeight:700, color:'#1f4e1a', margin:0 }}>Access Management</h1>
+          <p style={{ fontSize:13, color:'#64748b', margin:'4px 0 0' }}>Manage user roles, site access, and permissions</p>
         </div>
       </div>
 
-      {/* Supervisor without access — Request panel */}
-      {isViewOnly && (
-        <div className="card" style={{ padding: 20, marginBottom: 20, border: '2px solid #fbbf24', background: '#fffbeb' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-            <span style={{ fontSize: 28 }}>🔐</span>
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#92400e' }}>Request Site Access</p>
-              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#78350f' }}>You currently have view-only access. Request access to edit a specific site.</p>
-              <button onClick={() => { setSubmitted(false); setShowModal(true); }}
-                style={{ background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+      {/* Supervisor without access — Request panel (NOT shown to admins) */}
+      {!isAdmin && (
+        <div className="card" style={{ padding:20, marginBottom:20, border:'2px solid #fbbf24', background:'#fffbeb' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
+            <span style={{ fontSize:28 }}>🔐</span>
+            <div style={{ flex:1 }}>
+              <p style={{ margin:'0 0 4px', fontSize:15, fontWeight:700, color:'#92400e' }}>Request Site Access</p>
+              <p style={{ margin:'0 0 12px', fontSize:13, color:'#78350f' }}>You currently have view-only access. Request access to edit a specific site.</p>
+              <button onClick={() => { setSubmitted(false); setRSite(allSiteNames[0] || ''); setShowModal(true); }}
+                style={{ background:'#2d6a27', color:'#fff', border:'none', borderRadius:7, padding:'9px 20px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
                 Request Access to a Site
               </button>
             </div>
@@ -129,36 +178,38 @@ export default function Access() {
 
       {/* Admin — Pending Requests */}
       {isAdmin && (
-        <div className="card section-block" style={{ padding: 20, marginBottom: 20 }}>
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: '#c0440a', margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-            📋 Pending Access Requests
+        <div className="card section-block" style={{ padding:20, marginBottom:20 }}>
+          <h3 style={{ fontSize:15, fontWeight:700, color:'#c0440a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
+            Pending Access Requests
             {pendingRequests.length > 0 && (
-              <span style={{ background: '#c0440a', color: '#fff', borderRadius: '50%', width: 20, height: 20, fontSize: 11, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ background:'#c0440a', color:'#fff', borderRadius:'50%', width:20, height:20, fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
                 {pendingRequests.length}
               </span>
             )}
           </h3>
 
           {pendingRequests.length === 0 ? (
-            <p style={{ color: '#94a3b8', fontSize: 13 }}>No pending requests.</p>
+            <div style={{ textAlign:'center', padding:'24px', color:'#94a3b8', fontSize:13 }}>
+              ✓ No pending access requests
+            </div>
           ) : pendingRequests.map(req => (
-            <div key={req.id} style={{ border: '1px solid #fde68a', borderRadius: 8, padding: '14px 16px', marginBottom: 10, background: '#fffbeb' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10 }}>
+            <div key={req.id} style={{ border:'1px solid #fde68a', borderRadius:8, padding:'14px 16px', marginBottom:10, background:'#fffbeb' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 }}>
                 <div>
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1e293b' }}>{req.name}</p>
-                  <p style={{ margin: '2px 0', fontSize: 12, color: '#64748b' }}>{req.email}</p>
-                  <p style={{ margin: '4px 0 2px', fontSize: 12, color: '#374151' }}>Requesting: <strong>{req.site}</strong></p>
-                  {req.reason && <p style={{ margin: '2px 0', fontSize: 12, color: '#64748b', fontStyle: 'italic' }}>"{req.reason}"</p>}
-                  <p style={{ margin: '4px 0 0', fontSize: 11, color: '#94a3b8' }}>Requested: {fmtDate(req.requestedAt)}</p>
+                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#1e293b' }}>{req.name}</p>
+                  <p style={{ margin:'2px 0', fontSize:12, color:'#64748b' }}>{req.email}</p>
+                  <p style={{ margin:'4px 0 2px', fontSize:12, color:'#374151' }}>Requesting: <strong>{req.site}</strong></p>
+                  {req.reason && <p style={{ margin:'2px 0', fontSize:12, color:'#64748b', fontStyle:'italic' }}>"{req.reason}"</p>}
+                  <p style={{ margin:'4px 0 0', fontSize:11, color:'#94a3b8' }}>Requested: {fmtDate(req.requestedAt)}</p>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={() => handleApprove(req)}
-                    style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 5, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                    \u2713 Approve
+                <div style={{ display:'flex', gap:8 }}>
+                  <button onClick={() => approveRequest(req.id)}
+                    style={{ background:'#2d6a27', color:'white', border:'none', padding:'6px 14px', borderRadius:'4px', fontSize:'12px', fontWeight:600, cursor:'pointer' }}>
+                    ✓ Approve
                   </button>
-                  <button onClick={() => handleReject(req)}
-                    style={{ height: 32, background: '#fff', color: '#b91c1c', border: '1px solid #fca5a5', borderRadius: 5, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
-                    \u2715 Reject
+                  <button onClick={() => rejectRequest(req.id)}
+                    style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'6px 14px', borderRadius:'4px', fontSize:'12px', fontWeight:600, cursor:'pointer' }}>
+                    ✗ Reject
                   </button>
                 </div>
               </div>
@@ -168,35 +219,71 @@ export default function Access() {
       )}
 
       {/* Registered Users */}
-      <div className="card" style={{ padding: 20 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 600, color: '#1f4e1a', margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div className="card" style={{ padding:20, marginBottom:20 }}>
+        <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
           <span>👥</span> Registered Users
         </h3>
-        {REGISTERED_USERS.map(u => (
-          <div key={u.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9' }}>
-            <div style={{ width: 36, height: 36, borderRadius: '50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'SUPERVISOR' ? '#1d4ed8' : '#2d6a27', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
-              {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+        {baseUsers.map(u => (
+          <div key={u.email} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'1px solid #f1f5f9' }}>
+            <div style={{ width:36, height:36, borderRadius:'50%', background: u.role === 'ADMIN' ? '#b91c1c' : '#2d6a27', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:700, flexShrink:0 }}>
+              {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)}
             </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{u.name}</p>
-              <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{u.email} · {u.site}</p>
+            <div style={{ flex:1 }}>
+              <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1e293b' }}>{u.name}</p>
+              <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{u.email} · {u.site}</p>
             </div>
-            <span style={{
-              fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
-              background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'SUPERVISOR' ? '#dbeafe' : '#dcfce7',
-              color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'SUPERVISOR' ? '#1d4ed8' : '#15803d',
-            }}>{u.role}</span>
+            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : '#15803d' }}>
+              {u.role}
+            </span>
+            {/* Remove button — only for admin, not for admin@gppms.com itself */}
+            {isAdmin && u.email !== session.email && u.email !== 'admin@gppms.com' && (
+              <button onClick={() => removeUser(u.email)}
+                style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'4px 10px', borderRadius:'4px', fontSize:'11px', cursor:'pointer', marginLeft:'8px' }}>
+                Remove
+              </button>
+            )}
           </div>
         ))}
       </div>
 
+      {/* GA Locations — ADMIN ONLY */}
+      {isAdmin && (
+        <div className="card" style={{ padding:20, marginBottom:20 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
+            <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:0, display:'flex', alignItems:'center', gap:8 }}>
+              <span>📍</span> GA Locations & Sites
+            </h3>
+            <button onClick={() => setShowLocModal(true)}
+              style={{ background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'8px 16px', fontSize:12, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
+              + Add New GA Location
+            </button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
+            {sites.map(s => (
+              <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:8, padding:'14px 16px', background:'#f8fafc' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                  <p style={{ margin:'0 0 4px', fontSize:13, fontWeight:700, color:'#1f4e1a' }}>{s.name}</p>
+                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, background: s.status === 'Active' ? '#dcfce7' : '#fee2e2', color: s.status === 'Active' ? '#15803d' : '#b91c1c' }}>
+                    {s.status}
+                  </span>
+                </div>
+                <p style={{ margin:'0 0 6px', fontSize:11, color:'#64748b' }}>{s.zone || s.district || ''}</p>
+                <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>
+                  {(s.areas || []).slice(0,3).join(', ')}{(s.areas||[]).length > 3 ? ` +${s.areas.length - 3} more` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Info bar */}
-      <div style={{ marginTop: 16, background: '#dbeafe', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 16px', fontSize: 12, color: '#1e40af', display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 16px', fontSize:12, color:'#1e40af', display:'flex', alignItems:'center', gap:8 }}>
         <span>ℹ️</span>
         Full RBAC will be enforced once backend is connected. Currently using local mode authentication.
       </div>
 
-      {/* Request Access Modal */}
+      {/* ── Request Access Modal ── */}
       {showModal && (
         <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
           <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:460,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden' }}>
@@ -206,7 +293,7 @@ export default function Access() {
             </div>
             <div style={{ padding:24 }}>
               {submitted ? (
-                <div style={{ textAlign:'center',padding:'20px 0' }}>
+                <div style={{ textAlign:'center', padding:'20px 0' }}>
                   <div style={{ fontSize:40,marginBottom:12 }}>✅</div>
                   <p style={{ fontSize:15,fontWeight:700,color:'#15803d',marginBottom:8 }}>Request submitted!</p>
                   <p style={{ fontSize:13,color:'#64748b' }}>Your admin will review and approve your access.</p>
@@ -217,7 +304,7 @@ export default function Access() {
                 </div>
               ) : (
                 <>
-                  <div style={{ display:'flex',flexDirection:'column',gap:14 }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
                     <div>
                       <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Your Name</label>
                       <input value={rName} onChange={e => setRName(e.target.value)}
@@ -232,14 +319,13 @@ export default function Access() {
                       <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Select Site</label>
                       <select value={rSite} onChange={e => setRSite(e.target.value)}
                         style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#fff' }}>
-                        {ALL_SITES.map(s => <option key={s}>{s}</option>)}
+                        {allSiteNames.map(s => <option key={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Reason / Note (optional)</label>
+                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Reason (optional)</label>
                       <textarea value={rReason} onChange={e => setRReason(e.target.value)}
-                        placeholder="e.g. I am the supervisor for this site"
-                        rows={3}
+                        placeholder="e.g. I am the supervisor for this site" rows={3}
                         style={{ width:'100%',border:'1px solid #d1d5db',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical' }} />
                     </div>
                   </div>
@@ -255,6 +341,77 @@ export default function Access() {
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add GA Location Modal ── */}
+      {showLocModal && (
+        <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto' }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:500,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden',margin:'auto' }}>
+            <div style={{ background:'#1f4e1a',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Add New GA Location</span>
+              <button onClick={() => setShowLocModal(false)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding:24, display:'flex', flexDirection:'column', gap:14, maxHeight:'70vh', overflowY:'auto' }}>
+              <div>
+                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>GA Location Name *</label>
+                <input value={locName} onChange={e => setLocName(e.target.value)}
+                  placeholder="e.g. Ludhiana Zone-3"
+                  style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Contract Number</label>
+                  <input value={locContract} onChange={e => setLocContract(e.target.value)}
+                    placeholder="e.g. CA-12"
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Status</label>
+                  <select value={locStatus} onChange={e => setLocStatus(e.target.value)}
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,background:'#fff',boxSizing:'border-box' }}>
+                    <option>Active</option>
+                    <option>Inactive</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Zone Details</label>
+                <input value={locZone} onChange={e => setLocZone(e.target.value)}
+                  placeholder="e.g. Zone-03, Ludhiana"
+                  style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>District</label>
+                  <input value={locDistrict} onChange={e => setLocDistrict(e.target.value)}
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>City / Village</label>
+                  <input value={locCity} onChange={e => setLocCity(e.target.value)}
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Areas under this location</label>
+                <textarea value={locAreas} onChange={e => setLocAreas(e.target.value)}
+                  placeholder="Enter areas separated by commas e.g. Uttam Nagar, Model Town, Guru Nanak Nagar" rows={3}
+                  style={{ width:'100%',border:'1px solid #d1d5db',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical' }} />
+                <p style={{ fontSize:11,color:'#64748b',marginTop:4 }}>These areas will appear in the Area dropdown when adding house entries</p>
+              </div>
+              <div style={{ display:'flex',gap:10 }}>
+                <button onClick={() => setShowLocModal(false)}
+                  style={{ flex:1,height:38,background:'#f1f5f9',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
+                  Cancel
+                </button>
+                <button onClick={handleAddLocation}
+                  style={{ flex:1,height:38,background:'#2d6a27',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#fff' }}>
+                  Add Location
+                </button>
+              </div>
             </div>
           </div>
         </div>
