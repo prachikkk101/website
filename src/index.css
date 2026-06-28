@@ -320,146 +320,123 @@ body {
 .nav-tab:hover { background: rgba(255,255,255,0.1); color: #fff; }
 .nav-tab.active { background: #2d6a27; color: #fff; border-bottom-color: #7ec56f; }
 
-/* ---- SlidePanel Form Elements ---- */
-.panel-section-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #1f4e1a;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 6px;
-  margin-bottom: 12px;
-}
+/* ============================================================
+   MOBILE RESPONSIVE — max-width: 767px
+   ============================================================ */
 
-.panel-field {
-  margin-bottom: 16px;
-}
+@media (max-width: 767px) {
 
-.panel-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-  margin-bottom: 4px;
-  display: block;
-}
-
-.panel-input, .panel-select {
-  width: 100%;
-  height: 34px;
-  border: 1px solid #d1d5db;
-  border-radius: 5px;
-  padding: 0 10px;
-  font-size: 13px;
-  outline: none;
-  background: white;
-  color: #1e293b;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.panel-input:focus, .panel-select:focus {
-  border-color: #2d6a27;
-  box-shadow: 0 0 0 2px rgba(45,106,39,0.15);
-}
-
-.panel-input.error, .panel-select.error {
-  border-color: #ef4444;
-}
-
-.panel-error-text {
-  font-size: 11px;
-  color: #ef4444;
-  margin-top: 4px;
-}
-
-.panel-footer {
-  background: #f8fafc;
-  border-top: 1px solid #e2e8f0;
-  padding: 14px 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.panel-btn-cancel {
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
-  padding: 8px 20px;
-  border-radius: 5px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.panel-btn-save {
-  background: #2d6a27;
-  color: white;
-  border: none;
-  padding: 8px 24px;
-  border-radius: 5px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.15s;
-}
-
-.panel-btn-cancel:hover, .panel-btn-save:hover {
-  opacity: 0.9;
-}
-
-/* ---- Toast Animations ---- */
-@keyframes toastSlideIn {
-  from {
-    transform: translateX(120%);
-    opacity: 0;
+  /* ---- Table cells — smaller on mobile ---- */
+  .gp-table th, .gp-table td {
+    font-size: 11px;
+    padding: 8px 6px;
   }
-  to {
-    transform: translateX(0);
-    opacity: 1;
+
+  /* ---- KPI tiles — 2 columns on mobile ---- */
+  .kpi-grid-7 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .kpi-tile {
+    padding: 12px 8px;
+    min-height: 72px;
+  }
+  .kpi-value {
+    font-size: 18px !important;
+  }
+  .kpi-label {
+    font-size: 10px;
+  }
+
+  /* ---- Dashboard grid — stack vertically ---- */
+  .dash-two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ---- Worker cards — 2 columns on mobile ---- */
+  .worker-grid {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* ---- Filter bar — stack vertically ---- */
+  .filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .filter-bar > * {
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
+  }
+
+  /* ---- Export date row — stack vertically on mobile ---- */
+  .export-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+  .export-row > * {
+    width: 100% !important;
+  }
+  .export-row input[type="date"] {
+    width: 100% !important;
+  }
+  .export-row button {
+    width: 100% !important;
+    justify-content: center;
+  }
+
+  /* ---- Add Entry buttons — full width on mobile ---- */
+  .btn-add-entry {
+    width: 100% !important;
+    height: 44px !important;
+    font-size: 14px !important;
+    justify-content: center;
+  }
+
+  /* ---- Card padding — tighter on mobile ---- */
+  .card {
+    border-radius: 6px;
+  }
+
+  /* ---- Report cards ---- */
+  .report-card {
+    padding: 12px !important;
+  }
+  .report-card-header {
+    font-size: 13px !important;
+  }
+  .report-card-body {
+    font-size: 12px !important;
+  }
+
+  /* ---- Main padding reduction ---- */
+  main {
+    padding: 10px !important;
+  }
+
+  /* ---- Section gap ---- */
+  .section-block {
+    margin-bottom: 10px;
+  }
+
+  /* ---- Modal box ---- */
+  .modal-box {
+    max-width: 100% !important;
+    border-radius: 8px;
+  }
+
+  /* ---- PE Laying KPI tiles — 2×2 on mobile ---- */
+  .pe-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 }
 
-.toast-message {
-  animation: toastSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+/* ---- Slide Panel — full width on mobile ---- */
+@media (max-width: 767px) {
+  .slide-panel {
+    width: 100vw !important;
+    right: 0 !important;
+    left: 0 !important;
+    border-radius: 0 !important;
+  }
 }
-
-/* ---- Navigation Dropdown ---- */
-.nav-tab-container:hover .nav-dropdown-menu {
-  display: block;
-}
-
-.nav-dropdown-menu {
-  display: none;
-  position: absolute;
-  top: 100%;
-  left: 0;
-  background: #1f4e1a;
-  min-width: 180px;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-  border-radius: 0 0 6px 6px;
-  overflow: hidden;
-  z-index: 105;
-}
-
-.nav-dropdown-item {
-  display: block;
-  padding: 10px 16px;
-  color: rgba(255, 255, 255, 0.8);
-  text-decoration: none;
-  font-size: 13px;
-  font-weight: 500;
-  transition: background 0.15s, color 0.15s;
-}
-
-.nav-dropdown-item:hover {
-  background: #2d6a27;
-  color: #fff;
-}
-
-.nav-dropdown-item.active {
-  background: #2d6a27;
-  color: #fff;
-  border-left: 3px solid #7ec56f;
-}
-
-
-

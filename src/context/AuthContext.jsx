@@ -1,196 +1,114 @@
-// src/context/AuthContext.jsx
-import {
-  createContext, useContext, useState, useEffect,
-  useCallback, useRef,
-} from 'react';
-import { authService } from '../api/authService';
+import { createContext, useState, useEffect } from 'react';
+import api from '../utils/api';
 
-const AuthContext = createContext({
-  user: null,
-  isAuthenticated: false,
-  isLoading: true,
-  pendingRequestCount: 0,
-  newAccessRequest: null,
-  clearNewRequest: () => {},
-  login: async () => {},
-  logout: () => {},
-  register: async () => {},
-  verifyEmail: async () => {},
-});
+export const AuthContext = createContext();
+
+/* ── Hardcoded admin credentials (local / offline mode) ── */
+const ADMIN_EMAILS = [
+  'admin@gppms.com',
+  'oxygenhisar@gmail.com',
+  'oxygenprotech@gmail.com',
+];
+
+// admin@gppms.com + admin123 always works as admin.
+// The two Google emails also get ADMIN in local fallback (any password).
+function buildMockUser(email, password) {
+  const em = email.toLowerCase();
+  const isHardcodedAdmin =
+    (em === 'admin@gppms.com' && password === 'admin123') ||
+    ADMIN_EMAILS.includes(em);
+
+  if (isHardcodedAdmin) {
+    return {
+      id: 1,
+      name: em === 'admin@gppms.com' ? 'Admin' : email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      email,
+      role: 'ADMIN',
+      siteAccess: 'all',
+      token: 'local-admin-' + Date.now(),
+      isLocalMode: true,
+    };
+  }
+
+  // Everyone else → SUPERVISOR, view-only until approved
+  return {
+    id: Date.now(),
+    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    email,
+    role: 'SUPERVISOR',
+    siteAccess: 'none',
+    token: 'local-' + Date.now(),
+    isLocalMode: true,
+  };
+}
 
 export function AuthProvider({ children }) {
-  const [user, setUser]               = useState(null);
-  const [isLoading, setIsLoading]     = useState(true);
-  const [pendingRequestCount, setPendingRequestCount] = useState(0);
-  const [newAccessRequest, setNewAccessRequest]       = useState(null);
+  const [user, setUser]       = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Track previous count so we only fire popup on NEW requests
-  const prevCountRef = useRef(0);
-  const pollTimerRef = useRef(null);
-
-  // ── Poll for pending access requests (admin only) ──
-  const pollPendingRequests = useCallback(async (currentUser) => {
-    if (!currentUser || currentUser.role !== 'ADMIN') return;
-    try {
-      const data = await authService.getAccessRequests('pending');
-      const requests = Array.isArray(data)
-        ? data
-        : (data.requests || data.accessRequests || []);
-      const count = requests.length;
-      setPendingRequestCount(count);
-
-      // Fire popup only if count increased
-      if (count > prevCountRef.current && count > 0) {
-        const latest = requests[0];
-        setNewAccessRequest({
-          name:     latest.name || latest.fullName || 'Someone',
-          email:    latest.email || '',
-          site:     latest.site?.name || latest.siteName || 'Unknown Site',
-          role:     latest.role || 'Supervisor',
-          id:       latest.id,
-        });
-      }
-      prevCountRef.current = count;
-    } catch {
-      // Silently ignore — backend may not be running during dev
-    }
-  }, []);
-
-  const startPolling = useCallback((currentUser) => {
-    if (!currentUser || currentUser.role !== 'ADMIN') return;
-    // Immediate first poll
-    pollPendingRequests(currentUser);
-    // Then every 60 seconds
-    pollTimerRef.current = setInterval(() => {
-      pollPendingRequests(currentUser);
-    }, 60_000);
-  }, [pollPendingRequests]);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
-    }
-  }, []);
-
-  // ── On mount: restore session ──
   useEffect(() => {
-    // Read from unified keys
-    const sessionStr = localStorage.getItem('gppms_session');
-    const token      = localStorage.getItem('gppms_token');
-
-    if (sessionStr && token) {
-      try {
-        const saved = JSON.parse(sessionStr);
-
-        // ── Local mode: skip backend validation ──
-        if (saved.isLocalMode || token.startsWith('local-')) {
-          setUser(saved);
-          startPolling(saved);
-          setIsLoading(false);
-          return;
-        }
-
-        // ── Real backend: validate token ──
-        authService
-          .getMe()
-          .then((data) => {
-            const u = data.user;
-            setUser(u);
-            localStorage.setItem('gppms_session', JSON.stringify({ ...u, token }));
-            startPolling(u);
-          })
-          .catch(() => {
-            localStorage.removeItem('gppms_session');
-            localStorage.removeItem('gppms_token');
-            setUser(null);
-          })
-          .finally(() => setIsLoading(false));
-        return; // don't set isLoading=false synchronously
-      } catch {
-        localStorage.removeItem('gppms_session');
-        localStorage.removeItem('gppms_token');
+    try {
+      const storedUser = localStorage.getItem('gppms_session');
+      const token      = localStorage.getItem('gppms_token');
+      if (storedUser && token) {
+        setUser(JSON.parse(storedUser));
       }
-    }
-
-    setIsLoading(false);
-    return () => stopPolling();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Login (real backend) ──
-  const login = useCallback(async (email, password) => {
-    const data = await authService.login(email, password);
-    if (data.success) {
-      const sessionObj = { ...data.user, token: data.accessToken };
-      localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
-      localStorage.setItem('gppms_token', data.accessToken);
-      setUser(data.user);
-      startPolling(data.user);
-    }
-    return data;
-  }, [startPolling]);
-
-  // ── Login (local mock — no backend call) ──
-  const loginWithMockUser = useCallback((mockUser) => {
-    localStorage.setItem('gppms_session', JSON.stringify(mockUser));
-    localStorage.setItem('gppms_token', mockUser.token);
-    setUser(mockUser);
-    // No polling for local mode (no backend to poll)
+    } catch { /* ignore */ }
+    setLoading(false);
   }, []);
 
-  // ── Logout ──
-  const logout = useCallback(() => {
-    stopPolling();
-    localStorage.removeItem('gppms_session');
+  const login = async (email, password) => {
+    // Basic client-side validation
+    if (!password || password.length < 4) {
+      return { success: false, error: 'Password must be at least 4 characters.' };
+    }
+
+    try {
+      // ── 1. Try real backend ──
+      const response = await api.post('/auth/login', { email, password });
+      if (response.data.success) {
+        const { user: u, accessToken, refreshToken } = response.data;
+        const sessionObj = { ...u, token: accessToken };
+        localStorage.setItem('gppms_token', accessToken);
+        if (refreshToken) localStorage.setItem('gppms_refresh', refreshToken);
+        localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
+        setUser(sessionObj);
+        return { success: true, user: sessionObj };
+      }
+      // Backend responded but said login failed (wrong password etc.)
+      return { success: false, error: response.data.error || 'Invalid credentials.' };
+    } catch (err) {
+      // ── 2. Network/502 error — fall back to local mode ──
+      const isNetworkError = !err.response;
+      const is5xx = err.response?.status >= 500;
+
+      if (isNetworkError || is5xx) {
+        // Silent local fallback — check hardcoded admin creds first
+        const mockUser = buildMockUser(email, password);
+        localStorage.setItem('gppms_token', mockUser.token);
+        localStorage.setItem('gppms_session', JSON.stringify(mockUser));
+        setUser(mockUser);
+        return { success: true, user: mockUser };
+      }
+
+      // Backend is reachable but returned 4xx (wrong credentials)
+      return {
+        success: false,
+        error: err.response?.data?.error || 'Invalid email or password.',
+      };
+    }
+  };
+
+  const logout = () => {
     localStorage.removeItem('gppms_token');
+    localStorage.removeItem('gppms_refresh');
+    localStorage.removeItem('gppms_session');
     setUser(null);
-    setPendingRequestCount(0);
-    setNewAccessRequest(null);
-    prevCountRef.current = 0;
-  }, [stopPolling]);
-
-  // ── Legacy methods kept for backward compat ──
-  const register = useCallback(async (name, email, password) => {
-    const data = await authService.register(name, email, password);
-    return data;
-  }, []);
-
-  const verifyEmail = useCallback(async (email, code) => {
-    const data = await authService.verifyEmail(email, code);
-    return data;
-  }, []);
-
-  const clearNewRequest = useCallback(() => {
-    setNewAccessRequest(null);
-  }, []);
-
-  // Expose a way for Masters page to refresh the count after approving/rejecting
-  const refreshPendingCount = useCallback(() => {
-    pollPendingRequests(user);
-  }, [pollPendingRequests, user]);
+  };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        isAuthenticated: !!user,
-        isLoading,
-        pendingRequestCount,
-        newAccessRequest,
-        clearNewRequest,
-        refreshPendingCount,
-        login,
-        loginWithMockUser,
-        logout,
-        register,
-        verifyEmail,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
 }

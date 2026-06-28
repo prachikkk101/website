@@ -6,13 +6,18 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: true,
-    allowedHosts: ['all'],
+    allowedHosts: 'all',
     proxy: {
       '/api': {
         target: 'http://localhost:5001',
         changeOrigin: true,
         secure: false,
       },
+    },
+    // HMR works over localtunnel — use relative websocket path
+    hmr: {
+      protocol: 'wss',
+      clientPort: 443,
     },
   },
 })

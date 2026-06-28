@@ -1,47 +1,61 @@
 // src/components/Toast.jsx
-import React from 'react';
-import { useSite } from '../context/SiteContext';
+import { useState, useCallback, useRef } from 'react';
 
-export function useToast() {
-  const { showToast } = useSite();
-  return { showToast };
-}
+let _showToast = null;
 
-export default function ToastContainer() {
-  const { toasts } = useSite();
+/* Internal component — mount once in App or Layout */
+export function ToastContainer() {
+  const [toasts, setToasts] = useState([]);
+  const idRef = useRef(0);
+
+  // Register the global trigger
+  _showToast = useCallback((message, type = 'success') => {
+    const id = ++idRef.current;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3200);
+  }, []);
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: '20px',
-        right: '20px',
-        zIndex: 2000,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-        pointerEvents: 'none',
-      }}
-    >
-      {toasts.map((toast) => (
+    <div style={{
+      position: 'fixed', top: 20, right: 20, zIndex: 2000,
+      display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none',
+    }}>
+      {toasts.map(t => (
         <div
-          key={toast.id}
-          className="toast-message"
+          key={t.id}
           style={{
-            background: '#2d6a27',
-            color: 'white',
-            borderRadius: '6px',
+            background: t.type === 'error' ? '#dc2626' : '#2d6a27',
+            color: '#fff',
+            borderRadius: 6,
             padding: '12px 20px',
-            fontSize: '13px',
+            fontSize: 13,
             fontWeight: 500,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-            pointerEvents: 'auto',
-            minWidth: '220px',
+            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            animation: 'toastIn 0.25s ease forwards',
+            display: 'flex', alignItems: 'center', gap: 8,
+            minWidth: 220,
           }}
         >
-          {toast.message}
+          <span>{t.type === 'error' ? '⚠' : '✓'}</span>
+          {t.message}
         </div>
       ))}
+      <style>{`
+        @keyframes toastIn {
+          from { opacity:0; transform: translateX(40px); }
+          to   { opacity:1; transform: translateX(0); }
+        }
+      `}</style>
     </div>
   );
+}
+
+/* Hook used in any component */
+export function useToast() {
+  const showToast = useCallback((message, type = 'success') => {
+    if (_showToast) _showToast(message, type);
+  }, []);
+  return { showToast };
 }

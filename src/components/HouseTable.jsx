@@ -1,26 +1,43 @@
 // src/components/HouseTable.jsx
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { useSite } from '../context/SiteContext';
-import { useToast } from './Toast';
-import SlidePanel from './SlidePanel';
+import { useState, useMemo, useEffect, useContext } from 'react';
+import { houses as defaultHouses } from '../data/houses';
 import MeterModal from './MeterModal';
-import { pngService } from '../api/pngService';
+import defaultStockData from '../data/stockData';
 import { exportHouseData } from '../utils/exportExcel';
-import { getHouses, addHouse } from '../utils/dataService';
+import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
+import { useToast } from './Toast';
+import { AuthContext } from '../context/AuthContext';
+import { useSite, useSiteAreas } from '../context/SiteContext';
+
+/* ── Helpers ── */
+function initStore(key, defaults) {
+  try {
+    const raw = localStorage.getItem('gppms_' + key);
+    if (!raw) { localStorage.setItem('gppms_' + key, JSON.stringify(defaults)); return defaults; }
+    return JSON.parse(raw);
+  } catch { return defaults; }
+}
+
+function getSession() {
+  try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
+}
+
+const todayStr = () => new Date().toISOString().split('T')[0];
+
+function formatDate(d) {
+  if (!d || d === '-') return '—';
+  try {
+    const date = new Date(d);
+    if (isNaN(date)) return d;
+    return date.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return d; }
+}
 
 /* ── Status Badge ── */
 const STATUS_MAP = {
-  'Done':        'badge-done',
-  'Done 3.0':    'badge-done',
-  'Done 3.0 MTR': 'badge-done',
-  'Done 3.5 MTR': 'badge-done',
-  'Pending':     'badge-pending',
-  'Not Updated': 'badge-updated',
-  'RFC':         'badge-rfc',
-  '-':           '',
-  '—':           '',
+  'Done':'badge-done','Done 3.0':'badge-done','Done 3.5':'badge-done',
+  'Pending':'badge-pending','Not Updated':'badge-updated','RFC':'badge-rfc',
 };
-
 function StatusBadge({ val }) {
   if (!val || val === '-' || val === '—') return <span style={{ color: '#cbd5e1' }}>—</span>;
   const cls = STATUS_MAP[val] ?? 'badge-done';
@@ -28,293 +45,666 @@ function StatusBadge({ val }) {
 }
 
 const PAGE_SIZE = 8;
+const AREAS_LIST    = ['UE-II','PLA','Guru Nanak Nagar','Uttam Nagar','Sector 12','Model Town','Kishangar Village','Market'];
+const ACCT_TYPES    = ['Domestic','Commercial','Industrial'];
+const GC_STATUSES   = ['—','Done','Pending','Done 3.0 MTR','Done 3.5 MTR'];
+const GI_STATUSES   = ['—','Done','Pending'];
+const RFC_STATUSES  = ['—','Done','RFC','Pending'];
+const NG_STATUSES   = ['—','Done','NG Done','RFC','Pending'];
+const SARAL_STATUSES= ['—','DONE','NG PENDING','METER NOT UPDATE','Prepaid Meter'];
+const METER_MAKES   = ['Select','Itron','Elster','Honeywell','Landis+Gyr'];
+const MATERIALS     = [
+  { key: 'pe20',      label: "20mm PE Pipe",          unit: 'mtr'  },
+  { key: 'gi12',      label: "½\" GI Pipe",           unit: 'mtr'  },
+  { key: 'tfFit',     label: 'TF Fitting',            unit: 'pcs'  },
+  { key: 'ibv',       label: 'Isolation Ball Valve',  unit: 'pcs'  },
+  { key: 'c32',       label: '32mm Coupler',          unit: 'pcs'  },
+  { key: 'c63',       label: '63mm Coupler',          unit: 'pcs'  },
+  { key: 'teflon',    label: 'Teflon Tape (rolls)',   unit: 'rolls' },
+  { key: 'gasTap',    label: 'Gas Tap',               unit: 'pcs'  },
+  { key: 'rubber',    label: 'Rubber Tube',           unit: 'mtr'  },
+  { key: 'hoseClamp', label: 'Hose Clamp',            unit: 'pcs'  },
+];
 
-const ACCT_TYPES = ['DOMESTIC', 'COMMERCIAL', 'INDUSTRIAL', 'CNG'];
-
-const initialForm = {
-  appNo: '',
-  customerName: '',
-  mobile: '',
-  altMobile: '',
-  accountType: 'DOMESTIC',
-  houseNo: '',
-  address1: '',
-  address2: '',
-  city: '',
-  society: '',
-  gcLength: '',
-  giPipeMtr: '',
-  tfCount: '',
-  ivCount: '',
+const EMPTY_FORM = {
+  bpNo:'', appNo:'', name:'', mobile:'', altMobile:'',
+  acctType:'Domestic', houseNo:'', address1:'', area:'UE-II', city:'HISAR',
+  gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', saralStatus:'—',
+  plumbingDate:'', gcLen:'', giLen:'', tf:'', iv:'',
+  meterNo:'', meterDate:'', meterMake:'Select', meterReading:0, side:'LHS', meterPhotoFile:null,
+  pe20:0, gi12:0, tfFit:0, ibv:0, c32:0, c63:0, teflon:0, gasTap:0, rubber:0, hoseClamp:0,
 };
 
+/* ── Delete Confirm Modal ── */
+function ConfirmDelete({ onConfirm, onCancel }) {
+  return (
+    <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
+      <div style={{ background:'#fff',borderRadius:12,padding:28,maxWidth:360,width:'100%',boxShadow:'0 20px 60px rgba(0,0,0,0.25)',textAlign:'center' }}>
+        <div style={{ fontSize:36,marginBottom:12 }}>🗑</div>
+        <p style={{ fontSize:15,fontWeight:700,color:'#1e293b',marginBottom:6 }}>Delete this entry permanently?</p>
+        <p style={{ fontSize:12,color:'#64748b',marginBottom:20 }}>This action cannot be undone.</p>
+        <div style={{ display:'flex',gap:10 }}>
+          <button onClick={onCancel} style={{ flex:1,height:38,background:'#f1f5f9',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} style={{ flex:1,height:38,background:'#c0440a',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#fff' }}>
+            Yes, Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function HouseTable() {
-  const { selectedSite, sites } = useSite();
   const { showToast } = useToast();
-
-  const [houses, setHouses] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [filterAcct, setFilterAcct] = useState('');
-  const [filterBP, setFilterBP] = useState('');
-  const [page, setPage] = useState(1);
-  const [modalHouse, setModalHouse] = useState(null);
-
-  // Export dates default to today
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [exportFrom, setExportFrom] = useState(todayStr);
-  const [exportTo, setExportTo] = useState(todayStr);
-
-  // Add Entry Panel State
-  const [panelOpen, setPanelOpen] = useState(false);
-  const [formData, setFormData] = useState(initialForm);
-  const [errors, setErrors] = useState({});
-  const [saving, setSaving] = useState(false);
-
-  // Fetch connections from API
-  const fetchConnections = useCallback(async () => {
-    // Detect local mode: site IDs are placeholder strings, not real UUIDs
-    const isLocalMode = sites.length > 0 && String(sites[0]?.id).startsWith('local-site-');
-
-    if (selectedSite === 'all') {
-      setLoading(true);
-      if (isLocalMode) {
-        setHouses(getHouses());
-        setLoading(false);
-        return;
-      }
-      try {
-        const allConns = [];
-        for (const site of sites) {
-          try {
-            const data = await pngService.getConnections(site.id);
-            const conns = data.connections || data || [];
-            allConns.push(...(Array.isArray(conns) ? conns : []));
-          } catch { /* skip failed sites */ }
-        }
-        setHouses(allConns.length > 0 ? allConns : getHouses());
-      } catch {
-        setHouses(getHouses());
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      setLoading(true);
-      if (isLocalMode || String(selectedSite).startsWith('local-site-')) {
-        setHouses(getHouses());
-        setLoading(false);
-        return;
-      }
-      try {
-        const data = await pngService.getConnections(selectedSite);
-        const conns = data.connections || data || [];
-        setHouses(Array.isArray(conns) && conns.length > 0 ? conns : getHouses());
-      } catch {
-        setHouses(getHouses());
-      } finally {
-        setLoading(false);
-      }
-    }
-  }, [selectedSite, sites]);
+  const { user }      = useContext(AuthContext);
+  const { selectedSite } = useSite();
+  const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
+  const [allHouses, setAllHouses] = useState([]);
 
   useEffect(() => {
-    fetchConnections();
-  }, [fetchConnections]);
+    document.title = 'GP-PMS — PNG Connections';
+    setAllHouses(initStore('houses', defaultHouses));
+  }, []);
+
+  // Auth / role checks
+  const session    = getSession();
+  const isSupervisor = user?.role === 'SUPERVISOR';
+  const siteAccess   = session.siteAccess;
+  const isAdmin      = (
+    user?.role === 'ADMIN' || user?.role === 'admin' ||
+    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+      .includes((session.email || '').toLowerCase())
+  );
+  const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
+  const canWrite     = !isViewOnly;
+
+  const [filterAcct, setFilterAcct] = useState('');
+  const [filterArea, setFilterArea] = useState('');
+  const [filterBP,   setFilterBP]   = useState('');
+  const [page,       setPage]       = useState(1);
+  const [modalHouse, setModalHouse] = useState(null);
+
+  // Export state — default from 2020 to capture all historical data
+  const [exportFrom,   setExportFrom]   = useState('2020-01-01');
+  const [exportTo,     setExportTo]     = useState(todayStr());
+  const [exportFilter, setExportFilter] = useState('all');
+
+  // Add/Edit panel
+  const [panelOpen,    setPanelOpen]    = useState(false);
+  const [editEntry,    setEditEntry]    = useState(null);
+  const [form,         setForm]         = useState(EMPTY_FORM);
+  const [errors,       setErrors]       = useState({});
+  const [showDelete,   setShowDelete]   = useState(false);
+
+  // Dual photo state
+  const [photo1,        setPhoto1]        = useState(null);
+  const [photo1Preview, setPhoto1Preview] = useState(null);
+  const [photo2,        setPhoto2]        = useState(null);
+  const [photo2Preview, setPhoto2Preview] = useState(null);
+
+  // Photo popover state (for table cell)
+  const [photoPopover, setPhotoPopover] = useState(null); // houseId or null
 
   function reset() { setPage(1); }
+  const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
-  const filtered = useMemo(() => {
-    return houses.filter(h => {
-      if (filterAcct && (h.accountType || '').toUpperCase() !== filterAcct.toUpperCase()) return false;
-      if (filterBP && !(h.bpNo || h.appNo || '').includes(filterBP)) return false;
-      return true;
-    });
-  }, [houses, filterAcct, filterBP]);
+  /* Photo handler */
+  const handlePhoto = (e, slot) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (slot === 1) { setPhoto1(file); setPhoto1Preview(url); }
+    else            { setPhoto2(file); setPhoto2Preview(url); }
+  };
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-  const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  /* Convert file to base64 */
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = reject;
+  });
 
-  async function handleSave() {
-    const newErrors = {};
-    if (!formData.appNo.trim()) newErrors.appNo = 'Application No. is required';
-    if (!formData.customerName.trim()) newErrors.customerName = 'Customer Name is required';
-    if (!formData.mobile.trim()) newErrors.mobile = 'Mobile Number is required';
-    if (!formData.houseNo.trim()) newErrors.houseNo = 'House No. is required';
+  /* Photo utils */
+  const viewPhoto = (data) => {
+    const win = window.open();
+    win.document.write(`<img src="${data}" style="max-width:100%;height:auto;background:#000" />`);
+  };
+  const downloadPhoto = (data, name) => {
+    const a = document.createElement('a');
+    a.href = data; a.download = name || 'photo.jpg';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
 
-    setErrors(newErrors);
-    if (Object.keys(newErrors).length > 0) {
-      showToast('⚠️ Please fill in all required fields');
-      return;
-    }
+  const filtered = useMemo(() => (allHouses || []).filter(h => {
+    if (filterAcct && h.acctType !== filterAcct) return false;
+    if (filterArea && h.area    !== filterArea)  return false;
+    if (filterBP   && !String(h.bpNo || '').includes(filterBP)) return false;
+    return true;
+  }), [allHouses, filterAcct, filterArea, filterBP]);
 
-    const targetSiteId = selectedSite === 'all' ? sites[0]?.id : selectedSite;
-    if (!targetSiteId) {
-      showToast('⚠️ Please select a site first');
-      return;
-    }
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
+  const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-    setSaving(true);
-    try {
-      await pngService.createConnection(targetSiteId, {
-        appNo: formData.appNo,
-        customerName: formData.customerName,
-        mobile: formData.mobile,
-        altMobile: formData.altMobile || undefined,
-        accountType: formData.accountType,
-        houseNo: formData.houseNo,
-        address1: formData.address1 || formData.houseNo,
-        address2: formData.address2 || undefined,
-        city: formData.city || 'HISAR',
-        society: formData.society || undefined,
-        gcLength: formData.gcLength ? Number(formData.gcLength) : undefined,
-        giPipeMtr: formData.giPipeMtr ? Number(formData.giPipeMtr) : undefined,
-        tfCount: formData.tfCount ? Number(formData.tfCount) : undefined,
-        ivCount: formData.ivCount ? Number(formData.ivCount) : undefined,
-      });
-    } catch {
-      // API unreachable — persist locally
-      addHouse({
-        appNo: formData.appNo,
-        bpNo: formData.appNo,
-        name: formData.customerName,
-        mobile: formData.mobile,
-        altMobile: formData.altMobile,
-        acctType: formData.accountType,
-        houseNo: formData.houseNo,
-        area: formData.address1 || formData.address2 || '',
-        city: formData.city || 'HISAR',
-        site: sites.find(s => s.id === targetSiteId)?.name || '',
-        gcStatus: '-', giStatus: '-', rfc: '-', ngStatus: '-', saralStatus: '-',
-        meterNo: '-', meterDate: '-', meterPhoto: false,
-      });
-    }
-
-    showToast('✓ Connection created successfully');
-    setFormData(initialForm);
-    setErrors({});
-    setPanelOpen(false);
-    fetchConnections();
-    setSaving(false);
-  }
-
-  function handleCancel() {
-    setFormData(initialForm);
-    setErrors({});
-    setPanelOpen(false);
-  }
-
-  if (loading) {
+  /* ── isDone / isPending helpers ── */
+  function isDone(h) {
+    const gc    = (h.gc    || h.gcStatus    || '').toLowerCase();
+    const gi    = (h.gi    || h.giStatus    || '').toLowerCase();
+    const rfc   = (h.rfc   || h.rfcStatus   || '').toLowerCase();
+    const ng    = (h.ng    || h.ngStatus    || '').toLowerCase();
+    const saral = (h.saral || h.saralStatus || '').toLowerCase();
+    const meter = String(h.meter || h.meterNo || h.meterNumber || '');
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
-        <div style={{
-          width: 36, height: 36, border: '4px solid #e2e8f0',
-          borderTopColor: '#2d6a27', borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite', margin: '0 auto 12px',
-        }} />
-        <p style={{ color: '#64748b', fontSize: 13 }}>Loading connections...</p>
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
-      </div>
+      gc.includes('done') &&
+      gi.includes('done') &&
+      rfc.includes('done') &&
+      ng.includes('done') &&
+      saral === 'done' &&
+      meter !== '' && meter !== '-' && meter !== '–' && meter !== 'null'
+    );
+  }
+
+  /* ── Date-match helper — lenient (include if no date field) ── */
+  function dateMatches(h) {
+    const dateStr = h.createdAt || h.meterDate || h.plumbingDate || h.date || null;
+    if (!dateStr) return true; // no date → always include
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return true;
+      const from = new Date(exportFrom); from.setHours(0,0,0,0);
+      const to   = new Date(exportTo);   to.setHours(23,59,59,999);
+      return d >= from && d <= to;
+    } catch { return true; }
+  }
+
+  /* ── Compute export-preview counts ── */
+  const exportPreview = useMemo(() => {
+    const inRange = (allHouses || []).filter(dateMatches);
+    const doneCount    = inRange.filter(isDone).length;
+    const pendingCount = inRange.length - doneCount;
+    return { total: inRange.length, done: doneCount, pending: pendingCount };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allHouses, exportFrom, exportTo]);
+
+  /* ── Export with Done/Pending filter ── */
+  function handleExport() {
+    let data = (allHouses || []).filter(dateMatches);
+
+    if (exportFilter === 'done')    data = data.filter(isDone);
+    else if (exportFilter === 'pending') data = data.filter(h => !isDone(h));
+
+    console.log('Exporting', data.length, 'rows with filter:', exportFilter);
+
+    const suffix = exportFilter === 'all'
+      ? `All_${exportFrom}_to_${exportTo}`
+      : `${exportFilter.charAt(0).toUpperCase() + exportFilter.slice(1)}_${exportFrom}_to_${exportTo}`;
+
+    exportHouseData(data, exportFrom, exportTo, exportFilter, suffix);
+  }
+
+  /* ── Validate ── */
+  function validateForm() {
+    const e = {};
+    // BP Number is now optional — only Name, Mobile, House No. required
+    if (!form.name.trim())    e.name    = 'Required';
+    if (!form.mobile.trim())  e.mobile  = 'Required';
+    if (!form.houseNo.trim()) e.houseNo = 'Required';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  /* ── Open Add panel ── */
+  function openAddPanel() {
+    setEditEntry(null);
+    setForm(EMPTY_FORM);
+    setErrors({});
+    setPhoto1(null); setPhoto1Preview(null);
+    setPhoto2(null); setPhoto2Preview(null);
+    setPanelOpen(true);
+  }
+
+  /* ── Open Edit panel ── */
+  function openEditPanel(h) {
+    setEditEntry(h);
+    setForm({
+      bpNo: h.bpNo || '', appNo: h.appNo || '', name: h.name || '',
+      mobile: h.mobile || '', altMobile: h.altMobile || '',
+      acctType: h.acctType || 'Domestic',
+      houseNo: h.houseNo || '', address1: h.address1 || '',
+      area: h.area || 'UE-II', city: h.city || 'HISAR',
+      gcStatus: h.gcStatus || '—', giStatus: h.giStatus || '—',
+      rfc: h.rfc || '—', ngStatus: h.ngStatus || '—', saralStatus: h.saralStatus || '—',
+      plumbingDate: h.plumbingDate || '', gcLen: h.gcLen || '',
+      giLen: h.giLen || '', tf: h.tf || '', iv: h.iv || '',
+      meterNo: h.meterNo || '', meterDate: h.meterDate || '',
+      meterMake: h.meterMake || 'Select', meterReading: h.meterReading || 0,
+      side: h.side || 'LHS',
+      pe20:0, gi12:0, tfFit:0, ibv:0, c32:0, c63:0, teflon:0, gasTap:0, rubber:0, hoseClamp:0,
+    });
+    setErrors({});
+    setPhoto1(null); setPhoto1Preview(null);
+    setPhoto2(null); setPhoto2Preview(null);
+    setShowDelete(false);
+    setPanelOpen(true);
+  }
+
+  /* ── Save (add or update) — async for base64 photos ── */
+  async function handleSave() {
+    if (!validateForm()) return;
+
+    // Validate photo sizes before converting
+    if (photo1 && photo1.size > 4000000) { alert('Photo 1 is too large (>4MB). Please use a smaller image.'); return; }
+    if (photo2 && photo2.size > 4000000) { alert('Photo 2 is too large (>4MB). Please use a smaller image.'); return; }
+
+    // Convert to base64 for localStorage storage
+    const p1b64 = photo1 ? await toBase64(photo1) : null;
+    const p2b64 = photo2 ? await toBase64(photo2) : null;
+
+    // Check base64 size after conversion (~2MB compressed limit)
+    if (p1b64 && p1b64.length > 2000000) {
+      alert('Photo 1 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    }
+    if (p2b64 && p2b64.length > 2000000) {
+      alert('Photo 2 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    }
+
+    // Build materialsUsed — only items with qty > 0
+    const rawMaterials = {
+      '20mm PE Pipe':          { qty: form.pe20      || 0, unit: 'mtr'   },
+      '½" GI Pipe':            { qty: form.gi12      || 0, unit: 'mtr'   },
+      'TF Fitting':            { qty: form.tfFit     || 0, unit: 'pcs'   },
+      'Isolation Ball Valve':  { qty: form.ibv       || 0, unit: 'pcs'   },
+      '32mm Coupler':          { qty: form.c32       || 0, unit: 'pcs'   },
+      '63mm Coupler':          { qty: form.c63       || 0, unit: 'pcs'   },
+      'Teflon Tape':           { qty: form.teflon    || 0, unit: 'rolls' },
+      'Gas Tap':               { qty: form.gasTap    || 0, unit: 'pcs'   },
+      'Rubber Tube':           { qty: form.rubber    || 0, unit: 'mtr'   },
+      'Hose Clamp':            { qty: form.hoseClamp || 0, unit: 'pcs'   },
+    };
+    const materialsUsed = Object.fromEntries(
+      Object.entries(rawMaterials).filter(([, v]) => v.qty > 0)
+    );
+
+    if (editEntry) {
+      // Update existing
+      const updated = (allHouses || []).map(h =>
+        h.id === editEntry.id
+          ? {
+              ...h,
+              bpNo: form.bpNo, appNo: form.appNo, name: form.name,
+              mobile: form.mobile, altMobile: form.altMobile,
+              acctType: form.acctType, houseNo: form.houseNo,
+              address1: form.address1, area: form.area, city: form.city,
+              gcStatus: form.gcStatus, giStatus: form.giStatus,
+              rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
+              plumbingDate: form.plumbingDate, meterNo: form.meterNo,
+              meterDate: form.meterDate, meterMake: form.meterMake,
+              meterReading: form.meterReading, side: form.side,
+              photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+              photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+              photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+              updatedAt: new Date().toISOString(),
+            }
+          : h
+      );
+      setAllHouses(updated);
+      localStorage.setItem('gppms_houses', JSON.stringify(updated));
+      setPanelOpen(false); setEditEntry(null);
+      showToast('✓ Entry updated successfully');
+    } else {
+      // Add new
+      const newEntry = {
+        id: Date.now(), bpNo: form.bpNo, name: form.name, mobile: form.mobile,
+        appNo: form.appNo, altMobile: form.altMobile,
+        acctType: form.acctType, houseNo: form.houseNo,
+        address1: form.address1, area: form.area, city: form.city,
+        meterNo: form.meterNo, meterDate: form.meterDate,
+        meterMake: form.meterMake, meterReading: form.meterReading,
+        gcStatus: form.gcStatus, giStatus: form.giStatus,
+        rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
+        plumbingDate: form.plumbingDate, side: form.side,
+        photo1Data: p1b64, photo1Name: photo1?.name || null,
+        photo2Data: p2b64, photo2Name: photo2?.name || null,
+        photoCount: [p1b64, p2b64].filter(Boolean).length,
+        materialsUsed,
+        createdAt: new Date().toISOString(),
+      };
+      const updated = [newEntry, ...(allHouses || [])];
+      setAllHouses(updated);
+      localStorage.setItem('gppms_houses', JSON.stringify(updated));
+
+      // Deduct stock
+      try {
+        const currentStockRaw = localStorage.getItem('gppms_stock');
+        let currentStock = currentStockRaw ? JSON.parse(currentStockRaw) : defaultStockData;
+        const materialMapping = {
+          pe20: '25mm MDPE Pipe', gi12: 'GI Nipple 25mm',
+          tfFit: 'Compression Fitting 25mm', ibv: 'Ball Valve 25mm',
+          c32: 'Tee 32mm', c63: 'PE Saddle 63×25mm',
+          teflon: 'Reducer 32×25mm', gasTap: 'Pressure Regulator',
+          rubber: 'Gas Hose Pipe (1mtr)', hoseClamp: 'Compression Fitting 25mm',
+        };
+        const updatedStock = currentStock.map(item => {
+          let qtyToDeduct = 0;
+          Object.entries(materialMapping).forEach(([formKey, stockName]) => {
+            if (item.mat === stockName || item.material === stockName)
+              qtyToDeduct += Number(form[formKey]) || 0;
+          });
+          if (qtyToDeduct > 0) {
+            return { ...item, issued: (item.issued||0) + qtyToDeduct, onSite: Math.max(0,(item.onSite||0) - qtyToDeduct) };
+          }
+          return item;
+        });
+        localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+      } catch(err) { console.error('Stock deduction error:', err); }
+
+      setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
+      setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
+      showToast('✓ Entry saved successfully');
+    }
+  }
+
+  /* ── Delete entry ── */
+  function handleDelete() {
+    if (!editEntry) return;
+    const updated = (allHouses || []).filter(h => h.id !== editEntry.id);
+    setAllHouses(updated);
+    localStorage.setItem('gppms_houses', JSON.stringify(updated));
+    setPanelOpen(false);
+    setEditEntry(null);
+    setShowDelete(false);
+    showToast('✓ Entry deleted');
+  }
+
+  const panelTitle = editEntry ? `Edit Entry — ${editEntry.name || 'Entry'}` : 'Add House Connection Entry';
+
+  /* ── Shared form body (used for both add and edit) ── */
+  function FormBody() {
+    return (
+      <>
+        <div>
+          <SectionTitle>1. Customer Details</SectionTitle>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
+            <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
+            <Field label="Customer Name" required error={errors.name}><Input value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Mobile" required error={errors.mobile}><Input type="tel" value={form.mobile} onChange={e => f('mobile', e.target.value)} error={errors.mobile} /></Field>
+              <Field label="Alt Mobile"><Input type="tel" value={form.altMobile} onChange={e => f('altMobile', e.target.value)} /></Field>
+            </div>
+            <Field label="Account Type" required><Select value={form.acctType} onChange={e => f('acctType', e.target.value)}>{ACCT_TYPES.map(t => <option key={t}>{t}</option>)}</Select></Field>
+          </div>
+        </div>
+        <div>
+          <SectionTitle>2. Address</SectionTitle>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <Field label="House No." required error={errors.houseNo}><Input value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
+            <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Area"><Select value={form.area} onChange={e => f('area', e.target.value)}>{(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}</Select></Field>
+              <Field label="City"><Input value={form.city} onChange={e => f('city', e.target.value)} /></Field>
+            </div>
+          </div>
+        </div>
+        <div>
+          <SectionTitle>3. Work Status</SectionTitle>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="GC Status"><Select value={form.gcStatus} onChange={e => f('gcStatus', e.target.value)}>{GC_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GI Status"><Select value={form.giStatus} onChange={e => f('giStatus', e.target.value)}>{GI_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="RFC Status"><Select value={form.rfc} onChange={e => f('rfc', e.target.value)}>{RFC_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="NG Status"><Select value={form.ngStatus} onChange={e => f('ngStatus', e.target.value)}>{NG_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="SARAL Status"><Select value={form.saralStatus} onChange={e => f('saralStatus', e.target.value)}>{SARAL_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={e => f('plumbingDate', e.target.value)} /></Field>
+          </div>
+        </div>
+          {/* Section 4: Meter Details */}
+          <SectionTitle>4. Meter Details</SectionTitle>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Field label="Meter No."><Input value={form.meterNo} onChange={e => f('meterNo', e.target.value)} /></Field>
+            <Field label="Meter Date"><Input type="date" value={form.meterDate} onChange={e => f('meterDate', e.target.value)} /></Field>
+            <Field label="Meter Make"><Select value={form.meterMake} onChange={e => f('meterMake', e.target.value)}>{METER_MAKES.map(m => <option key={m}>{m}</option>)}</Select></Field>
+            <Field label="Meter Reading"><Input type="number" min={0} value={form.meterReading} onChange={e => f('meterReading', e.target.value)} /></Field>
+          </div>
+          <Field label="Side" style={{ marginTop: 10 }}>
+            <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+              {['LHS','RHS'].map(s => (
+                <label key={s} style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontSize: 13 }}>
+                  <input type="radio" name="side" value={s} checked={form.side === s} onChange={() => f('side', s)} style={{ accentColor: '#2d6a27' }} />{s}
+                </label>
+              ))}
+            </div>
+          </Field>
+
+          {/* House Photos — Two slots */}
+          <div style={{ marginTop: 12, marginBottom: 4 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#374151' }}>House Photos</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+              {/* Photo 1 */}
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Photo 1 — Meter / Connection</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  <div onClick={() => document.getElementById('cam1').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>📷 Camera</div>
+                  <div onClick={() => document.getElementById('gal1').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>🖼 Gallery</div>
+                </div>
+                <input id="cam1" type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handlePhoto(e, 1)} />
+                <input id="gal1" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handlePhoto(e, 1)} />
+                {photo1Preview && (
+                  <div style={{ marginTop: 6 }}>
+                    <img src={photo1Preview} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #d1d5db' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: '#2d6a27' }}>✓ Photo 1 ready</span>
+                      <button type="button" onClick={() => { setPhoto1(null); setPhoto1Preview(null); }} style={{ fontSize: 10, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Photo 2 */}
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Photo 2 — Additional / Site</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  <div onClick={() => document.getElementById('cam2').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>📷 Camera</div>
+                  <div onClick={() => document.getElementById('gal2').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>🖼 Gallery</div>
+                </div>
+                <input id="cam2" type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handlePhoto(e, 2)} />
+                <input id="gal2" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handlePhoto(e, 2)} />
+                {photo2Preview && (
+                  <div style={{ marginTop: 6 }}>
+                    <img src={photo2Preview} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #d1d5db' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: '#2d6a27' }}>✓ Photo 2 ready</span>
+                      <button type="button" onClick={() => { setPhoto2(null); setPhoto2Preview(null); }} style={{ fontSize: 10, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          </div>
+        <div>
+          <SectionTitle>5. Materials Used</SectionTitle>
+          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 10, background: '#fef3c7', padding: '6px 10px', borderRadius: 4 }}>
+            ⚠ Quantities entered here will be deducted from site stock.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {MATERIALS.map(mat => (
+              <div key={mat.key} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{mat.label}</label>
+                <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{mat.unit}</span>
+                <input type="number" min={0} value={form[mat.key]} onChange={e => f(mat.key, Number(e.target.value))}
+                  style={{ width: 80, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      </>
     );
   }
 
   return (
     <div>
-      {/* ── Title Heading ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f4e1a', margin: 0 }}>
-          House Connections
-        </h1>
-        <button
-          onClick={() => setPanelOpen(true)}
-          className="btn btn-primary"
-          style={{ background: '#2d6a27', color: 'white', padding: '0 20px', height: 36, fontSize: 13, borderRadius: 6, fontWeight: 600 }}
-        >
-          + Add New Entry
-        </button>
-      </div>
-
-      {/* ── Export ── */}
-      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 12, color: '#475569', fontWeight: 500 }}>Export entries from</span>
-          <input type="date" className="gp-input" style={{ height: 32, fontSize: 12 }} value={exportFrom} onChange={e => setExportFrom(e.target.value)} />
-          <span style={{ fontSize: 12, color: '#475569', fontWeight: 500 }}>to</span>
-          <input type="date" className="gp-input" style={{ height: 32, fontSize: 12 }} value={exportTo} onChange={e => setExportTo(e.target.value)} />
-          <button onClick={() => exportHouseData(filtered, exportFrom, exportTo)} className="btn btn-outline">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-              <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
-            </svg>
-            Export Excel
-          </button>
-        </div>
-      </div>
-
-      {/* ── Filter Bar ── */}
-      <div className="card section-block" style={{ padding: '10px 14px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <select className="gp-select-dark" style={{ width: 160 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
-            <option value="">-- Account Type --</option>
-            {ACCT_TYPES.map(a => <option key={a}>{a}</option>)}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+        {/* Export bar */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: '#64748b' }}>From</span>
+          <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+          <span style={{ fontSize: 12, color: '#64748b' }}>to</span>
+          <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)}
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+          <select value={exportFilter} onChange={e => setExportFilter(e.target.value)}
+            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12, background: 'white' }}>
+            <option value="all">All Entries</option>
+            <option value="done">Done Only</option>
+            <option value="pending">Pending Only</option>
           </select>
-          <input className="gp-input-dark" style={{ width: 150 }} placeholder="BP / App Number" value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
-          <button className="btn btn-primary" onClick={reset}>Search</button>
+          <button onClick={handleExport}
+            style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ↓ Export Excel
+          </button>
+          {canWrite && (
+            <button onClick={openAddPanel}
+              style={{ height: 32, background: '#1f4e1a', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              + Add New Entry
+            </button>
+          )}
         </div>
       </div>
+      <p style={{ fontSize: 11, color: '#94a3b8', marginBottom: 10, textAlign: 'right' }}>
+        Default shows all historical data &nbsp;|&nbsp;
+        <span style={{ color: '#16a34a', fontWeight: 600 }}>{exportPreview.done} Done</span>&nbsp;
+        / <span style={{ color: '#dc2626', fontWeight: 600 }}>{exportPreview.pending} Pending</span>&nbsp;
+        / {exportPreview.total} Total in selected range
+      </p>
+          {/* Filter bar — Account Type, Area, BP Number */}
+          <div className="card section-block" style={{ padding: '10px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <select className="gp-select-dark" style={{ width: 160 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
+                <option value="">-- Account Type --</option>
+                {ACCT_TYPES.map(a => <option key={a}>{a}</option>)}
+              </select>
+              <select className="gp-select-dark" style={{ width: 160 }} value={filterArea} onChange={e => { setFilterArea(e.target.value); reset(); }}>
+                <option value="">All Areas</option>
+                {(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}
+              </select>
+              <input className="gp-input-dark" style={{ width: 130 }} placeholder="BP Number" value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
+              <button className="btn btn-primary" onClick={reset}>Search</button>
+            </div>
+          </div>
 
-      {/* Showing info */}
       <p style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
-        Showing page {page} of {Math.max(1, totalPages)} — {filtered.length} entries
+        Showing page {page} of {totalPages} — {filtered.length} entries
       </p>
 
-      {/* ── Table ── */}
+      {/* Site data label — only when a specific site is selected, NOT GA Dashboard */}
+      {selectedSite && selectedSite !== 'all' && selectedSite !== 'ga_dashboard' && (
+        <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#fff0f3', border:'1px solid #f9a8d4', borderRadius:6, padding:'4px 10px', fontSize:11, color:'#be185d', fontWeight:600, marginBottom:8 }}>
+          📍 Site data — {SITE_OPTIONS_LABELS[selectedSite] || selectedSite}
+        </div>
+      )}
+
       <div className="card section-block" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <table className="gp-table">
             <thead>
               <tr>
-                {['Acct','App No.','BP No.','Name','Mobile','House No.','City','Status','Action'].map(col => (
-                  <th key={col}>{col}</th>
-                ))}
+                {['Acct','BP No.','Name','Mobile','House No.','Area','City','Meter No.','Meter Date','GC','GI','RFC','NG','SARAL','Photo','Action', canWrite ? '✏' : ''].filter(Boolean).map(c => <th key={c}>{c}</th>)}
               </tr>
             </thead>
             <tbody>
-              {paged.map(h => (
-                <tr key={h.id}>
-                  <td style={{ fontSize: 11, color: '#64748b' }}>{h.accountType}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.appNo}</td>
-                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.bpNo || '—'}</td>
-                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h.customerName}</td>
+              {paged.length === 0 ? (
+                <tr><td colSpan={canWrite ? 17 : 16} style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                  <div style={{ fontSize: 32 }}>📋</div>
+                  <div style={{ marginTop: 8, fontSize: 14 }}>No entries found</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>Try adjusting your filters or add a new entry</div>
+                </td></tr>
+              ) : paged.map(h => (
+                <tr key={h.id} style={{ cursor: canWrite ? 'default' : 'default' }}>
+                  <td style={{ fontSize: 11, color: '#64748b' }}>{h.acctType}</td>
+                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.bpNo}</td>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h.name}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{h.mobile}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{h.houseNo}</td>
+                  <td>{h.area}</td>
                   <td>{h.city}</td>
-                  <td><StatusBadge val={h.status} /></td>
-                  <td>
-                    <button
-                      onClick={e => { e.stopPropagation(); setModalHouse(h); }}
-                      className="btn btn-primary btn-sm"
-                      style={{ borderRadius: 4 }}
-                    >
-                      Details
-                    </button>
+                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.meterNo}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{formatDate(h.meterDate)}</td>
+                  <td><StatusBadge val={h.gcStatus} /></td>
+                  <td><StatusBadge val={h.giStatus} /></td>
+                  <td><StatusBadge val={h.rfc} /></td>
+                  <td><StatusBadge val={h.ngStatus} /></td>
+                  <td><StatusBadge val={h.saralStatus} /></td>
+                  <td style={{ textAlign: 'center', position: 'relative' }}>
+                    {/* Photo badge — clickable popover */}
+                    {(() => {
+                      const cnt = h.photoCount ?? (h.meterPhoto ? 1 : 0);
+                      const label = cnt === 2 ? '2 Photos' : cnt === 1 ? '1 Photo' : 'None';
+                      const color = cnt > 0 ? '#16a34a' : '#94a3b8';
+                      const bg    = cnt > 0 ? '#dcfce7' : '#f1f5f9';
+                      return (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <span
+                            onClick={cnt > 0 ? e => { e.stopPropagation(); setPhotoPopover(photoPopover === h.id ? null : h.id); } : undefined}
+                            style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: bg, color, cursor: cnt > 0 ? 'pointer' : 'default', userSelect: 'none' }}
+                          >
+                            {label}
+                          </span>
+                          {photoPopover === h.id && cnt > 0 && (
+                            <div
+                              onClick={e => e.stopPropagation()}
+                              style={{ position: 'absolute', zIndex: 200, top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 12px', minWidth: 200, textAlign: 'left' }}
+                            >
+                              {[{ data: h.photo1Data, name: h.photo1Name, label: 'Photo 1 — Meter' }, { data: h.photo2Data, name: h.photo2Name, label: 'Photo 2 — Site' }]
+                                .filter(p => p.data)
+                                .map((p, i) => (
+                                  <div key={i} style={{ marginBottom: i === 0 && h.photo2Data ? 10 : 0 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 5 }}>📷 {p.label}</div>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                      <button onClick={() => viewPhoto(p.data)}
+                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', color: '#374151' }}>👁 View</button>
+                                      <button onClick={() => downloadPhoto(p.data, p.name)}
+                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #2d6a27', borderRadius: 4, background: '#f0fdf4', cursor: 'pointer', color: '#15803d' }}>⬇ Download</button>
+                                    </div>
+                                  </div>
+                                ))
+                              }
+                              <button onClick={() => setPhotoPopover(null)}
+                                style={{ marginTop: 8, width: '100%', fontSize: 10, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
+                  <td><button onClick={e => { e.stopPropagation(); setModalHouse(h); }} className="btn btn-primary btn-sm" style={{ borderRadius: 4 }}>Meter Details</button></td>
+                  {canWrite && (
+                    <td style={{ textAlign: 'center' }}>
+                      <button
+                        onClick={e => { e.stopPropagation(); openEditPanel(h); }}
+                        title="Edit entry"
+                        style={{ background: 'none', border: '1px solid #d1d5db', borderRadius: 4, width: 28, height: 28, cursor: 'pointer', fontSize: 13, color: '#374151', display:'inline-flex', alignItems:'center', justifyContent:'center' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#f0f7ee'; e.currentTarget.style.borderColor = '#2d6a27'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.borderColor = '#d1d5db'; }}
+                      >✏</button>
+                    </td>
+                  )}
                 </tr>
               ))}
-              {paged.length === 0 && (
-                <tr>
-                  <td colSpan={9} style={{ textAlign: 'center', padding: '32px 0', color: '#94a3b8' }}>
-                    {'No records match the current filters.'}
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
-
-        {/* ── Pagination ── */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, padding: '12px 16px', borderTop: '1px solid #e5e7eb' }}>
             <button className="page-btn" onClick={() => setPage(p => Math.max(1,p-1))} disabled={page===1}>←</button>
-            {Array.from({ length: Math.min(totalPages, 10) }, (_, i) => i+1).map(p => (
+            {Array.from({ length: totalPages }, (_, i) => i+1).map(p => (
               <button key={p} className={`page-btn${p===page?' active':''}`} onClick={() => setPage(p)}>{p}</button>
             ))}
             <button className="page-btn" onClick={() => setPage(p => Math.min(totalPages,p+1))} disabled={page===totalPages}>→</button>
@@ -322,96 +712,41 @@ export default function HouseTable() {
         )}
       </div>
 
-      {/* Meter Modal */}
-      {modalHouse && (
-        <MeterModal
-          house={modalHouse}
-          onClose={() => setModalHouse(null)}
-          onSave={() => { setModalHouse(null); fetchConnections(); }}
+      {modalHouse && <MeterModal house={modalHouse} onClose={() => setModalHouse(null)} onSave={() => setModalHouse(null)} />}
+
+      {/* Add / Edit Entry Panel */}
+      <SlidePanel
+        isOpen={panelOpen}
+        onClose={() => { setPanelOpen(false); setEditEntry(null); setErrors({}); }}
+        title={panelTitle}
+        onSave={handleSave}
+        saveLabel={editEntry ? 'Update Entry' : 'Save Entry'}
+        extraFooter={editEntry && (
+          <button
+            onClick={() => setShowDelete(true)}
+            style={{ height:32, background:'#fee2e2', color:'#b91c1c', border:'1px solid #fca5a5', borderRadius:5, padding:'0 14px', fontSize:12, fontWeight:600, cursor:'pointer' }}
+          >
+            🗑 Delete Entry
+          </button>
+        )}
+      >
+        <FormBody />
+      </SlidePanel>
+
+      {showDelete && (
+        <ConfirmDelete
+          onConfirm={handleDelete}
+          onCancel={() => setShowDelete(false)}
         />
       )}
-
-      {/* ── Add Entry Panel ── */}
-      <SlidePanel isOpen={panelOpen} onClose={handleCancel} title="Add House Connection">
-        {/* Customer Details */}
-        <div>
-          <div className="panel-section-title">Customer Details</div>
-          <div className="panel-field">
-            <label className="panel-label">Application No.*</label>
-            <input type="text" className={`panel-input${errors.appNo ? ' error' : ''}`} value={formData.appNo}
-              onChange={e => setFormData({ ...formData, appNo: e.target.value })} placeholder="Unique application number" />
-            {errors.appNo && <p className="panel-error-text">{errors.appNo}</p>}
-          </div>
-          <div className="panel-field">
-            <label className="panel-label">Customer Name*</label>
-            <input type="text" className={`panel-input${errors.customerName ? ' error' : ''}`} value={formData.customerName}
-              onChange={e => setFormData({ ...formData, customerName: e.target.value })} placeholder="Customer Name" />
-            {errors.customerName && <p className="panel-error-text">{errors.customerName}</p>}
-          </div>
-          <div className="panel-field">
-            <label className="panel-label">Mobile Number*</label>
-            <input type="text" className={`panel-input${errors.mobile ? ' error' : ''}`} value={formData.mobile}
-              onChange={e => setFormData({ ...formData, mobile: e.target.value })} placeholder="Mobile Number" />
-            {errors.mobile && <p className="panel-error-text">{errors.mobile}</p>}
-          </div>
-          <div className="panel-field">
-            <label className="panel-label">Account Type</label>
-            <select className="panel-select" value={formData.accountType}
-              onChange={e => setFormData({ ...formData, accountType: e.target.value })}>
-              {ACCT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Address */}
-        <div>
-          <div className="panel-section-title">Address</div>
-          <div className="panel-field">
-            <label className="panel-label">House No.*</label>
-            <input type="text" className={`panel-input${errors.houseNo ? ' error' : ''}`} value={formData.houseNo}
-              onChange={e => setFormData({ ...formData, houseNo: e.target.value })} placeholder="House No." />
-            {errors.houseNo && <p className="panel-error-text">{errors.houseNo}</p>}
-          </div>
-          <div className="panel-field">
-            <label className="panel-label">Address Line 1</label>
-            <input type="text" className="panel-input" value={formData.address1}
-              onChange={e => setFormData({ ...formData, address1: e.target.value })} placeholder="Address" />
-          </div>
-          <div className="panel-field">
-            <label className="panel-label">City</label>
-            <input type="text" className="panel-input" value={formData.city}
-              onChange={e => setFormData({ ...formData, city: e.target.value })} placeholder="City" />
-          </div>
-        </div>
-
-        {/* Pipe Details */}
-        <div>
-          <div className="panel-section-title">Pipe Details</div>
-          <div className="panel-field" style={{ display: 'flex', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <label className="panel-label">GC Length (mtr)</label>
-              <input type="number" className="panel-input" value={formData.gcLength}
-                onChange={e => setFormData({ ...formData, gcLength: e.target.value })} placeholder="0" />
-            </div>
-            <div style={{ flex: 1 }}>
-              <label className="panel-label">GI Pipe (mtr)</label>
-              <input type="number" className="panel-input" value={formData.giPipeMtr}
-                onChange={e => setFormData({ ...formData, giPipeMtr: e.target.value })} placeholder="0" />
-            </div>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="panel-footer" style={{ margin: '0 -20px -20px', padding: '14px 20px' }}>
-          <span style={{ fontSize: 12, color: '#94a3b8' }}>* Required fields</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={handleCancel} className="panel-btn-cancel">Cancel</button>
-            <button onClick={handleSave} className="panel-btn-save" disabled={saving}>
-              {saving ? 'Saving...' : 'Save Entry'}
-            </button>
-          </div>
-        </div>
-      </SlidePanel>
     </div>
   );
 }
+
+// Map site values to labels for display
+const SITE_OPTIONS_LABELS = {
+  khanna: 'Khanna (CA-09)',
+  uenii:  'UE-II — Hisar',
+  pla:    'PLA — Hisar',
+  kohara: 'Kohara — CA-07',
+};

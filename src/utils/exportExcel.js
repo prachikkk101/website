@@ -9,96 +9,89 @@ function download(wb, filename) {
   XLSX.writeFile(wb, filename);
 }
 
-/* ── Helper: styled header row ── */
-function applyHeaderStyle(ws, headerRow, cols) {
-  // XLSX community edition doesn't support cell styles directly,
-  // so we manually set the header row values and column widths.
-  XLSX.utils.sheet_add_aoa(ws, [headerRow], { origin: 'A1' });
-  ws['!cols'] = cols.map(w => ({ wch: w }));
+/* Parse a date string or Date object safely */
+function parseDate(val) {
+  if (!val) return null;
+  const d = new Date(val);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+/* Filter array by date range using multiple possible date field names */
+function filterByDateRange(data, fromDate, toDate, ...fields) {
+  if (!fromDate && !toDate) return data;
+  const from = fromDate ? new Date(fromDate + 'T00:00:00') : null;
+  const to   = toDate   ? new Date(toDate   + 'T23:59:59') : null;
+  return data.filter(r => {
+    for (const f of fields) {
+      const d = parseDate(r[f]);
+      if (!d) continue;
+      if (from && d < from) return false;
+      if (to   && d > to)   return false;
+      return true;
+    }
+    return true; // no date field → include
+  });
 }
 
 /* ══════════════════════════════════════
    1. Export House Connections
    ══════════════════════════════════════ */
-function parseEntryDate(dateStr) {
-  if (!dateStr || dateStr === '-' || dateStr === '—') return null;
-  if (dateStr.includes('-') && dateStr.split('-')[0].length === 4) {
-    return dateStr;
-  }
-  if (dateStr.includes('/')) {
-    const parts = dateStr.split('/');
-    if (parts.length === 3) {
-      const day = parts[0].padStart(2, '0');
-      const month = parts[1].padStart(2, '0');
-      const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
-      return `${year}-${month}-${day}`;
-    }
-  }
-  return null;
-}
+export function exportHouseData(houses, fromDate, toDate, filterLabel, filenameSuffix) {
+  const data = filterByDateRange(houses, fromDate, toDate, 'meterDate', 'createdAt');
 
-export function exportHouseData(houses, fromDate, toDate) {
   const headers = [
     'Acct Type','BP No.','Customer Name','Mobile','House No.','Area','City',
     'Meter No.','Meter Date','GC Status','GI Status','RFC','NG Status','SARAL Status','Photo Uploaded',
   ];
 
-  let filteredHouses = houses;
-  if (fromDate || toDate) {
-    filteredHouses = houses.filter(h => {
-      const entryDate = h.entryDate || parseEntryDate(h.meterDate);
-      if (!entryDate) return false;
-      if (fromDate && entryDate < fromDate) return false;
-      if (toDate && entryDate > toDate) return false;
-      return true;
-    });
-  }
-
-  const rows = filteredHouses.map(h => [
-    h.acctType, h.bpNo, h.name, h.mobile, h.houseNo, h.area, h.city,
-    h.meterNo, h.meterDate, h.gcStatus, h.giStatus, h.rfc, h.ngStatus, h.saralStatus,
-    h.meterPhoto ? 'Yes' : 'No',
+  const rows = data.map(h => [
+    h.acct        || h.acctType    || h.accountType  || '',
+    h.bp          || h.bpNo        || h.bpNumber      || '',
+    h.name        || h.customerName || '',
+    h.mobile      || h.mobileNo    || '',
+    h.house       || h.houseNo     || h.houseNumber   || '',
+    h.area        || '',
+    h.city        || '',
+    h.meter       || h.meterNo     || h.meterNumber   || '',
+    h.meterDate   || h.mdate       || '',
+    h.gc          || h.gcStatus    || '',
+    h.gi          || h.giStatus    || '',
+    h.rfc         || h.rfcStatus   || '',
+    h.ng          || h.ngStatus    || '',
+    h.saral       || h.saralStatus || '',
+    (h.meterPhoto || h.photo) ? 'Yes' : 'No',
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-
   ws['!cols'] = [
-    { wch: 10 }, // Acct Type
-    { wch: 16 }, // BP No
-    { wch: 20 }, // Name
-    { wch: 14 }, // Mobile
-    { wch: 14 }, // House No
-    { wch: 10 }, // Area
-    { wch: 10 }, // City
-    { wch: 16 }, // Meter No
-    { wch: 12 }, // Meter Date
-    { wch: 12 }, // GC Status
-    { wch: 10 }, // GI Status
-    { wch: 8  }, // RFC
-    { wch: 12 }, // NG Status
-    { wch: 16 }, // SARAL Status
-    { wch: 12 }, // Photo
+    { wch: 10 },{ wch: 16 },{ wch: 20 },{ wch: 14 },{ wch: 14 },
+    { wch: 10 },{ wch: 10 },{ wch: 16 },{ wch: 12 },
+    { wch: 12 },{ wch: 10 },{ wch: 8  },{ wch: 12 },{ wch: 16 },{ wch: 12 },
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'House Connections');
 
-  const filename = (fromDate && toDate)
-    ? `GP_PMS_HouseData_${fromDate}_to_${toDate}.xlsx`
-    : `GP_PMS_HouseData_${today()}.xlsx`;
-
+  let filename;
+  if (filenameSuffix) {
+    filename = `GP_PMS_Houses_${filenameSuffix}.xlsx`;
+  } else if (fromDate && toDate) {
+    filename = `GP_PMS_HouseData_${fromDate}_to_${toDate}.xlsx`;
+  } else {
+    filename = `GP_PMS_HouseData_${today()}.xlsx`;
+  }
   download(wb, filename);
 }
 
 /* ══════════════════════════════════════
    2. Export Stock Statement
    ══════════════════════════════════════ */
-export function exportStockData(stock) {
+export function exportStockData(stock, fromDate, toDate) {
   const title   = [['OXYGEN PROTECH PVT LTD — Stock Statement']];
   const headers = [['Sr.','Material','Unit','Opening Stock','Received Qty','Issued Qty','Return Qty','Net Used','Physical On Site','Physical In Store','Required','Status']];
 
   const rows = stock.map((s, i) => {
-    const netUsed = (s.issued ?? s.issued) - (s.ret ?? s.returned ?? 0);
+    const netUsed = (s.issued ?? 0) - (s.ret ?? s.returned ?? 0);
     const status  = s.status?.label ?? s.status ?? '';
     return [
       i + 1,
@@ -117,46 +110,25 @@ export function exportStockData(stock) {
   });
 
   const ws = XLSX.utils.aoa_to_sheet([...title, ...headers, ...rows]);
-
-  // Merge title across all 12 columns: A1:L1
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }];
-
   ws['!cols'] = [
-    { wch: 5  }, // Sr
-    { wch: 25 }, // Material
-    { wch: 7  }, // Unit
-    { wch: 10 }, // Opening
-    { wch: 10 }, // Received
-    { wch: 10 }, // Issued
-    { wch: 10 }, // Returned
-    { wch: 10 }, // Net Used
-    { wch: 10 }, // On Site
-    { wch: 10 }, // In Store
-    { wch: 10 }, // Required
-    { wch: 10 }, // Status
+    { wch: 5  },{ wch: 25 },{ wch: 7  },{ wch: 10 },{ wch: 10 },
+    { wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Stock Statement');
-  download(wb, `GP_PMS_Stock_${today()}.xlsx`);
+  const filename = fromDate
+    ? `GP_PMS_Stock_${fromDate}.xlsx`
+    : `GP_PMS_Stock_${today()}.xlsx`;
+  download(wb, filename);
 }
 
 /* ══════════════════════════════════════
    3. Export PE Laying Data
    ══════════════════════════════════════ */
 export function exportPELaying(data, fromDate, toDate) {
-  let filteredData = data;
-  if (fromDate || toDate) {
-    filteredData = data.filter(r => {
-      const dateStr = r.layDate || r.layingDate || null;
-      if (!dateStr) return true;
-      const parsed = parseEntryDate(dateStr);
-      if (!parsed) return true;
-      if (fromDate && parsed < fromDate) return false;
-      if (toDate && parsed > toDate) return false;
-      return true;
-    });
-  }
+  const filteredData = filterByDateRange(data, fromDate, toDate, 'layDate', 'layingDate');
 
   const headers = [[
     'Sr.','Laying Date','Testing Date','Charging Date','RA Bill No.','Report No.','Work Status','Area',
@@ -170,15 +142,10 @@ export function exportPELaying(data, fromDate, toDate) {
     r.d90tot, r.d125tot,
   ]);
 
-  /* Totals row */
   const tot = filteredData.reduce((acc, r) => ({
-    d32oc: acc.d32oc + r.d32oc,
-    d32b:  acc.d32b  + r.d32b,
-    d63oc: acc.d63oc + r.d63oc,
-    d63b:  acc.d63b  + r.d63b,
-    d63h:  acc.d63h  + r.d63hdd,
-    d90:   acc.d90   + r.d90tot,
-    d125:  acc.d125  + r.d125tot,
+    d32oc: acc.d32oc + r.d32oc, d32b: acc.d32b + r.d32b,
+    d63oc: acc.d63oc + r.d63oc, d63b: acc.d63b + r.d63b,
+    d63h:  acc.d63h  + r.d63hdd, d90: acc.d90  + r.d90tot, d125: acc.d125 + r.d125tot,
   }), { d32oc:0,d32b:0,d63oc:0,d63b:0,d63h:0,d90:0,d125:0 });
 
   const totalRow = [
@@ -189,67 +156,17 @@ export function exportPELaying(data, fromDate, toDate) {
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows, totalRow]);
-
   ws['!cols'] = [
-    { wch: 5  },{ wch: 12 },{ wch: 12 },{ wch: 14 },{ wch: 14 },
-    { wch: 10 },{ wch: 10 },{ wch: 20 },{ wch: 18 },
-    { wch: 10 },{ wch: 12 },{ wch: 12 },
-    { wch: 10 },{ wch: 12 },{ wch: 10 },{ wch: 12 },
-    { wch: 12 },{ wch: 12 },
+    { wch:5 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:14 },
+    { wch:10 },{ wch:10 },{ wch:20 },{ wch:18 },
+    { wch:10 },{ wch:12 },{ wch:12 },
+    { wch:10 },{ wch:12 },{ wch:10 },{ wch:12 },{ wch:12 },{ wch:12 },
   ];
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Data');
-
   const filename = (fromDate && toDate)
     ? `GP_PMS_PELaying_${fromDate}_to_${toDate}.xlsx`
     : `GP_PMS_PELaying_${today()}.xlsx`;
-
   download(wb, filename);
-}
-
-export function exportLMCData(data) {
-  const headers = [['Sr.','Application No.','BP No.','Customer Name','Address','LMC Date','Regulator No.','Meter Serial No.','Remarks']];
-  const rows = data.map((r, i) => [
-    i + 1,
-    r.appNo || '—',
-    r.bpNo || '—',
-    r.customerName || '—',
-    r.address || '—',
-    r.lmcDate ? r.lmcDate.split('T')[0] : '—',
-    r.regulatorNo || '—',
-    r.meterSerialNo || '—',
-    r.remarks || 'PENDING',
-  ]);
-  const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
-  ws['!cols'] = [
-    { wch: 5 }, { wch: 15 }, { wch: 15 }, { wch: 20 }, { wch: 25 },
-    { wch: 12 }, { wch: 15 }, { wch: 15 }, { wch: 12 }
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'LMC Work');
-  download(wb, `GP_PMS_LMC_${today()}.xlsx`);
-}
-
-export function exportICData(data) {
-  const headers = [['Sr.','Customer Name','Address','I&C Date','Regulator No.','Meter Serial No.','Pressure (mbar)','Flow Rate (SCMH)','Status']];
-  const rows = data.map((r, i) => [
-    i + 1,
-    r.customerName || '—',
-    r.address || '—',
-    r.icDate ? r.icDate.split('T')[0] : '—',
-    r.regulatorNo || '—',
-    r.meterSerialNo || '—',
-    r.regulatorPoutMbar || 0,
-    r.flowRateScmh || 0,
-    r.status || 'Pending',
-  ]);
-  const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows]);
-  ws['!cols'] = [
-    { wch: 5 }, { wch: 20 }, { wch: 25 }, { wch: 12 }, { wch: 15 },
-    { wch: 15 }, { wch: 15 }, { wch: 15 }, { wch: 12 }
-  ];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'I&C Work');
-  download(wb, `GP_PMS_IC_${today()}.xlsx`);
 }

@@ -1,86 +1,60 @@
 // src/context/SiteContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { siteService } from '../api/siteService';
-import { useAuth } from './AuthContext';
 
-// ── Static fallback sites for local / offline mode ──
-const LOCAL_SITES = [
-  { id: 'local-site-1', name: 'Khanna — CA-09',  location: 'Zone-02, Ludhiana' },
-  { id: 'local-site-2', name: 'UE-II — Hisar',   location: 'Urban Extension II' },
-  { id: 'local-site-3', name: 'PLA — Hisar',     location: 'PLA Colony' },
-  { id: 'local-site-4', name: 'Kohara — CA-07',  location: 'Kohara, Ludhiana' },
+/* ── Default GA Locations (seed data, matches Access.jsx) ── */
+const DEFAULT_SITES = [
+  { id: 'khanna', name: 'Khanna — CA-09', zone: 'Zone-02, Ludhiana',   areas: ['Uttam Nagar','Guru Nanak Nagar','Kishangar Village','Sector 12'], status: 'Active' },
+  { id: 'uenii',  name: 'UE-II — Hisar',  zone: 'Urban Extension II', areas: ['UE-II'],                                                             status: 'Active' },
+  { id: 'pla',    name: 'PLA — Hisar',    zone: 'P.L.A Colony',        areas: ['PLA'],                                                              status: 'Active' },
+  { id: 'kohara', name: 'Kohara — CA-07', zone: 'Kohara, Ludhiana',    areas: ['Kohara'],                                                           status: 'Active' },
 ];
 
+/* ── Read all sites from localStorage (default + custom) ── */
+function loadSites() {
+  try {
+    const raw = localStorage.getItem('gppms_sites');
+    if (!raw) return DEFAULT_SITES;
+    const parsed = JSON.parse(raw);
+    const storedIds = parsed.map(s => s.id);
+    // Merge: defaults first (not overridden by stored), then custom additions
+    return [...DEFAULT_SITES.filter(d => !storedIds.includes(d.id)), ...parsed];
+  } catch { return DEFAULT_SITES; }
+}
+
+/* ── Build dropdown options from live sites ── */
+function buildOptions(siteList) {
+  return [
+    { value: 'all', label: 'GA Locations' },   // <-- renamed from "GA Dashboard"
+    ...siteList.map(s => ({ value: s.id, label: s.name })),
+  ];
+}
+
+/* ── Context ── */
 const SiteContext = createContext({
-  selectedSite: 'all',
+  selectedSite:    'all',
   setSelectedSite: () => {},
-  sites: [],
-  sitesLoading: false,
-  refreshSites: () => {},
-  toasts: [],
-  showToast: () => {},
+  siteOptions:     [{ value: 'all', label: 'GA Locations' }],
+  siteList:        DEFAULT_SITES,
 });
 
 export function SiteProvider({ children }) {
-  const { isAuthenticated } = useAuth();
-  const [selectedSite, setSelectedSite] = useState('all');
-  const [sites, setSites] = useState([]);
-  const [sitesLoading, setSitesLoading] = useState(false);
-  const [toasts, setToasts] = useState([]);
+  const [selectedSite,    setSelectedSite]    = useState('all');
+  const [siteList,        setSiteList]        = useState(() => loadSites());
 
-  const showToast = useCallback((message) => {
-    const id = Date.now() + Math.random().toString();
-    setToasts((prev) => [...prev, { id, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  }, []);
+  // Re-sync whenever another tab or the Access page writes to localStorage
+  const syncSites = useCallback(() => setSiteList(loadSites()), []);
 
-  const refreshSites = useCallback(async () => {
-    if (!isAuthenticated) return;
-    setSitesLoading(true);
-    try {
-      const data = await siteService.getSites();
-      if (data.success !== false) {
-        const siteList = Array.isArray(data) ? data : (data.sites || []);
-        // If backend returned real sites, use them; otherwise fall back to local
-        setSites(siteList.length > 0 ? siteList : LOCAL_SITES);
-      }
-    } catch {
-      // Backend offline — use local static sites so components can render
-      setSites(LOCAL_SITES);
-    } finally {
-      setSitesLoading(false);
-    }
-  }, [isAuthenticated]);
-
-  // Fetch sites when user is authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      refreshSites();
-    } else {
-      setSites([]);
-      setSelectedSite('all');
-    }
-  }, [isAuthenticated, refreshSites]);
+    window.addEventListener('storage', syncSites);
+    // Also re-read on mount in case Access already wrote new data
+    syncSites();
+    return () => window.removeEventListener('storage', syncSites);
+  }, [syncSites]);
 
-  // Build site options for dropdowns
-  const siteOptions = [
-    { value: 'all', label: 'All Sites' },
-    ...sites.map((s) => ({ value: s.id, label: s.name })),
-  ];
+  const siteOptions = buildOptions(siteList);
 
   return (
-    <SiteContext.Provider value={{
-      selectedSite,
-      setSelectedSite,
-      sites,
-      siteOptions,
-      sitesLoading,
-      refreshSites,
-      toasts,
-      showToast,
-    }}>
+    <SiteContext.Provider value={{ selectedSite, setSelectedSite, siteOptions, siteList }}>
       {children}
     </SiteContext.Provider>
   );
@@ -90,8 +64,20 @@ export function useSite() {
   return useContext(SiteContext);
 }
 
-// Helper: get current site ID (returns null if "all")
-export function useSelectedSiteId() {
-  const { selectedSite } = useSite();
-  return selectedSite === 'all' ? null : selectedSite;
+/* ── useSiteAreas: returns areas for the selected site (or all merged areas) ── */
+export function useSiteAreas() {
+  const { selectedSite, siteList } = useContext(SiteContext);
+  if (!selectedSite || selectedSite === 'all') {
+    // Merge all areas across all sites, deduplicated
+    const all = [];
+    siteList.forEach(s => (s.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
+    return all;
+  }
+  const site = siteList.find(s => s.id === selectedSite);
+  return site?.areas || [];
 }
+
+/* ── Legacy static export (kept for backwards compatibility with imports) ── */
+// Components that do: import { SITE_OPTIONS } from '../context/SiteContext'
+// now get the default seed — they should switch to useSite().siteOptions for live data
+export const SITE_OPTIONS = buildOptions(DEFAULT_SITES);
