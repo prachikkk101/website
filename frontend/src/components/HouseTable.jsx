@@ -132,14 +132,50 @@ export default function HouseTable() {
 
   // Add/Edit panel
   const [panelOpen,    setPanelOpen]    = useState(false);
-  const [editEntry,    setEditEntry]    = useState(null); // null => add mode, object => edit mode
+  const [editEntry,    setEditEntry]    = useState(null);
   const [form,         setForm]         = useState(EMPTY_FORM);
   const [errors,       setErrors]       = useState({});
-  const [photoName,    setPhotoName]    = useState('');
   const [showDelete,   setShowDelete]   = useState(false);
+
+  // Dual photo state
+  const [photo1,        setPhoto1]        = useState(null);
+  const [photo1Preview, setPhoto1Preview] = useState(null);
+  const [photo2,        setPhoto2]        = useState(null);
+  const [photo2Preview, setPhoto2Preview] = useState(null);
+
+  // Photo popover state (for table cell)
+  const [photoPopover, setPhotoPopover] = useState(null); // houseId or null
 
   function reset() { setPage(1); }
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
+  /* Photo handler */
+  const handlePhoto = (e, slot) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    if (slot === 1) { setPhoto1(file); setPhoto1Preview(url); }
+    else            { setPhoto2(file); setPhoto2Preview(url); }
+  };
+
+  /* Convert file to base64 */
+  const toBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload  = () => resolve(reader.result);
+    reader.onerror = reject;
+  });
+
+  /* Photo utils */
+  const viewPhoto = (data) => {
+    const win = window.open();
+    win.document.write(`<img src="${data}" style="max-width:100%;height:auto;background:#000" />`);
+  };
+  const downloadPhoto = (data, name) => {
+    const a = document.createElement('a');
+    a.href = data; a.download = name || 'photo.jpg';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
 
   const filtered = useMemo(() => (allHouses || []).filter(h => {
     if (filterAcct && h.acctType !== filterAcct) return false;
@@ -210,7 +246,7 @@ export default function HouseTable() {
   /* ── Validate ── */
   function validateForm() {
     const e = {};
-    if (!form.bpNo.trim())    e.bpNo    = 'Required';
+    // BP Number is now optional — only Name, Mobile, House No. required
     if (!form.name.trim())    e.name    = 'Required';
     if (!form.mobile.trim())  e.mobile  = 'Required';
     if (!form.houseNo.trim()) e.houseNo = 'Required';
@@ -223,7 +259,8 @@ export default function HouseTable() {
     setEditEntry(null);
     setForm(EMPTY_FORM);
     setErrors({});
-    setPhotoName('');
+    setPhoto1(null); setPhoto1Preview(null);
+    setPhoto2(null); setPhoto2Preview(null);
     setPanelOpen(true);
   }
 
@@ -242,18 +279,52 @@ export default function HouseTable() {
       giLen: h.giLen || '', tf: h.tf || '', iv: h.iv || '',
       meterNo: h.meterNo || '', meterDate: h.meterDate || '',
       meterMake: h.meterMake || 'Select', meterReading: h.meterReading || 0,
-      side: h.side || 'LHS', meterPhotoFile: null,
+      side: h.side || 'LHS',
       pe20:0, gi12:0, tfFit:0, ibv:0, c32:0, c63:0, teflon:0, gasTap:0, rubber:0, hoseClamp:0,
     });
     setErrors({});
-    setPhotoName('');
+    setPhoto1(null); setPhoto1Preview(null);
+    setPhoto2(null); setPhoto2Preview(null);
     setShowDelete(false);
     setPanelOpen(true);
   }
 
-  /* ── Save (add or update) ── */
-  function handleSave() {
+  /* ── Save (add or update) — async for base64 photos ── */
+  async function handleSave() {
     if (!validateForm()) return;
+
+    // Validate photo sizes before converting
+    if (photo1 && photo1.size > 4000000) { alert('Photo 1 is too large (>4MB). Please use a smaller image.'); return; }
+    if (photo2 && photo2.size > 4000000) { alert('Photo 2 is too large (>4MB). Please use a smaller image.'); return; }
+
+    // Convert to base64 for localStorage storage
+    const p1b64 = photo1 ? await toBase64(photo1) : null;
+    const p2b64 = photo2 ? await toBase64(photo2) : null;
+
+    // Check base64 size after conversion (~2MB compressed limit)
+    if (p1b64 && p1b64.length > 2000000) {
+      alert('Photo 1 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    }
+    if (p2b64 && p2b64.length > 2000000) {
+      alert('Photo 2 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    }
+
+    // Build materialsUsed — only items with qty > 0
+    const rawMaterials = {
+      '20mm PE Pipe':          { qty: form.pe20      || 0, unit: 'mtr'   },
+      '½" GI Pipe':            { qty: form.gi12      || 0, unit: 'mtr'   },
+      'TF Fitting':            { qty: form.tfFit     || 0, unit: 'pcs'   },
+      'Isolation Ball Valve':  { qty: form.ibv       || 0, unit: 'pcs'   },
+      '32mm Coupler':          { qty: form.c32       || 0, unit: 'pcs'   },
+      '63mm Coupler':          { qty: form.c63       || 0, unit: 'pcs'   },
+      'Teflon Tape':           { qty: form.teflon    || 0, unit: 'rolls' },
+      'Gas Tap':               { qty: form.gasTap    || 0, unit: 'pcs'   },
+      'Rubber Tube':           { qty: form.rubber    || 0, unit: 'mtr'   },
+      'Hose Clamp':            { qty: form.hoseClamp || 0, unit: 'pcs'   },
+    };
+    const materialsUsed = Object.fromEntries(
+      Object.entries(rawMaterials).filter(([, v]) => v.qty > 0)
+    );
 
     if (editEntry) {
       // Update existing
@@ -270,15 +341,16 @@ export default function HouseTable() {
               plumbingDate: form.plumbingDate, meterNo: form.meterNo,
               meterDate: form.meterDate, meterMake: form.meterMake,
               meterReading: form.meterReading, side: form.side,
-              meterPhoto: form.meterPhotoFile ? true : h.meterPhoto,
+              photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+              photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+              photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
               updatedAt: new Date().toISOString(),
             }
           : h
       );
       setAllHouses(updated);
       localStorage.setItem('gppms_houses', JSON.stringify(updated));
-      setPanelOpen(false);
-      setEditEntry(null);
+      setPanelOpen(false); setEditEntry(null);
       showToast('✓ Entry updated successfully');
     } else {
       // Add new
@@ -292,7 +364,11 @@ export default function HouseTable() {
         gcStatus: form.gcStatus, giStatus: form.giStatus,
         rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
         plumbingDate: form.plumbingDate, side: form.side,
-        meterPhoto: !!form.meterPhotoFile, createdAt: new Date().toISOString(),
+        photo1Data: p1b64, photo1Name: photo1?.name || null,
+        photo2Data: p2b64, photo2Name: photo2?.name || null,
+        photoCount: [p1b64, p2b64].filter(Boolean).length,
+        materialsUsed,
+        createdAt: new Date().toISOString(),
       };
       const updated = [newEntry, ...(allHouses || [])];
       setAllHouses(updated);
@@ -323,7 +399,8 @@ export default function HouseTable() {
         localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
       } catch(err) { console.error('Stock deduction error:', err); }
 
-      setPanelOpen(false); setForm(EMPTY_FORM); setErrors({}); setPhotoName('');
+      setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
+      setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
       showToast('✓ Entry saved successfully');
     }
   }
@@ -349,7 +426,7 @@ export default function HouseTable() {
         <div>
           <SectionTitle>1. Customer Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Field label="BP Number" required error={errors.bpNo}><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} error={errors.bpNo} /></Field>
+            <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
             <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
             <Field label="Customer Name" required error={errors.name}><Input value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
@@ -381,7 +458,7 @@ export default function HouseTable() {
             <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={e => f('plumbingDate', e.target.value)} /></Field>
           </div>
         </div>
-        <div>
+          {/* Section 4: Meter Details */}
           <SectionTitle>4. Meter Details</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="Meter No."><Input value={form.meterNo} onChange={e => f('meterNo', e.target.value)} /></Field>
@@ -398,20 +475,58 @@ export default function HouseTable() {
               ))}
             </div>
           </Field>
-          <Field label="Meter Photo" style={{ marginTop: 10 }}>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <label style={{ flex: 1, textAlign: 'center', padding: '8px 4px', border: '1px dashed #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', background: '#f8fafc' }}>
-                📷 Take Photo
-                <input type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => { f('meterPhotoFile', e.target.files[0]); setPhotoName(e.target.files[0]?.name || ''); }} />
-              </label>
-              <label style={{ flex: 1, textAlign: 'center', padding: '8px 4px', border: '1px dashed #d1d5db', borderRadius: 5, fontSize: 12, cursor: 'pointer', background: '#f8fafc' }}>
-                🖼 Gallery
-                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => { f('meterPhotoFile', e.target.files[0]); setPhotoName(e.target.files[0]?.name || ''); }} />
-              </label>
+
+          {/* House Photos — Two slots */}
+          <div style={{ marginTop: 12, marginBottom: 4 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, marginBottom: 8, color: '#374151' }}>House Photos</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+
+              {/* Photo 1 */}
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Photo 1 — Meter / Connection</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  <div onClick={() => document.getElementById('cam1').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>📷 Camera</div>
+                  <div onClick={() => document.getElementById('gal1').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>🖼 Gallery</div>
+                </div>
+                <input id="cam1" type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handlePhoto(e, 1)} />
+                <input id="gal1" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handlePhoto(e, 1)} />
+                {photo1Preview && (
+                  <div style={{ marginTop: 6 }}>
+                    <img src={photo1Preview} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #d1d5db' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: '#2d6a27' }}>✓ Photo 1 ready</span>
+                      <button type="button" onClick={() => { setPhoto1(null); setPhoto1Preview(null); }} style={{ fontSize: 10, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Photo 2 */}
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 4, fontWeight: 500 }}>Photo 2 — Additional / Site</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
+                  <div onClick={() => document.getElementById('cam2').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>📷 Camera</div>
+                  <div onClick={() => document.getElementById('gal2').click()}
+                    style={{ border: '1px dashed #2d6a27', borderRadius: 5, padding: '10px 6px', textAlign: 'center', cursor: 'pointer', color: '#2d6a27', fontSize: 10, fontWeight: 600 }}>🖼 Gallery</div>
+                </div>
+                <input id="cam2" type="file" accept="image/*" capture="environment" style={{ display: 'none' }} onChange={e => handlePhoto(e, 2)} />
+                <input id="gal2" type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handlePhoto(e, 2)} />
+                {photo2Preview && (
+                  <div style={{ marginTop: 6 }}>
+                    <img src={photo2Preview} style={{ width: '100%', height: 80, objectFit: 'cover', borderRadius: 4, border: '1px solid #d1d5db' }} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 3 }}>
+                      <span style={{ fontSize: 10, color: '#2d6a27' }}>✓ Photo 2 ready</span>
+                      <button type="button" onClick={() => { setPhoto2(null); setPhoto2Preview(null); }} style={{ fontSize: 10, color: '#dc2626', background: 'none', border: 'none', cursor: 'pointer' }}>Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
-            {photoName && <p style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>📎 {photoName}</p>}
-          </Field>
-        </div>
+          </div>
         <div>
           <SectionTitle>5. Materials Used</SectionTitle>
           <p style={{ fontSize: 11, color: '#64748b', marginBottom: 10, background: '#fef3c7', padding: '6px 10px', borderRadius: 4 }}>
@@ -526,7 +641,48 @@ export default function HouseTable() {
                   <td><StatusBadge val={h.rfc} /></td>
                   <td><StatusBadge val={h.ngStatus} /></td>
                   <td><StatusBadge val={h.saralStatus} /></td>
-                  <td style={{ textAlign: 'center' }}>{h.meterPhoto ? <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span> : <span style={{ color: '#dc2626' }}>✗</span>}</td>
+                  <td style={{ textAlign: 'center', position: 'relative' }}>
+                    {/* Photo badge — clickable popover */}
+                    {(() => {
+                      const cnt = h.photoCount ?? (h.meterPhoto ? 1 : 0);
+                      const label = cnt === 2 ? '2 Photos' : cnt === 1 ? '1 Photo' : 'None';
+                      const color = cnt > 0 ? '#16a34a' : '#94a3b8';
+                      const bg    = cnt > 0 ? '#dcfce7' : '#f1f5f9';
+                      return (
+                        <div style={{ position: 'relative', display: 'inline-block' }}>
+                          <span
+                            onClick={cnt > 0 ? e => { e.stopPropagation(); setPhotoPopover(photoPopover === h.id ? null : h.id); } : undefined}
+                            style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: bg, color, cursor: cnt > 0 ? 'pointer' : 'default', userSelect: 'none' }}
+                          >
+                            {label}
+                          </span>
+                          {photoPopover === h.id && cnt > 0 && (
+                            <div
+                              onClick={e => e.stopPropagation()}
+                              style={{ position: 'absolute', zIndex: 200, top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 12px', minWidth: 200, textAlign: 'left' }}
+                            >
+                              {[{ data: h.photo1Data, name: h.photo1Name, label: 'Photo 1 — Meter' }, { data: h.photo2Data, name: h.photo2Name, label: 'Photo 2 — Site' }]
+                                .filter(p => p.data)
+                                .map((p, i) => (
+                                  <div key={i} style={{ marginBottom: i === 0 && h.photo2Data ? 10 : 0 }}>
+                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 5 }}>📷 {p.label}</div>
+                                    <div style={{ display: 'flex', gap: 6 }}>
+                                      <button onClick={() => viewPhoto(p.data)}
+                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', color: '#374151' }}>👁 View</button>
+                                      <button onClick={() => downloadPhoto(p.data, p.name)}
+                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #2d6a27', borderRadius: 4, background: '#f0fdf4', cursor: 'pointer', color: '#15803d' }}>⬇ Download</button>
+                                    </div>
+                                  </div>
+                                ))
+                              }
+                              <button onClick={() => setPhotoPopover(null)}
+                                style={{ marginTop: 8, width: '100%', fontSize: 10, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
                   <td><button onClick={e => { e.stopPropagation(); setModalHouse(h); }} className="btn btn-primary btn-sm" style={{ borderRadius: 4 }}>Meter Details</button></td>
                   {canWrite && (
                     <td style={{ textAlign: 'center' }}>

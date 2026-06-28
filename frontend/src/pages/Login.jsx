@@ -85,14 +85,15 @@ export default function Login() {
 
         {/* Header */}
         <div style={{ padding:'40px 40px 28px',textAlign:'center',borderBottom:'1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ display:'inline-flex',alignItems:'center',justifyContent:'center',width:64,height:64,borderRadius:18,background:'linear-gradient(135deg,#1F4E1A,#2D6A27)',boxShadow:'0 8px 20px rgba(45,106,39,0.4)',marginBottom:18 }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-              <path d="M12 2C12 2 7 8 7 13C7 15.76 9.24 18 12 18C14.76 18 17 15.76 17 13C17 8 12 2 12 2Z" fill="#7ec56f"/>
-              <path d="M12 10C12 10 10 13 10 14.5C10 15.33 10.67 16 11.5 16C12.33 16 13 15.33 13 14.5C13 13 12 10 12 10Z" fill="#F97316"/>
-            </svg>
-          </div>
-          <h1 style={{ margin:'0 0 6px',fontSize:22,fontWeight:700,color:'#E8F5E8',letterSpacing:'-0.3px' }}>GP-PMS Portal</h1>
-          <p style={{ margin:0,fontSize:13,color:'#6A8F6A',fontWeight:500 }}>Oxygen Protech Pvt. Ltd.</p>
+          {/* TODO: Place the Oxygen Protech logo file at public/logo.png in the project root.
+               The logo should be a PNG with transparent background, minimum 200x200px resolution.
+               Current file: the blue triangular OP logo. */}
+          <img src="/logo.png" alt="Oxygen Protech"
+            style={{ width: 80, height: 80, objectFit: 'contain', borderRadius: 12, marginBottom: 18 }}
+            onError={e => { e.currentTarget.style.display='none'; }}
+          />
+          <h1 style={{ margin:'0 0 6px',fontSize:22,fontWeight:700,color:'#E8F5E8',letterSpacing:'-0.3px' }}>Oxygen Protech Gas</h1>
+          <p style={{ margin:0,fontSize:13,color:'#6A8F6A',fontWeight:500 }}>Gas Pipeline Management System</p>
         </div>
 
         {/* Form body */}

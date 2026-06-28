@@ -15,14 +15,9 @@ const breadcrumbs = {
   '/access':    'Access — User Management',
 };
 
-function FlameIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-      <path d="M12 2C12 2 7 8 7 13C7 15.76 9.24 18 12 18C14.76 18 17 15.76 17 13C17 8 12 2 12 2Z" fill="#7ec56f"/>
-      <path d="M12 10C12 10 10 13 10 14.5C10 15.33 10.67 16 11.5 16C12.33 16 13 15.33 13 14.5C13 13 12 10 12 10Z" fill="#c0440a"/>
-    </svg>
-  );
-}
+// TODO: Place the Oxygen Protech logo file at public/logo.png in the project root.
+// The logo should be a PNG with transparent background, minimum 200x200px resolution.
+// Current file: the blue triangular OP logo.
 
 function getSession() {
   try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
@@ -111,8 +106,13 @@ export default function Layout() {
 
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.1)' }}>
-            <FlameIcon />
-            <span style={{ color: '#fff', fontSize: 17, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>GP-PMS</span>
+            <img
+              src="/logo.png"
+              alt="Oxygen Protech"
+              style={{ height: 32, width: 'auto', objectFit: 'contain', borderRadius: 4 }}
+              onError={e => { e.currentTarget.style.display = 'none'; }}
+            />
+            <span style={{ color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: '-0.01em', whiteSpace: 'nowrap' }}>Oxygen Protech Gas</span>
           </div>
 
           {/* Desktop nav — hidden on mobile */}
