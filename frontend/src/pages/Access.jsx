@@ -142,6 +142,8 @@ export default function Access() {
     // Save only non-default sites to avoid duplication on reload
     const customOnly = updated.filter(s => !DEFAULT_SITES.find(d => d.id === s.id));
     localStorage.setItem('gppms_sites', JSON.stringify(customOnly));
+    // Notify SiteContext in this same tab to re-read immediately
+    window.dispatchEvent(new Event('storage'));
     setShowLocModal(false);
     setLocName(''); setLocContract(''); setLocZone(''); setLocDistrict('Ludhiana'); setLocCity(''); setLocAreas(''); setLocStatus('Active');
     showToast('\u2713 GA Location added \u2014 ' + newSite.name + ' is now available in the system');

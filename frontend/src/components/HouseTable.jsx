@@ -7,7 +7,7 @@ import { exportHouseData } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
-import { useSite } from '../context/SiteContext';
+import { useSite, useSiteAreas } from '../context/SiteContext';
 
 /* ── Helpers ── */
 function initStore(key, defaults) {
@@ -100,6 +100,7 @@ export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
   const { selectedSite } = useSite();
+  const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
 
   useEffect(() => {
@@ -442,7 +443,7 @@ export default function HouseTable() {
             <Field label="House No." required error={errors.houseNo}><Input value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
             <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Area"><Select value={form.area} onChange={e => f('area', e.target.value)}>{AREAS_LIST.map(a => <option key={a}>{a}</option>)}</Select></Field>
+              <Field label="Area"><Select value={form.area} onChange={e => f('area', e.target.value)}>{(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}</Select></Field>
               <Field label="City"><Input value={form.city} onChange={e => f('city', e.target.value)} /></Field>
             </div>
           </div>
@@ -583,21 +584,21 @@ export default function HouseTable() {
         / <span style={{ color: '#dc2626', fontWeight: 600 }}>{exportPreview.pending} Pending</span>&nbsp;
         / {exportPreview.total} Total in selected range
       </p>
-      {/* Filter bar — Account Type, Area, BP Number only */}
-      <div className="card section-block" style={{ padding: '10px 14px' }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <select className="gp-select-dark" style={{ width: 160 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
-            <option value="">-- Account Type --</option>
-            {ACCT_TYPES.map(a => <option key={a}>{a}</option>)}
-          </select>
-          <select className="gp-select-dark" style={{ width: 160 }} value={filterArea} onChange={e => { setFilterArea(e.target.value); reset(); }}>
-            <option value="">All Areas</option>
-            {AREAS_LIST.map(a => <option key={a}>{a}</option>)}
-          </select>
-          <input className="gp-input-dark" style={{ width: 130 }} placeholder="BP Number" value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
-          <button className="btn btn-primary" onClick={reset}>Search</button>
-        </div>
-      </div>
+          {/* Filter bar — Account Type, Area, BP Number */}
+          <div className="card section-block" style={{ padding: '10px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              <select className="gp-select-dark" style={{ width: 160 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
+                <option value="">-- Account Type --</option>
+                {ACCT_TYPES.map(a => <option key={a}>{a}</option>)}
+              </select>
+              <select className="gp-select-dark" style={{ width: 160 }} value={filterArea} onChange={e => { setFilterArea(e.target.value); reset(); }}>
+                <option value="">All Areas</option>
+                {(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}
+              </select>
+              <input className="gp-input-dark" style={{ width: 130 }} placeholder="BP Number" value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
+              <button className="btn btn-primary" onClick={reset}>Search</button>
+            </div>
+          </div>
 
       <p style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
         Showing page {page} of {totalPages} — {filtered.length} entries

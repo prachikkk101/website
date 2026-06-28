@@ -1,7 +1,7 @@
 // src/components/Layout.jsx
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useState, useContext, useEffect } from 'react';
-import { useSite, SITE_OPTIONS } from '../context/SiteContext';
+import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { ToastContainer } from './Toast';
 import { checkBackend } from '../utils/healthCheck';
@@ -33,7 +33,7 @@ function getPendingCount() {
 export default function Layout() {
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { selectedSite, setSelectedSite } = useSite();
+  const { selectedSite, setSelectedSite, siteOptions } = useSite();
   const { user, logout } = useContext(AuthContext);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [backendStatus,  setBackendStatus]  = useState('checking'); // 'checking'|'connected'|'offline'
@@ -148,7 +148,7 @@ export default function Layout() {
                     padding: '0 6px', borderRadius: 5,
                   }}
                 >
-                  {SITE_OPTIONS.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
+                  {siteOptions.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
                 </select>
               </div>
             )}
@@ -266,7 +266,7 @@ export default function Layout() {
             <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 4 }}>Current Site</label>
             <select value={selectedSite} onChange={e => setSelectedSite(e.target.value)}
               style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
-              {SITE_OPTIONS.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
+              {siteOptions.map(s => <option key={s.value} value={s.value} style={{ background: '#1f4e1a' }}>{s.label}</option>)}
             </select>
           </div>
         )}
