@@ -74,10 +74,17 @@ export default function Layout() {
     ? { bg: '#fee2e2', color: '#b91c1c' }
     : { bg: '#dbeafe', color: '#1d4ed8' };
 
+  // Admin check — role OR email fallback
+  const isAdmin = (
+    user?.role === 'ADMIN' ||
+    user?.role === 'admin' ||
+    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+      .includes((session.email || '').toLowerCase())
+  );
   // Supervisor with no site assigned => view-only
   const isSupervisor  = user?.role === 'SUPERVISOR';
   const siteAccess    = session.siteAccess;
-  const isViewOnly    = isSupervisor && (!siteAccess || siteAccess === 'none');
+  const showViewOnlyBanner = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -194,16 +201,17 @@ export default function Layout() {
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <span style={{ color: '#fff', fontSize: 11, fontWeight: 600, lineHeight: 1.2 }}>{displayName}</span>
-                {user?.role === 'SUPERVISOR' ? (
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
-                    background: siteAccess && siteAccess !== 'none' ? '#dbeafe' : '#fef3c7',
-                    color:      siteAccess && siteAccess !== 'none' ? '#1d4ed8' : '#92400e',
-                    lineHeight: 1.3, display: 'inline-block', whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {siteAccess && siteAccess !== 'none' ? siteAccess : 'No Site Assigned'}
+                {isAdmin ? (
+                  <span style={{ fontSize: '10px', background: '#d1fae5', color: '#166534', borderRadius: '4px', padding: '1px 6px', fontWeight: 600 }}>
+                    All Sites
+                  </span>
+                ) : (siteAccess && siteAccess !== 'none') ? (
+                  <span style={{ fontSize: '10px', background: '#dbeafe', color: '#1e40af', borderRadius: '4px', padding: '1px 6px', fontWeight: 600, whiteSpace: 'nowrap', maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+                    {siteAccess}
                   </span>
                 ) : (
-                  <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: roleBadge.bg, color: roleBadge.color, lineHeight: 1.3, display: 'inline-block' }}>
-                    {user?.role || 'USER'}
+                  <span style={{ fontSize: '10px', background: '#fef3c7', color: '#92400e', borderRadius: '4px', padding: '1px 6px', fontWeight: 600 }}>
+                    No Site Assigned
                   </span>
                 )}
               </div>
@@ -285,8 +293,8 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* ── View-only banner for supervisors with no site ── */}
-      {isViewOnly && (
+      {/* View-only banner — only for non-admin users with no site assigned */}
+      {showViewOnlyBanner && (
         <div style={{
           background: '#fffbeb', borderBottom: '2px solid #f59e0b',
           padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',

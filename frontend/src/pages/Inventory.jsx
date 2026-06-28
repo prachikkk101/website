@@ -96,7 +96,12 @@ export default function Inventory() {
   const session    = getSession();
   const isSupervisor = user?.role === 'SUPERVISOR';
   const siteAccess   = session.siteAccess;
-  const isViewOnly   = isSupervisor && (!siteAccess || siteAccess === 'none');
+  const isAdmin      = (
+    user?.role === 'ADMIN' || user?.role === 'admin' ||
+    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+      .includes((session.email || '').toLowerCase())
+  );
+  const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
   const canWrite     = !isViewOnly;
 
   // Delivery form state

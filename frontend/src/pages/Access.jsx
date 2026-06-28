@@ -41,10 +41,14 @@ export default function Access() {
   const navigate = useNavigate();
 
   const session    = getSession();
-  const isAdmin    = user?.role === 'ADMIN' || ADMIN_EMAILS.includes(session.email?.toLowerCase());
+  const isAdmin    = (
+    user?.role === 'ADMIN' || user?.role === 'admin' ||
+    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+      .includes((session.email || '').toLowerCase())
+  );
   const isSupervisor = user?.role === 'SUPERVISOR';
   const siteAccess   = session.siteAccess;
-  const isViewOnly   = isSupervisor && (!siteAccess || siteAccess === 'none');
+  const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
 
   const [requests,  setRequests]  = useState([]);
   const [sites,     setSites]     = useState([]);
