@@ -83,7 +83,14 @@ function HousesDoneRow({ item }) {
 
 /* ── Bar Chart ── */
 function BarChart({ data }) {
-  const max = Math.max(...data.map(d => d.count));
+  if (!data || data.length === 0) {
+    return (
+      <div style={{ height: 90, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: 12 }}>
+        No daily entries yet
+      </div>
+    );
+  }
+  const max = Math.max(...data.map(d => d.count), 1);
   const weekdayColors = ['#2d6a27','#2d6a27','#2d6a27','#2d6a27','#2d6a27'];
   const weekendColors = ['#c0440a','#c0440a'];
   const colors = [...weekdayColors, ...weekendColors];
@@ -159,22 +166,24 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Alert Strip */}
-      <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0 }}>
-          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-        </svg>
-        <span>
-          <strong>Low stock: </strong>
-          {lowStockAlerts.map((a, i) => (
-            <span key={i}>
-              <strong>{a.site}</strong> — {a.material} ({a.qty})
-              {i < lowStockAlerts.length - 1 ? ' | ' : ''}
-            </span>
-          ))}
-        </span>
-      </div>
+      {/* Alert Strip — only shown when there are real low-stock alerts */}
+      {lowStockAlerts.length > 0 && (
+        <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0 }}>
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <span>
+            <strong>Low stock: </strong>
+            {lowStockAlerts.map((a, i) => (
+              <span key={i}>
+                <strong>{a.site}</strong> — {a.material} ({a.qty})
+                {i < lowStockAlerts.length - 1 ? ' | ' : ''}
+              </span>
+            ))}
+          </span>
+        </div>
+      )}
 
       {/* Filter row */}
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, paddingBottom: 4, marginBottom: 12 }}>
@@ -234,7 +243,11 @@ export default function Dashboard() {
             </h3>
             <span className="badge badge-done">{filteredSites.filter(s => s.status === 'Active').length} Active</span>
           </div>
-          {filteredSites.map(s => <SiteRow key={s.name} site={s} />)}
+          {filteredSites.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: '#94a3b8', fontSize: 13 }}>
+              No sites added yet.
+            </div>
+          ) : filteredSites.map(s => <SiteRow key={s.name} site={s} />)}
         </div>
 
         {/* Right column */}
@@ -247,7 +260,11 @@ export default function Dashboard() {
               </svg>
               Houses done this month
             </h3>
-            {housesDoneThisMonth.map(item => <HousesDoneRow key={item.site} item={item} />)}
+            {housesDoneThisMonth.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '16px 0', color: '#94a3b8', fontSize: 12 }}>
+                No data yet
+              </div>
+            ) : housesDoneThisMonth.map(item => <HousesDoneRow key={item.site} item={item} />)}
           </div>
 
           {/* Daily entries chart */}
@@ -267,9 +284,15 @@ export default function Dashboard() {
           </svg>
           Active workers — all sites
         </h3>
-        <div className="worker-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-          {activeWorkers.map(w => <WorkerCard key={w.id} worker={w} />)}
-        </div>
+        {activeWorkers.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: '#94a3b8', fontSize: 13 }}>
+            No workers registered yet. Add supervisors via the Access tab.
+          </div>
+        ) : (
+          <div className="worker-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+            {activeWorkers.map(w => <WorkerCard key={w.id} worker={w} />)}
+          </div>
+        )}
         <div style={{
           marginTop: 12, padding: '8px 12px',
           background: '#eff6ff', border: '1px solid #bfdbfe',

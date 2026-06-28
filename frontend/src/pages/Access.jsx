@@ -4,21 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 
-const DEFAULT_SITES = [
-  { id: 'khanna', name: 'Khanna \u2014 CA-09', zone: 'Zone-02, Ludhiana',   areas: ['Uttam Nagar','Guru Nanak Nagar','Kishangar Village','Sector 12'], status: 'Active' },
-  { id: 'uenii',  name: 'UE-II \u2014 Hisar',  zone: 'Urban Extension II', areas: ['UE-II'],                                                             status: 'Active' },
-  { id: 'pla',    name: 'PLA \u2014 Hisar',    zone: 'P.L.A Colony',       areas: ['PLA'],                                                               status: 'Active' },
-  { id: 'kohara', name: 'Kohara \u2014 CA-07', zone: 'Kohara, Ludhiana',   areas: ['Kohara'],                                                            status: 'Active' },
-];
-
 function getSites() {
   try {
     const raw = localStorage.getItem('gppms_sites');
-    if (!raw) { localStorage.setItem('gppms_sites', JSON.stringify(DEFAULT_SITES)); return DEFAULT_SITES; }
-    const parsed = JSON.parse(raw);
-    const storedIds = parsed.map(s => s.id);
-    return [...DEFAULT_SITES.filter(d => !storedIds.includes(d.id)), ...parsed];
-  } catch { return DEFAULT_SITES; }
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch { return []; }
 }
 
 function getSession() {
@@ -139,22 +130,68 @@ export default function Access() {
     };
     const updated = [...sites, newSite];
     setSites(updated);
-    // Save only non-default sites to avoid duplication on reload
-    const customOnly = updated.filter(s => !DEFAULT_SITES.find(d => d.id === s.id));
-    localStorage.setItem('gppms_sites', JSON.stringify(customOnly));
-    // Notify SiteContext in this same tab to re-read immediately
+    localStorage.setItem('gppms_sites', JSON.stringify(updated));
     window.dispatchEvent(new Event('storage'));
     setShowLocModal(false);
     setLocName(''); setLocContract(''); setLocZone(''); setLocDistrict('Ludhiana'); setLocCity(''); setLocAreas(''); setLocStatus('Active');
     showToast('\u2713 GA Location added \u2014 ' + newSite.name + ' is now available in the system');
   }
 
-  // Registered users — pull from localStorage + hardcoded base
+  // ── Add Area to existing site ──
+  function handleAddArea(siteId) {
+    const areaName = prompt('Enter new area name to add to this location:');
+    if (!areaName || !areaName.trim()) return;
+    const updated = sites.map(s =>
+      s.id === siteId
+        ? { ...s, areas: [...(s.areas || []), areaName.trim()] }
+        : s
+    );
+    setSites(updated);
+    localStorage.setItem('gppms_sites', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    showToast('\u2713 Area "' + areaName.trim() + '" added');
+  }
+
+  // ── Remove one Area from GA Location ──
+  function handleRemoveArea(siteId, areaName) {
+    const updated = sites.map(s =>
+      s.id === siteId
+        ? { ...s, areas: (s.areas || []).filter(a => a !== areaName) }
+        : s
+    );
+    setSites(updated);
+    localStorage.setItem('gppms_sites', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    showToast('\u2713 Area "' + areaName + '" removed');
+  }
+
+  // ── Remove GA Location ──
+  function handleRemoveSite(siteId, siteName) {
+    if (!window.confirm(`Remove "${siteName}" from GA Locations?\n\nThis will remove the location and all its areas.`)) return;
+    const updated = sites.filter(s => s.id !== siteId);
+    setSites(updated);
+    localStorage.setItem('gppms_sites', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    showToast('\u2713 Location removed');
+  }
+
+  // Registered users — hardcoded admins + approved access requests
   const baseUsers = [
     { name: 'Admin',          email: 'admin@gppms.com',           role: 'ADMIN',      site: 'All Sites' },
     { name: 'Oxygen Hisar',   email: 'oxygenhisar@gmail.com',     role: 'ADMIN',      site: 'All Sites' },
     { name: 'Oxygen Protech', email: 'oxygenprotech@gmail.com',   role: 'ADMIN',      site: 'All Sites' },
   ];
+  // Merge in approved workers from request history
+  const approvedWorkers = requests
+    .filter(r => r.status === 'approved')
+    .reduce((acc, r) => {
+      // Avoid duplicates by email
+      if (!acc.find(u => u.email === r.email) && !baseUsers.find(u => u.email === r.email)) {
+        acc.push({ name: r.name, email: r.email, role: 'WORKER', site: r.site, approvedAt: r.requestedAt });
+      }
+      return acc;
+    }, []);
+  const allRegisteredUsers = [...baseUsers, ...approvedWorkers];
 
   return (
     <div>
@@ -228,17 +265,21 @@ export default function Access() {
       <div className="card" style={{ padding:20, marginBottom:20 }}>
         <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
           <span>👥</span> Registered Users
+          <span style={{ fontSize:11, color:'#64748b', fontWeight:400, marginLeft:4 }}>({allRegisteredUsers.length} total)</span>
         </h3>
-        {baseUsers.map(u => (
+        {allRegisteredUsers.map(u => (
           <div key={u.email} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'1px solid #f1f5f9' }}>
-            <div style={{ width:36, height:36, borderRadius:'50%', background: u.role === 'ADMIN' ? '#b91c1c' : '#2d6a27', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:700, flexShrink:0 }}>
+            <div style={{ width:36, height:36, borderRadius:'50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#2d6a27', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:700, flexShrink:0 }}>
               {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)}
             </div>
             <div style={{ flex:1 }}>
               <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1e293b' }}>{u.name}</p>
               <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{u.email} · {u.site}</p>
+              {u.role === 'WORKER' && u.approvedAt && (
+                <p style={{ margin:'2px 0 0', fontSize:10, color:'#16a34a' }}>✓ Approved · {fmtDate(u.approvedAt)}</p>
+              )}
             </div>
-            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : '#15803d' }}>
+            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
               {u.role}
             </span>
             {/* Remove button — only for admin, not for admin@gppms.com itself */}
@@ -264,22 +305,55 @@ export default function Access() {
               + Add New GA Location
             </button>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
-            {sites.map(s => (
-              <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:8, padding:'14px 16px', background:'#f8fafc' }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                  <p style={{ margin:'0 0 4px', fontSize:13, fontWeight:700, color:'#1f4e1a' }}>{s.name}</p>
-                  <span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, background: s.status === 'Active' ? '#dcfce7' : '#fee2e2', color: s.status === 'Active' ? '#15803d' : '#b91c1c' }}>
-                    {s.status}
-                  </span>
+          {sites.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 0', color:'#94a3b8', fontSize:13 }}>
+              No GA Locations added yet. Click "+ Add New GA Location" to get started.
+            </div>
+          ) : (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
+              {sites.map(s => (
+                <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:8, padding:'14px 16px', background:'#f8fafc', display:'flex', flexDirection:'column', gap:8 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+                    <p style={{ margin:0, fontSize:13, fontWeight:700, color:'#1f4e1a' }}>{s.name}</p>
+                    <span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, background: s.status === 'Active' ? '#dcfce7' : '#fee2e2', color: s.status === 'Active' ? '#15803d' : '#b91c1c', flexShrink:0 }}>
+                      {s.status}
+                    </span>
+                  </div>
+                  <p style={{ margin:0, fontSize:11, color:'#64748b' }}>{s.zone || s.district || ''}</p>
+                  {/* Areas as removable chips */}
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:5, minHeight: 22 }}>
+                    {(s.areas || []).length === 0
+                      ? <span style={{ color:'#94a3b8', fontStyle:'italic', fontSize:11 }}>No areas yet</span>
+                      : (s.areas || []).map(area => (
+                          <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:12, padding:'2px 8px 2px 9px', fontSize:11, fontWeight:500 }}>
+                            {area}
+                            <button
+                              onClick={() => handleRemoveArea(s.id, area)}
+                              title={`Remove area "${area}"`}
+                              style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:13, lineHeight:1, padding:'0 0 0 2px', display:'flex', alignItems:'center', fontWeight:700 }}
+                            >×</button>
+                          </span>
+                        ))
+                    }
+                  </div>
+                  <div style={{ display:'flex', gap:6, marginTop:4 }}>
+                    <button
+                      onClick={() => handleAddArea(s.id)}
+                      style={{ flex:1, height:28, background:'#2d6a27', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                    >
+                      + Add Area
+                    </button>
+                    <button
+                      onClick={() => handleRemoveSite(s.id, s.name)}
+                      style={{ height:28, padding:'0 10px', background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
-                <p style={{ margin:'0 0 6px', fontSize:11, color:'#64748b' }}>{s.zone || s.district || ''}</p>
-                <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>
-                  {(s.areas || []).slice(0,3).join(', ')}{(s.areas||[]).length > 3 ? ` +${s.areas.length - 3} more` : ''}
-                </p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

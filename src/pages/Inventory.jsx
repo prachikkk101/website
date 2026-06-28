@@ -1,4 +1,3 @@
-// src/pages/Inventory.jsx
 import { useState, useMemo, useEffect, useContext } from 'react';
 import defaultStockData from '../data/stockData';
 import { exportStockData } from '../utils/exportExcel';
@@ -6,6 +5,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { stockCategories } from '../data/stockCategories';
+import { useSite } from '../context/SiteContext';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -29,10 +29,17 @@ function getStatus(onSite, inStore, open, recv) {
   return              { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
 }
 
-const SITES = ['Khanna','UE-II','PLA','Kohara'];
 
 /* ── Category Accordion for Receive Stock ── */
 function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuantities }) {
+  // Load categories from localStorage so custom items persist
+  const [categories, setCategories] = useState(() => {
+    try {
+      const saved = localStorage.getItem('gppms_stock_categories');
+      return saved ? JSON.parse(saved) : stockCategories;
+    } catch { return stockCategories; }
+  });
+
   function toggleCategory(id) {
     setOpenCategory(prev => prev === id ? null : id);
   }
@@ -41,9 +48,32 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
     setQuantities(prev => ({ ...prev, [`${catId}__${item}`]: qty }));
   }
 
+  function handleAddItem(catId) {
+    const name = prompt('Enter new material name to add to this category:');
+    if (!name || !name.trim()) return;
+    const updated = categories.map(cat =>
+      cat.id === catId
+        ? { ...cat, items: [...cat.items, name.trim()] }
+        : cat
+    );
+    setCategories(updated);
+    localStorage.setItem('gppms_stock_categories', JSON.stringify(updated));
+  }
+
+  function handleRemoveItem(catId, itemName) {
+    if (!window.confirm(`Remove "${itemName}" from this category?`)) return;
+    const updated = categories.map(cat =>
+      cat.id === catId
+        ? { ...cat, items: cat.items.filter(i => i !== itemName) }
+        : cat
+    );
+    setCategories(updated);
+    localStorage.setItem('gppms_stock_categories', JSON.stringify(updated));
+  }
+
   return (
     <div>
-      {stockCategories.map(cat => {
+      {categories.map(cat => {
         const isOpen = openCategory === cat.id;
         return (
           <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
@@ -60,23 +90,38 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
               }}
             >
               <span>{cat.label}</span>
-              <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+              <span style={{ fontSize: 14 }}>{isOpen ? '\u25b2' : '\u25bc'}</span>
             </div>
 
             {/* Expanded items */}
             {isOpen && (
-              <div style={{ padding: '12px 16px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, background: 'white' }}>
-                {cat.items.map(item => (
-                  <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
-                    <input
-                      type="number" min="0"
-                      defaultValue={0}
-                      onChange={e => updateQty(cat.id, item, Number(e.target.value))}
-                      style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
-                    />
-                  </div>
-                ))}
+              <div style={{ padding: '12px 16px', background: 'white' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+                  {cat.items.map(item => (
+                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
+                      <input
+                        type="number" min="0"
+                        defaultValue={0}
+                        onChange={e => updateQty(cat.id, item, Number(e.target.value))}
+                        style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(cat.id, item)}
+                        title={`Remove "${item}"`}
+                        style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleAddItem(cat.id)}
+                  style={{ width: '100%', height: 30, background: '#f0f7ee', color: '#2d6a27', border: '1px dashed #2d6a27', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  + Add Item to {cat.label}
+                </button>
               </div>
             )}
           </div>
@@ -89,6 +134,12 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
 export default function Inventory() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
+  const { siteList }  = useSite();
+
+  const sites = useMemo(() => {
+    return siteList.map(s => s.name);
+  }, [siteList]);
+
   const [stockData, setStockData] = useState([]);
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
@@ -107,7 +158,7 @@ export default function Inventory() {
   // Delivery form state
   const [challan, setChallan] = useState('');
   const [dateRcv, setDateRcv] = useState(todayStr());
-  const [site,    setSite]    = useState(SITES[0]);
+  const [site,    setSite]    = useState('');
   const [notes,   setNotes]   = useState('');
   const [formErr, setFormErr] = useState({});
 
@@ -119,6 +170,12 @@ export default function Inventory() {
     document.title = 'GP-PMS \u2014 Stock Management';
     setStockData(initStore('stock', defaultStockData));
   }, []);
+
+  useEffect(() => {
+    if (sites.length > 0 && !site) {
+      setSite(sites[0]);
+    }
+  }, [sites, site]);
 
   const rows = useMemo(() => (stockData || []).map(s => {
     const netUsed = s.issued - s.ret;
@@ -137,13 +194,12 @@ export default function Inventory() {
   function openPanel() {
     setQuantities({});
     setOpenCategory(null);
-    setChallan(''); setDateRcv(todayStr()); setSite(SITES[0]); setNotes(''); setFormErr({});
+    setChallan(''); setDateRcv(todayStr()); setSite(sites[0] || ''); setNotes(''); setFormErr({});
     setPanelOpen(true);
   }
 
   function handleSave() {
     const e = {};
-    if (!challan.trim()) e.challan = 'Challan / DC Number is required';
     if (!dateRcv)        e.dateRcv = 'Date is required';
     setFormErr(e);
     if (Object.keys(e).length > 0) return;
@@ -190,6 +246,54 @@ export default function Inventory() {
     showToast(`\u2713 Stock received \u2014 ${updatedCount} items updated`);
   }
 
+  const [customCols, setCustomCols] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('gppms_custom_columns_inventory') || '[]');
+    } catch { return []; }
+  });
+
+  const handleAddColumn = () => {
+    const name = prompt('Enter new column name:');
+    if (!name || !name.trim()) return;
+    const newCol = {
+      key: 'custom_' + Date.now(),
+      label: name.trim()
+    };
+    const updated = [...customCols, newCol];
+    setCustomCols(updated);
+    localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+    showToast(`✓ Column "${name.trim()}" added`);
+  };
+
+  const handleRemoveColumn = () => {
+    if (customCols.length === 0) { showToast('⚠ No custom columns to remove'); return; }
+    const options = customCols.map((c, i) => `${i + 1}. ${c.label}`).join('\n');
+    const choice = prompt(`Which column to remove? Enter number:\n${options}`);
+    if (!choice) return;
+    const idx = parseInt(choice, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= customCols.length) { showToast('⚠ Invalid selection'); return; }
+    const removed = customCols[idx];
+    const updated = customCols.filter((_, i) => i !== idx);
+    setCustomCols(updated);
+    localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+    showToast(`✓ Column "${removed.label}" removed`);
+  };
+
+  const handleEditCell = (itemSr, colKey, colLabel, currentVal) => {
+    if (!canWrite) return;
+    const newVal = prompt(`Enter ${colLabel} for this item:`, currentVal || '');
+    if (newVal === null) return;
+    const updated = stockData.map(s => {
+      if (s.sr === itemSr) {
+        return { ...s, [colKey]: newVal.trim() };
+      }
+      return s;
+    });
+    setStockData(updated);
+    localStorage.setItem('gppms_stock', JSON.stringify(updated));
+    showToast('✓ Value updated');
+  };
+
   function onSiteColor(r) {
     if (r.onSitePct < 20) return '#dc2626';
     if (r.onSitePct < 40) return '#d97706';
@@ -212,10 +316,27 @@ export default function Inventory() {
             Export
           </button>
           {canWrite && (
-            <button onClick={openPanel} className="btn btn-primary" style={{ height: 32 }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              Receive Stock
-            </button>
+            <>
+              <button onClick={handleAddColumn} className="btn btn-primary" style={{ height: 32, fontSize: 12 }}>
+                ➕ Add Column
+              </button>
+              {customCols.length > 0 && (
+                <button
+                  onClick={handleRemoveColumn}
+                  style={{
+                    height: 32, background: '#fee2e2', color: '#dc2626',
+                    border: '1px solid #fca5a5', borderRadius: 4,
+                    padding: '0 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  ✕ Remove Column
+                </button>
+              )}
+              <button onClick={openPanel} className="btn btn-primary" style={{ height: 32 }}>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Receive Stock
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -236,12 +357,13 @@ export default function Inventory() {
                 <th style={{ textAlign:'right' }}>On Site</th>
                 <th style={{ textAlign:'right' }}>In Store</th>
                 <th style={{ textAlign:'right' }}>Required</th>
+                {customCols.map(col => <th key={col.key}>{col.label}</th>)}
                 <th style={{ minWidth: 140 }}>Status</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 ? (
-                <tr><td colSpan={12} style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8' }}>
+                <tr><td colSpan={12 + customCols.length} style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8' }}>
                   <div style={{ fontSize: 32 }}>📦</div>
                   <div style={{ marginTop: 8 }}>No stock data found</div>
                 </td></tr>
@@ -258,6 +380,22 @@ export default function Inventory() {
                   <td style={{ textAlign:'right', color: onSiteColor(r) }}>{(r.onSite||0).toLocaleString()}</td>
                   <td style={{ textAlign:'right' }}>{(r.inStore||0).toLocaleString()}</td>
                   <td style={{ textAlign:'right', color: r.req > 0 ? '#c0440a' : '#94a3b8', fontWeight: r.req > 0 ? 600 : 400 }}>{r.req > 0 ? r.req.toLocaleString() : '—'}</td>
+                  {customCols.map(col => (
+                    <td
+                      key={col.key}
+                      onClick={() => handleEditCell(r.sr, col.key, col.label, r[col.key])}
+                      style={{
+                        cursor: canWrite ? 'pointer' : 'default',
+                        color: r[col.key] ? '#1e293b' : '#94a3b8',
+                        fontStyle: r[col.key] ? 'normal' : 'italic',
+                        background: canWrite ? 'rgba(45, 106, 39, 0.02)' : 'none',
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={canWrite ? 'Click to edit' : undefined}
+                    >
+                      {r[col.key] || (canWrite ? 'click to set' : '—')}
+                    </td>
+                  ))}
                   <td>
                     <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                       <div style={{ width:80, height:8, background:'#e5e7eb', borderRadius:4, overflow:'hidden', flexShrink:0 }}>
@@ -278,6 +416,7 @@ export default function Inventory() {
                 <td style={{ textAlign:'right' }}>{totals.onSite.toLocaleString()}</td>
                 <td style={{ textAlign:'right' }}>{totals.inStore.toLocaleString()}</td>
                 <td style={{ textAlign:'right' }}>{totals.req.toLocaleString()}</td>
+                {customCols.map(col => <td key={col.key} />)}
                 <td />
               </tr>
             </tbody>
@@ -294,8 +433,8 @@ export default function Inventory() {
         <div>
           <SectionTitle>Delivery Details</SectionTitle>
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-            <Field label="Challan / DC Number" required error={formErr.challan}>
-              <Input value={challan} onChange={e => setChallan(e.target.value)} error={formErr.challan} placeholder="e.g. DC-2026-001" />
+            <Field label="Challan / DC Number (optional)">
+              <Input value={challan} onChange={e => setChallan(e.target.value)} placeholder="e.g. DC-2026-001" />
             </Field>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
@@ -303,7 +442,7 @@ export default function Inventory() {
               </Field>
               <Field label="Site">
                 <Select value={site} onChange={e => setSite(e.target.value)}>
-                  {SITES.map(s => <option key={s}>{s}</option>)}
+                  {sites.map(s => <option key={s}>{s}</option>)}
                 </Select>
               </Field>
             </div>

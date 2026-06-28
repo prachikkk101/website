@@ -2,23 +2,15 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 /* ── Default GA Locations (seed data, matches Access.jsx) ── */
-const DEFAULT_SITES = [
-  { id: 'khanna', name: 'Khanna — CA-09', zone: 'Zone-02, Ludhiana',   areas: ['Uttam Nagar','Guru Nanak Nagar','Kishangar Village','Sector 12'], status: 'Active' },
-  { id: 'uenii',  name: 'UE-II — Hisar',  zone: 'Urban Extension II', areas: ['UE-II'],                                                             status: 'Active' },
-  { id: 'pla',    name: 'PLA — Hisar',    zone: 'P.L.A Colony',        areas: ['PLA'],                                                              status: 'Active' },
-  { id: 'kohara', name: 'Kohara — CA-07', zone: 'Kohara, Ludhiana',    areas: ['Kohara'],                                                           status: 'Active' },
-];
+const DEFAULT_SITES = [];
 
 /* ── Read all sites from localStorage (default + custom) ── */
 function loadSites() {
   try {
     const raw = localStorage.getItem('gppms_sites');
-    if (!raw) return DEFAULT_SITES;
-    const parsed = JSON.parse(raw);
-    const storedIds = parsed.map(s => s.id);
-    // Merge: defaults first (not overridden by stored), then custom additions
-    return [...DEFAULT_SITES.filter(d => !storedIds.includes(d.id)), ...parsed];
-  } catch { return DEFAULT_SITES; }
+    if (!raw) return [];
+    return JSON.parse(raw);
+  } catch { return []; }
 }
 
 /* ── Build dropdown options from live sites ── */

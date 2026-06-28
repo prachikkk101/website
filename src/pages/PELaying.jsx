@@ -13,7 +13,8 @@ function initStore(key, defaults) {
   } catch { return defaults; }
 }
 
-const SITES       = ['All Sites','Khanna CA-09','UE-II Hisar','PLA Hisar','Kohara CA-07'];
+import { useSite } from '../context/SiteContext';
+
 const DATE_RANGES = ['All Time','Last 30 Days','Last 90 Days','Custom'];
 const STATUSES    = ['All','LAYING','HDD','JOINT'];
 const WK_STATUSES = ['LAYING','HDD','JOINT'];
@@ -21,6 +22,7 @@ const WK_STATUSES = ['LAYING','HDD','JOINT'];
 const STATUS_CLS  = { LAYING: 'badge-laying', HDD: 'badge-hdd', JOINT: 'badge-joint' };
 
 const todayStr = () => new Date().toISOString().split('T')[0];
+
 
 const EMPTY_ENTRY = {
   layDate:'', testDate:'', chargeDate:'',
@@ -30,7 +32,12 @@ const EMPTY_ENTRY = {
 
 export default function PELaying() {
   const { showToast } = useToast();
+  const { siteList }  = useSite();
   const [allData, setAllData] = useState([]);
+
+  const sites = useMemo(() => {
+    return ['All Sites', ...siteList.map(s => s.name)];
+  }, [siteList]);
 
   useEffect(() => {
     document.title = 'GP-PMS — PE Laying';
@@ -158,7 +165,7 @@ export default function PELaying() {
       {/* Filter bar + Export */}
       <div className="card section-block" style={{ padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <select className="gp-select" value={site} onChange={e => setSite(e.target.value)}>
-          {SITES.map(s => <option key={s}>{s}</option>)}
+          {sites.map(s => <option key={s}>{s}</option>)}
         </select>
         <select className="gp-select" value={dateRange} onChange={e => setDateRange(e.target.value)}>
           {DATE_RANGES.map(d => <option key={d}>{d}</option>)}
@@ -324,7 +331,10 @@ export default function PELaying() {
               </Field>
             </div>
             <Field label="Location">
-              <Input value={form.location} onChange={e => f('location', e.target.value)} />
+              <Select value={form.location} onChange={e => f('location', e.target.value)}>
+                <option value="">-- Select Location --</option>
+                {siteList.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </Select>
             </Field>
           </div>
         </div>

@@ -3,19 +3,7 @@ import { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useToast } from '../components/Toast';
 
-const SITES = ['All Sites', 'Khanna — CA-09', 'UE-II — Hisar', 'PLA — Hisar', 'Kohara — CA-07'];
-
-const SAMPLE_REPORTS = [
-  { id: 1, site: 'Khanna — CA-09',  date: '2026-06-26',
-    workDone: 'Laid 85 mtr of D63 pipe in Uttam Nagar. Completed 6 house connections. 4 workers present.',
-    issues: '', postedBy: 'ATUL KUMAR', postedAt: '2026-06-26T18:30:00.000Z' },
-  { id: 2, site: 'UE-II — Hisar',   date: '2026-06-26',
-    workDone: 'Completed plumbing for 10 houses in Ward 31. GI pipe work done for 4 connections. Meter installed at 3 sites.',
-    issues: 'One meter found defective, returned to store.', postedBy: 'RAVI SHARMA', postedAt: '2026-06-26T17:00:00.000Z' },
-  { id: 3, site: 'PLA — Hisar',     date: '2026-06-25',
-    workDone: 'PE pipe laying completed for 60 mtr stretch near PLA Colony main road. Testing scheduled tomorrow.',
-    issues: '', postedBy: 'GURPREET SINGH', postedAt: '2026-06-25T19:15:00.000Z' },
-];
+import { useSite } from '../context/SiteContext';
 
 function initStore(key, defaults) {
   try {
@@ -40,13 +28,19 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 
 export default function Reports() {
   const { showToast } = useToast();
+  const { siteList }  = useSite();
+
+  const sites = useMemo(() => {
+    return ['All Sites', ...siteList.map(s => s.name)];
+  }, [siteList]);
+
   const [reports,    setReports]    = useState([]);
   const [filterSite, setFilterSite] = useState('All Sites');
   const [filterDate, setFilterDate] = useState('');
   const [filterQ,    setFilterQ]    = useState('');
 
   // Post form state
-  const [pSite,     setPSite]     = useState(SITES[1]);
+  const [pSite,     setPSite]     = useState('');
   const [pDate,     setPDate]     = useState(todayStr());
   const [pWork,     setPWork]     = useState('');
   const [pIssues,   setPIssues]   = useState('');
@@ -56,8 +50,14 @@ export default function Reports() {
 
   useEffect(() => {
     document.title = 'GP-PMS — Reports';
-    setReports(initStore('reports', SAMPLE_REPORTS));
+    setReports(initStore('reports', []));
   }, []);
+
+  useEffect(() => {
+    if (sites.length > 1 && !pSite) {
+      setPSite(sites[1]);
+    }
+  }, [sites, pSite]);
 
   const session = (() => {
     try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
@@ -138,7 +138,7 @@ export default function Reports() {
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Site *</label>
             <select value={pSite} onChange={e => setPSite(e.target.value)} className="gp-select" style={{ width: '100%' }}>
-              {SITES.slice(1).map(s => <option key={s}>{s}</option>)}
+              {sites.slice(1).map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
@@ -175,7 +175,7 @@ export default function Reports() {
       {/* Filter bar */}
       <div className="card section-block" style={{ padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <select value={filterSite} onChange={e => setFilterSite(e.target.value)} className="gp-select" style={{ minWidth: 160 }}>
-          {SITES.map(s => <option key={s}>{s}</option>)}
+          {sites.map(s => <option key={s}>{s}</option>)}
         </select>
         <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="gp-input" style={{ width: 140 }} />
         <input value={filterQ} onChange={e => setFilterQ(e.target.value)} placeholder="Search reports…" className="gp-input" style={{ flex: 1, minWidth: 160 }} />
