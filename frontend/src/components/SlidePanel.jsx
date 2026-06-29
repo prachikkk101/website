@@ -32,13 +32,14 @@ export function Field({ label, required, error, children }) {
   );
 }
 
-export function Input({ error, ...props }) {
+export function Input({ error, style, ...props }) {
   return (
     <input
       style={{
         ...fieldStyle,
         borderColor: error ? '#ef4444' : '#d1d5db',
         boxShadow: error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none',
+        ...style,
       }}
       onFocus={e => { e.target.style.borderColor = error ? '#ef4444' : '#2d6a27'; e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)'; }}
       onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#d1d5db'; e.target.style.boxShadow = error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none'; }}
@@ -47,7 +48,7 @@ export function Input({ error, ...props }) {
   );
 }
 
-export function Select({ error, children, ...props }) {
+export function Select({ error, style, children, ...props }) {
   return (
     <select
       style={{
@@ -55,6 +56,7 @@ export function Select({ error, children, ...props }) {
         background: '#fff',
         cursor: 'pointer',
         borderColor: error ? '#ef4444' : '#d1d5db',
+        ...style,
       }}
       onFocus={e => { e.target.style.borderColor = '#2d6a27'; e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)'; }}
       onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#d1d5db'; e.target.style.boxShadow = 'none'; }}
@@ -65,12 +67,13 @@ export function Select({ error, children, ...props }) {
   );
 }
 
-export function Textarea({ error, ...props }) {
+export function Textarea({ error, style, ...props }) {
   return (
     <textarea
       style={{
         ...fieldStyle, height: 72, padding: '8px 10px', resize: 'vertical',
         borderColor: error ? '#ef4444' : '#d1d5db',
+        ...style,
       }}
       onFocus={e => { e.target.style.borderColor = '#2d6a27'; e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)'; }}
       onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#d1d5db'; e.target.style.boxShadow = 'none'; }}

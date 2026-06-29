@@ -131,43 +131,7 @@ export default function Layout() {
               PNG Connections
             </NavLink>
 
-            {/* Site selector — 3 cascading dropdowns inline */}
-            {showSiteSelector && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth="2" style={{ marginRight: 2, flexShrink: 0 }}>
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>
-                </svg>
-                {/* GA Location */}
-                <select
-                  value={selGA}
-                  onChange={e => setSelGA(e.target.value)}
-                  style={{ width: 130, height: 28, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: 11, padding: '0 6px', borderRadius: 4, cursor: 'pointer', outline: 'none' }}
-                >
-                  <option value="all" style={{ background: '#1f4e1a' }}>All GA</option>
-                  {mergedGAs.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
-                </select>
-                {/* City */}
-                <select
-                  value={selCity}
-                  onChange={e => setSelCity(e.target.value)}
-                  disabled={selGA === 'all'}
-                  style={{ width: 120, height: 28, background: selGA === 'all' ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: selGA === 'all' ? 'rgba(255,255,255,0.35)' : '#fff', fontSize: 11, padding: '0 6px', borderRadius: 4, cursor: selGA === 'all' ? 'default' : 'pointer', outline: 'none' }}
-                >
-                  <option value="all" style={{ background: '#1f4e1a' }}>All Cities</option>
-                  {getCitiesForGA(selGA).map(c => <option key={c.id} value={c.id} style={{ background: '#1f4e1a' }}>{c.label}</option>)}
-                </select>
-                {/* Area */}
-                <select
-                  value={selArea}
-                  onChange={e => setSelArea(e.target.value)}
-                  disabled={selCity === 'all'}
-                  style={{ width: 120, height: 28, background: selCity === 'all' ? 'rgba(0,0,0,0.1)' : 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: selCity === 'all' ? 'rgba(255,255,255,0.35)' : '#fff', fontSize: 11, padding: '0 6px', borderRadius: 4, cursor: selCity === 'all' ? 'default' : 'pointer', outline: 'none' }}
-                >
-                  <option value="all" style={{ background: '#1f4e1a' }}>All Areas</option>
-                  {getAreasForCity(selCity).map(a => <option key={a} value={a} style={{ background: '#1f4e1a' }}>{a}</option>)}
-                </select>
-              </div>
-            )}
+
 
             {/* Remaining nav tabs */}
             {[
@@ -275,34 +239,6 @@ export default function Layout() {
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>🔥 GP-PMS Menu</span>
           <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>✕</button>
         </div>
-
-        {/* Site selector in menu */}
-        {showSiteSelector && (
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
-            <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 6 }}>Site Filter</label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <select value={selGA} onChange={e => setSelGA(e.target.value)}
-                style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
-                <option value="all" style={{ background: '#1f4e1a' }}>All GA Locations</option>
-                {mergedGAs.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
-              </select>
-              {selGA !== 'all' && (
-                <select value={selCity} onChange={e => setSelCity(e.target.value)}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
-                  <option value="all" style={{ background: '#1f4e1a' }}>All Cities</option>
-                  {getCitiesForGA(selGA).map(c => <option key={c.id} value={c.id} style={{ background: '#1f4e1a' }}>{c.label}</option>)}
-                </select>
-              )}
-              {selCity !== 'all' && (
-                <select value={selArea} onChange={e => setSelArea(e.target.value)}
-                  style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
-                  <option value="all" style={{ background: '#1f4e1a' }}>All Areas</option>
-                  {getAreasForCity(selCity).map(a => <option key={a} value={a} style={{ background: '#1f4e1a' }}>{a}</option>)}
-                </select>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Nav items */}
         {navItems.map(item => (

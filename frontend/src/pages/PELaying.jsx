@@ -5,7 +5,6 @@ import { exportPELaying } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/SlidePanel';
 import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
-import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
 
 function initStore(key, defaults) {
   try {
@@ -20,6 +19,25 @@ const todayStr = () => new Date().toISOString().split('T')[0];
 // Work Status
 const WK_STATUSES = ['Laying', 'Testing & Flushing', 'Commissioning'];
 const CONN_TYPES  = ['Domestic', 'Commercial', 'Industrial'];
+
+const DEFAULT_COLS = [
+  { key: 'layDate',    label: 'Laying Date' },
+  { key: 'area',       label: 'Area' },
+  { key: 'coil',       label: 'Coil/Batch No.' },
+  { key: 'd32oc',      label: 'Ø32 Laying' },
+  { key: 'd32b',       label: 'Ø32 Boring' },
+  { key: 'd32hdd',     label: 'Ø32 HDD' },
+  { key: 'd63oc',      label: 'Ø63 Laying' },
+  { key: 'd63b',       label: 'Ø63 Boring' },
+  { key: 'd63hdd',     label: 'Ø63 HDD' },
+  { key: 'd90oc',      label: 'Ø90 Laying' },
+  { key: 'd90b',       label: 'Ø90 Boring' },
+  { key: 'd90hdd',     label: 'Ø90 HDD' },
+  { key: 'd125oc',     label: 'Ø125 Laying' },
+  { key: 'd125b',      label: 'Ø125 Boring' },
+  { key: 'd125hdd',    label: 'Ø125 HDD' },
+  { key: 'workStatus', label: 'Work Status' },
+];
 
 const EMPTY_ENTRY = {
   layDate: '', connType: 'Domestic', area: '', coil: '',
@@ -57,7 +75,23 @@ export default function PELaying() {
   const [errors,    setErrors]      = useState({});
 
   const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
-  const n = (key, val) => setForm(prev => ({ ...prev, [key]: Number(val) || 0 }));
+
+  // Custom and hidden columns state
+  const [customCols, setCustomCols] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gppms_custom_columns_pelaying') || '[]'); } catch { return []; }
+  });
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_pelaying') || '[]'); } catch { return []; }
+  });
+  const [showColManager, setShowColManager] = useState(false);
+
+  function toggleColVisibility(key) {
+    const updated = hiddenCols.includes(key)
+      ? hiddenCols.filter(k => k !== key)
+      : [...hiddenCols, key];
+    setHiddenCols(updated);
+    localStorage.setItem('gppms_hidden_cols_pelaying', JSON.stringify(updated));
+  }
 
   // ── KPI totals (all data) ──
   const kpiTotals = useMemo(() => allData.reduce((acc, r) => ({
@@ -105,14 +139,16 @@ export default function PELaying() {
 
   function openAddPanel() {
     setEditingId(null);
-    setForm(EMPTY_ENTRY);
+    const initForm = { ...EMPTY_ENTRY };
+    customCols.forEach(c => { initForm[c.key] = ''; });
+    setForm(initForm);
     setErrors({});
     setPanelOpen(true);
   }
 
   function openEditPanel(row) {
     setEditingId(row.id || row.sr);
-    setForm({
+    const initForm = {
       layDate:    row.layDate    || '',
       connType:   row.connType   || 'Domestic',
       area:       row.area       || '',
@@ -130,7 +166,9 @@ export default function PELaying() {
       d125b:      row.d125b  != null && row.d125b  !== 0 ? row.d125b  : '',
       d125hdd:    row.d125hdd != null && row.d125hdd !== 0 ? row.d125hdd : '',
       workStatus: row.workStatus || 'Laying',
-    });
+    };
+    customCols.forEach(c => { initForm[c.key] = row[c.key] || ''; });
+    setForm(initForm);
     setErrors({});
     setPanelOpen(true);
   }
@@ -151,6 +189,7 @@ export default function PELaying() {
       d125oc:  Number(form.d125oc)  || 0,
       d125b:   Number(form.d125b)   || 0,
       d125hdd: Number(form.d125hdd) || 0,
+      ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
     };
     let updated;
     if (editingId !== null) {
@@ -185,6 +224,7 @@ export default function PELaying() {
   const d63Total  = (Number(form.d63oc)  || 0) + (Number(form.d63b)  || 0) + (Number(form.d63hdd)  || 0);
   const d90Total  = (Number(form.d90oc)  || 0) + (Number(form.d90b)  || 0) + (Number(form.d90hdd)  || 0);
   const d125Total = (Number(form.d125oc) || 0) + (Number(form.d125b) || 0) + (Number(form.d125hdd) || 0);
+
   const num = v => {
     const n = Number(v);
     return n > 0 ? n : <span style={{ color: '#cbd5e1' }}>—</span>;
@@ -192,16 +232,22 @@ export default function PELaying() {
 
   return (
     <div>
-      {/* Title + Add button */}
+      {/* Title + Action buttons */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f4e1a', margin: 0 }}>PE Laying — Pipeline Progress</h1>
-        <button onClick={openAddPanel}
-          style={{ height: 34, background: '#1f4e1a', color: '#fff', border: 'none', borderRadius: 5, padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-          </svg>
-          + Add Laying Entry
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button onClick={() => setShowColManager(true)}
+            style={{ height: 34, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 5, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            ⚙ Manage Columns
+          </button>
+          <button onClick={openAddPanel}
+            style={{ height: 34, background: '#1f4e1a', color: '#fff', border: 'none', borderRadius: 5, padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            + Add Laying Entry
+          </button>
+        </div>
       </div>
 
       {/* KPI Summary Row — recalculated from data */}
@@ -259,28 +305,29 @@ export default function PELaying() {
             <thead>
               <tr>
                 <th style={{ width: 40 }}>Sr.</th>
-                <th>Laying Date</th>
-                <th>Area</th>
-                <th>Coil/Batch No.</th>
-                <th style={{ textAlign: 'right' }}>Ø32 Laying</th>
-                <th style={{ textAlign: 'right' }}>Ø32 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø32 HDD</th>
-                <th style={{ textAlign: 'right' }}>Ø63 Laying</th>
-                <th style={{ textAlign: 'right' }}>Ø63 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø63 HDD</th>
-                <th style={{ textAlign: 'right' }}>Ø90 Laying</th>
-                <th style={{ textAlign: 'right' }}>Ø90 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø90 HDD</th>
-                <th style={{ textAlign: 'right' }}>Ø125 Laying</th>
-                <th style={{ textAlign: 'right' }}>Ø125 Boring</th>
-                <th style={{ textAlign: 'right' }}>Ø125 HDD</th>
-                <th>Work Status</th>
+                {!hiddenCols.includes('layDate') && <th>Laying Date</th>}
+                {!hiddenCols.includes('area') && <th>Area</th>}
+                {!hiddenCols.includes('coil') && <th>Coil/Batch No.</th>}
+                {!hiddenCols.includes('d32oc') && <th style={{ textAlign: 'right' }}>Ø32 Laying</th>}
+                {!hiddenCols.includes('d32b') && <th style={{ textAlign: 'right' }}>Ø32 Boring</th>}
+                {!hiddenCols.includes('d32hdd') && <th style={{ textAlign: 'right' }}>Ø32 HDD</th>}
+                {!hiddenCols.includes('d63oc') && <th style={{ textAlign: 'right' }}>Ø63 Laying</th>}
+                {!hiddenCols.includes('d63b') && <th style={{ textAlign: 'right' }}>Ø63 Boring</th>}
+                {!hiddenCols.includes('d63hdd') && <th style={{ textAlign: 'right' }}>Ø63 HDD</th>}
+                {!hiddenCols.includes('d90oc') && <th style={{ textAlign: 'right' }}>Ø90 Laying</th>}
+                {!hiddenCols.includes('d90b') && <th style={{ textAlign: 'right' }}>Ø90 Boring</th>}
+                {!hiddenCols.includes('d90hdd') && <th style={{ textAlign: 'right' }}>Ø90 HDD</th>}
+                {!hiddenCols.includes('d125oc') && <th style={{ textAlign: 'right' }}>Ø125 Laying</th>}
+                {!hiddenCols.includes('d125b') && <th style={{ textAlign: 'right' }}>Ø125 Boring</th>}
+                {!hiddenCols.includes('d125hdd') && <th style={{ textAlign: 'right' }}>Ø125 HDD</th>}
+                {!hiddenCols.includes('workStatus') && <th>Work Status</th>}
+                {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <th key={col.key}>{col.label}</th>)}
                 <th style={{ width: 40 }}>✏</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={18} style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                <tr><td colSpan={18 + customCols.length} style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
                   <div style={{ fontSize: 32 }}>🚧</div>
                   <div style={{ marginTop: 8 }}>No {activeTab} entries found</div>
                 </td></tr>
@@ -289,28 +336,31 @@ export default function PELaying() {
                 return (
                   <tr key={r.id || r.sr}>
                     <td style={{ textAlign: 'center', color: '#94a3b8' }}>{idx + 1}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>
-                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coil || '—'}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32hdd)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90hdd)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125oc)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125b)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125hdd)}</td>
-                    <td>
-                      {r.workStatus && r.workStatus !== 'Laying' ? (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: r.workStatus === 'Commissioning' ? '#dcfce7' : '#dbeafe', color: wsColor }}>{r.workStatus}</span>
-                      ) : r.workStatus === 'Laying' ? (
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#f0f7ee', color: '#2d6a27' }}>Laying</span>
-                      ) : <span style={{ color: '#cbd5e1' }}>—</span>}
-                    </td>
+                    {!hiddenCols.includes('layDate') && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>}
+                    {!hiddenCols.includes('area') && <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>}
+                    {!hiddenCols.includes('coil') && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coil || '—'}</td>}
+                    {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>}
+                    {!hiddenCols.includes('d32b') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>}
+                    {!hiddenCols.includes('d32hdd') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32hdd)}</td>}
+                    {!hiddenCols.includes('d63oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc)}</td>}
+                    {!hiddenCols.includes('d63b') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b)}</td>}
+                    {!hiddenCols.includes('d63hdd') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd)}</td>}
+                    {!hiddenCols.includes('d90oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90oc)}</td>}
+                    {!hiddenCols.includes('d90b') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90b)}</td>}
+                    {!hiddenCols.includes('d90hdd') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90hdd)}</td>}
+                    {!hiddenCols.includes('d125oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125oc)}</td>}
+                    {!hiddenCols.includes('d125b') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125b)}</td>}
+                    {!hiddenCols.includes('d125hdd') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125hdd)}</td>}
+                    {!hiddenCols.includes('workStatus') && (
+                      <td>
+                        {r.workStatus && r.workStatus !== 'Laying' ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: r.workStatus === 'Commissioning' ? '#dcfce7' : '#dbeafe', color: wsColor }}>{r.workStatus}</span>
+                        ) : r.workStatus === 'Laying' ? (
+                          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#f0f7ee', color: '#2d6a27' }}>Laying</span>
+                        ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                    )}
+                    {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{r[col.key] || '—'}</td>)}
                     <td style={{ textAlign: 'center' }}>
                       <button onClick={() => openEditPanel(r)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: '#2d6a27', padding: 2 }} title="Edit entry">✏</button>
@@ -322,20 +372,22 @@ export default function PELaying() {
               {/* Totals row */}
               {filtered.length > 0 && (
                 <tr style={{ background: '#f0f7ee' }}>
-                  <td colSpan={4} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32hdd}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63oc}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63b}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63hdd}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90oc}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90b}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90hdd}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125oc}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125b}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125hdd}</td>
-                  <td colSpan={2} />
+                  <td colSpan={1 + (!hiddenCols.includes('layDate')?1:0) + (!hiddenCols.includes('area')?1:0) + (!hiddenCols.includes('coil')?1:0)} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
+                  {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>}
+                  {!hiddenCols.includes('d32b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>}
+                  {!hiddenCols.includes('d32hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32hdd}</td>}
+                  {!hiddenCols.includes('d63oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63oc}</td>}
+                  {!hiddenCols.includes('d63b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63b}</td>}
+                  {!hiddenCols.includes('d63hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63hdd}</td>}
+                  {!hiddenCols.includes('d90oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90oc}</td>}
+                  {!hiddenCols.includes('d90b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90b}</td>}
+                  {!hiddenCols.includes('d90hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90hdd}</td>}
+                  {!hiddenCols.includes('d125oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125oc}</td>}
+                  {!hiddenCols.includes('d125b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125b}</td>}
+                  {!hiddenCols.includes('d125hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125hdd}</td>}
+                  {!hiddenCols.includes('workStatus') && <td />}
+                  {customCols.filter(col => !hiddenCols.includes(col.key)).map(col => <td key={col.key} />)}
+                  <td />
                 </tr>
               )}
             </tbody>
@@ -378,74 +430,57 @@ export default function PELaying() {
 
         <div>
           <SectionTitle>Pipe Quantities (metres)</SectionTitle>
-          {/* Ø32mm */}
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø32mm</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-            <Field label="Open Cut / Laying">
-              <Input type="number" min={0} value={form.d32oc} onChange={e => n('d32oc', e.target.value)} />
-            </Field>
-            <Field label="Boring">
-              <Input type="number" min={0} value={form.d32b} onChange={e => n('d32b', e.target.value)} />
-            </Field>
-            <Field label="HDD">
-              <Input type="number" min={0} value={form.d32hdd} onChange={e => n('d32hdd', e.target.value)} />
-            </Field>
-            <Field label="Total (auto)">
-              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d32Total}</div>
-            </Field>
-          </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr 1fr', gap: '8px 10px', alignItems: 'center', marginTop: 10 }}>
+            {/* Row 1: Headers */}
+            <div />
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Laying</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Boring</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>HDD</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Total</div>
 
-          {/* Ø63mm */}
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø63mm</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-            <Field label="Open Cut / Laying">
-              <Input type="number" min={0} value={form.d63oc} onChange={e => n('d63oc', e.target.value)} />
-            </Field>
-            <Field label="Boring">
-              <Input type="number" min={0} value={form.d63b} onChange={e => n('d63b', e.target.value)} />
-            </Field>
-            <Field label="HDD">
-              <Input type="number" min={0} value={form.d63hdd} onChange={e => n('d63hdd', e.target.value)} />
-            </Field>
-            <Field label="Total (auto)">
-              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d63Total}</div>
-            </Field>
-          </div>
+            {/* Row 2: Ø32 */}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø32mm</div>
+            <Input type="number" min={0} value={form.d32oc} onChange={e => f('d32oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d32b} onChange={e => f('d32b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d32hdd} onChange={e => f('d32hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d32Total}</div>
 
-          {/* Ø90mm */}
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø90mm</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
-            <Field label="Open Cut / Laying">
-              <Input type="number" min={0} value={form.d90oc} onChange={e => f('d90oc', e.target.value)} />
-            </Field>
-            <Field label="Boring">
-              <Input type="number" min={0} value={form.d90b} onChange={e => f('d90b', e.target.value)} />
-            </Field>
-            <Field label="HDD">
-              <Input type="number" min={0} value={form.d90hdd} onChange={e => f('d90hdd', e.target.value)} />
-            </Field>
-            <Field label="Total (auto)">
-              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d90Total}</div>
-            </Field>
-          </div>
+            {/* Row 3: Ø63 */}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø63mm</div>
+            <Input type="number" min={0} value={form.d63oc} onChange={e => f('d63oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d63b} onChange={e => f('d63b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d63hdd} onChange={e => f('d63hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d63Total}</div>
 
-          {/* Ø125mm */}
-          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø125mm</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-            <Field label="Open Cut / Laying">
-              <Input type="number" min={0} value={form.d125oc} onChange={e => f('d125oc', e.target.value)} />
-            </Field>
-            <Field label="Boring">
-              <Input type="number" min={0} value={form.d125b} onChange={e => f('d125b', e.target.value)} />
-            </Field>
-            <Field label="HDD">
-              <Input type="number" min={0} value={form.d125hdd} onChange={e => f('d125hdd', e.target.value)} />
-            </Field>
-            <Field label="Total (auto)">
-              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d125Total}</div>
-            </Field>
+            {/* Row 4: Ø90 */}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø90mm</div>
+            <Input type="number" min={0} value={form.d90oc} onChange={e => f('d90oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d90b} onChange={e => f('d90b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d90hdd} onChange={e => f('d90hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d90Total}</div>
+
+            {/* Row 5: Ø125 */}
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø125mm</div>
+            <Input type="number" min={0} value={form.d125oc} onChange={e => f('d125oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d125b} onChange={e => f('d125b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d125hdd} onChange={e => f('d125hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d125Total}</div>
           </div>
         </div>
+
+        {customCols.length > 0 && (
+          <div style={{ marginTop: 16 }}>
+            <SectionTitle>Additional Information</SectionTitle>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {customCols.map(col => (
+                <Field key={col.key} label={col.label}>
+                  <Input value={form[col.key] || ''} onChange={e => f(col.key, e.target.value)} />
+                </Field>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Delete button for edit mode */}
         {editingId !== null && (
@@ -471,6 +506,82 @@ export default function PELaying() {
               <button onClick={() => setShowDelete(false)} style={{ flex: 1, height: 38, background: '#f1f5f9', border: '1px solid #d1d5db', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#374151' }}>Cancel</button>
               <button onClick={handleDelete} style={{ flex: 1, height: 38, background: '#c0440a', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', color: '#fff' }}>Yes, Delete</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Column Manager Modal ── */}
+      {showColManager && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}
+          onClick={() => setShowColManager(false)}>
+          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:420, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', maxHeight:'85vh', overflowY:'auto', margin:'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:18 }}>
+              <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:'#1f4e1a' }}>⚙ Manage Columns</h3>
+              <button onClick={() => setShowColManager(false)}
+                style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#64748b', lineHeight:1 }}>×</button>
+            </div>
+            <p style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>Toggle columns on/off. Hidden columns are saved for your session.</p>
+
+            <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Built-in Columns</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+              {DEFAULT_COLS.map(col => (
+                <label key={col.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#f0f7ee', cursor:'pointer', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#bbf7d0' }}>
+                  <input type="checkbox" checked={!hiddenCols.includes(col.key)}
+                    onChange={() => toggleColVisibility(col.key)}
+                    style={{ accentColor:'#2d6a27', width:15, height:15 }} />
+                  <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#1f4e1a', flex:1 }}>{col.label}</span>
+                  {hiddenCols.includes(col.key) && <span style={{ fontSize:10, color:'#94a3b8', background:'#f1f5f9', padding:'1px 6px', borderRadius:4 }}>hidden</span>}
+                </label>
+              ))}
+            </div>
+
+            {customCols.length > 0 && (
+              <>
+                <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Custom Columns</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+                  {customCols.map(col => (
+                    <div key={col.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#fefce8', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#fde68a' }}>
+                      <input type="checkbox" checked={!hiddenCols.includes(col.key)}
+                        onChange={() => toggleColVisibility(col.key)}
+                        style={{ accentColor:'#2d6a27', width:15, height:15 }} />
+                      <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#92400e', flex:1 }}>{col.label}</span>
+                      <button onClick={() => {
+                        const updated = customCols.filter(c => c.key !== col.key);
+                        setCustomCols(updated);
+                        localStorage.setItem('gppms_custom_columns_pelaying', JSON.stringify(updated));
+                        setHiddenCols(prev => prev.filter(k => k !== col.key));
+                        showToast(`Column "${col.label}" deleted`);
+                      }} title="Delete this column permanently"
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:4, width:26, height:26, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Add New Column</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <input id="newColInputPL" placeholder="Column name..."
+                  style={{ flex:1, height:34, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13 }} />
+                <button onClick={() => {
+                  const val = document.getElementById('newColInputPL')?.value?.trim();
+                  if (!val) return;
+                  const newCol = { key: 'custom_' + Date.now(), label: val };
+                  const updated = [...customCols, newCol];
+                  setCustomCols(updated);
+                  localStorage.setItem('gppms_custom_columns_pelaying', JSON.stringify(updated));
+                  document.getElementById('newColInputPL').value = '';
+                  showToast(`✓ Column "${val}" added`);
+                }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
+              </div>
+            </div>
+
+            <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_pelaying'); showToast('All columns visible'); }}
+              style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              ↺ Reset — Show All Columns
+            </button>
           </div>
         </div>
       )}

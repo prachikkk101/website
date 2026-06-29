@@ -548,6 +548,24 @@ export default function Inventory() {
               </>
             )}
 
+            <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:14 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Add New Column</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <input id="newColInputInv" placeholder="Column name..."
+                  style={{ flex:1, height:34, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13 }} />
+                <button onClick={() => {
+                  const val = document.getElementById('newColInputInv')?.value?.trim();
+                  if (!val) return;
+                  const newCol = { key: 'custom_' + Date.now(), label: val };
+                  const updated = [...customCols, newCol];
+                  setCustomCols(updated);
+                  localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+                  document.getElementById('newColInputInv').value = '';
+                  showToast(`✓ Column "${val}" added`);
+                }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
+              </div>
+            </div>
+
             <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_inventory'); showToast('All columns visible'); }}
               style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
               ↺ Reset — Show All Columns

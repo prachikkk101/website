@@ -103,12 +103,12 @@ const EMPTY_FORM_BASE = {
   acctType:'Domestic', houseNo:'', floor:'GF', address1:'', area:'', city:'',
   gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', saralStatus:'—',
   plumbingDate:'', gcLen:'', giLen:'', tf:'', iv:'',
-  meterNo:'', meterDate:'', meterMake:'Select', meterReading:0, side:'LHS', meterPhotoFile:null,
+  meterNo:'', meterDate:'', meterMake:'Select', meterReading:'', side:'LHS', meterPhotoFile:null,
 };
 
 function makeEmptyForm(matList) {
   const base = { ...EMPTY_FORM_BASE };
-  matList.forEach(m => { base[m.key] = 0; });
+  matList.forEach(m => { base[m.key] = ''; });
   return base;
 }
 
@@ -400,11 +400,14 @@ export default function HouseTable() {
       plumbingDate: h.plumbingDate || '', gcLen: h.gcLen || '',
       giLen: h.giLen || '', tf: h.tf || '', iv: h.iv || '',
       meterNo: h.meterNo || '', meterDate: h.meterDate || '',
-      meterMake: h.meterMake || 'Select', meterReading: h.meterReading || 0,
+      meterMake: h.meterMake || 'Select', meterReading: h.meterReading != null && h.meterReading !== 0 ? h.meterReading : '',
       side: h.side || 'LHS',
     };
     // Restore material quantities from saved entry
-    matList.forEach(m => { initForm[m.key] = 0; }); // reset to 0
+    matList.forEach(m => {
+      const saved = h.materialsUsed?.[m.label];
+      initForm[m.key] = saved && saved.qty !== 0 ? saved.qty : '';
+    });
 
     customCols.forEach(c => { initForm[c.key] = h[c.key] || ''; });
     setForm(initForm);
@@ -462,6 +465,9 @@ export default function HouseTable() {
               photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
               photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
               photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+              materialsUsed,
+              customMaterials: customMaterials.filter(m => m.label.trim()),
+              hiddenMaterials,
               ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
               updatedAt: new Date().toISOString(),
             }
@@ -670,7 +676,7 @@ export default function HouseTable() {
               <div key={mat.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{mat.label}</label>
                 <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{mat.unit}</span>
-                <input type="number" min={0} value={form[mat.key] || 0} onChange={e => f(mat.key, Number(e.target.value))}
+                <input type="number" min={0} value={form[mat.key] !== undefined && form[mat.key] !== null ? form[mat.key] : ''} onChange={e => f(mat.key, e.target.value === '' ? '' : Number(e.target.value))}
                   style={{ width: 72, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }} />
                 {/* × hide for this entry only */}
                 <button type="button"
@@ -831,9 +837,9 @@ export default function HouseTable() {
               ) : paged.map((h, index) => (
                 <tr key={h.id}>
                   <td style={{ textAlign: 'center', color: '#94a3b8' }}>{(page - 1) * PAGE_SIZE + index + 1}</td>
-                  {!hiddenCols.includes('appNo')      && <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: '#1f4e1a' }}>{h.appNo || '—'}</td>}
                   {!hiddenCols.includes('acct')       && <td style={{ fontSize: 11, color: '#64748b' }}>{h.acctType}</td>}
                   {!hiddenCols.includes('bpNo')       && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.bpNo || '—'}</td>}
+                  {!hiddenCols.includes('appNo')      && <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: '#1f4e1a' }}>{h.appNo || '—'}</td>}
                   {!hiddenCols.includes('name')       && <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h.name}</td>}
                   {!hiddenCols.includes('mobile')     && <td style={{ whiteSpace: 'nowrap' }}>{h.mobile}</td>}
                   {!hiddenCols.includes('houseNo')    && <td style={{ whiteSpace: 'nowrap' }}>{h.houseNo}{h.floor && h.floor !== 'GF' ? <span style={{ fontSize: 10, color: '#2d6a27', marginLeft: 4, fontWeight: 600 }}>{h.floor}</span> : null}</td>}
