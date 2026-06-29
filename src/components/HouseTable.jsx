@@ -8,6 +8,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
+import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
 
 /* ── Helpers ── */
 function initStore(key, defaults) {
@@ -56,11 +57,13 @@ const METER_MAKES   = ['Select','Itron','Elster','Honeywell','Landis+Gyr'];
 
 // All default/built-in columns — user can hide any of these
 const DEFAULT_COLS = [
+  { key: 'appNo',     label: 'App No.' },
   { key: 'acct',      label: 'Acct' },
   { key: 'bpNo',      label: 'BP No.' },
   { key: 'name',      label: 'Name' },
   { key: 'mobile',    label: 'Mobile' },
   { key: 'houseNo',   label: 'House No.' },
+  { key: 'floor',     label: 'Floor' },
   { key: 'area',      label: 'Area' },
   { key: 'city',      label: 'City' },
   { key: 'meterNo',   label: 'Meter No.' },
@@ -92,9 +95,12 @@ function loadMatList() {
   } catch { return DEFAULT_MATERIALS; }
 }
 
+const FLOORS = ['GF', 'FF', 'SF', 'TF', 'FoF'];
+const FLOOR_LABELS_MAP = { GF: 'Ground Floor', FF: 'First Floor', SF: 'Second Floor', TF: 'Third Floor', FoF: 'Fourth Floor' };
+
 const EMPTY_FORM_BASE = {
   bpNo:'', appNo:'', name:'', mobile:'', altMobile:'',
-  acctType:'Domestic', houseNo:'', address1:'', area:'', city:'',
+  acctType:'Domestic', houseNo:'', floor:'GF', address1:'', area:'', city:'',
   gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', saralStatus:'—',
   plumbingDate:'', gcLen:'', giLen:'', tf:'', iv:'',
   meterNo:'', meterDate:'', meterMake:'Select', meterReading:0, side:'LHS', meterPhotoFile:null,
@@ -130,7 +136,7 @@ function ConfirmDelete({ onConfirm, onCancel }) {
 export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { selectedSite } = useSite();
+  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite } = useSite();
   const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
 
@@ -152,9 +158,12 @@ export default function HouseTable() {
   const canWrite     = !isViewOnly;
 
   const [filterAcct, setFilterAcct] = useState('');
-  const [filterArea, setFilterArea] = useState('');
   const [filterBP,   setFilterBP]   = useState('');
   const [page,       setPage]       = useState(1);
+  // 3-level filter (local to table, independent of navbar)
+  const [tFilterGA,   setTFilterGA]   = useState('all');
+  const [tFilterCity, setTFilterCity] = useState('all');
+  const [tFilterArea, setTFilterArea] = useState('all');
   const [modalHouse, setModalHouse] = useState(null);
 
   // Export state — default from 2020 to capture all historical data
@@ -271,10 +280,23 @@ export default function HouseTable() {
 
   const filtered = useMemo(() => (allHouses || []).filter(h => {
     if (filterAcct && h.acctType !== filterAcct) return false;
-    if (filterArea && h.area    !== filterArea)  return false;
-    if (filterBP   && !String(h.bpNo || '').includes(filterBP)) return false;
+    if (filterBP   && !String(h.bpNo || '').toLowerCase().includes(filterBP.toLowerCase()) &&
+                      !String(h.appNo || '').toLowerCase().includes(filterBP.toLowerCase())) return false;
+    // 3-level location filter
+    if (tFilterArea !== 'all' && h.area !== tFilterArea) return false;
+    if (tFilterCity !== 'all') {
+      const cityAreas = getAreasForCity(tFilterCity);
+      if (cityAreas.length > 0 && !cityAreas.includes(h.area)) return false;
+    }
+    if (tFilterGA !== 'all') {
+      const ga = gaLocations.find(g => g.id === tFilterGA);
+      if (ga) {
+        const allGaAreas = ga.cities.flatMap(c => c.areas);
+        if (allGaAreas.length > 0 && !allGaAreas.includes(h.area)) return false;
+      }
+    }
     return true;
-  }), [allHouses, filterAcct, filterArea, filterBP]);
+  }), [allHouses, filterAcct, filterBP, tFilterGA, tFilterCity, tFilterArea]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
   const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -370,7 +392,8 @@ export default function HouseTable() {
       bpNo: h.bpNo || '', appNo: h.appNo || '', name: h.name || '',
       mobile: h.mobile || '', altMobile: h.altMobile || '',
       acctType: h.acctType || 'Domestic',
-      houseNo: h.houseNo || '', address1: h.address1 || '',
+      houseNo: h.houseNo || '', floor: h.floor || 'GF',
+      address1: h.address1 || '',
       area: h.area || 'UE-II', city: h.city || 'HISAR',
       gcStatus: h.gcStatus || '—', giStatus: h.giStatus || '—',
       rfc: h.rfc || '—', ngStatus: h.ngStatus || '—', saralStatus: h.saralStatus || '—',
@@ -429,7 +452,7 @@ export default function HouseTable() {
               ...h,
               bpNo: form.bpNo, appNo: form.appNo, name: form.name,
               mobile: form.mobile, altMobile: form.altMobile,
-              acctType: form.acctType, houseNo: form.houseNo,
+              acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
               address1: form.address1, area: form.area, city: form.city,
               gcStatus: form.gcStatus, giStatus: form.giStatus,
               rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
@@ -453,7 +476,7 @@ export default function HouseTable() {
       const newEntry = {
         id: Date.now(), bpNo: form.bpNo, name: form.name, mobile: form.mobile,
         appNo: form.appNo, altMobile: form.altMobile,
-        acctType: form.acctType, houseNo: form.houseNo,
+        acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
         address1: form.address1, area: form.area, city: form.city,
         meterNo: form.meterNo, meterDate: form.meterDate,
         meterMake: form.meterMake, meterReading: form.meterReading,
@@ -540,7 +563,14 @@ export default function HouseTable() {
         <div>
           <SectionTitle>2. Address</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Field label="House No." required error={errors.houseNo}><Input value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="House No." required error={errors.houseNo}><Input value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
+              <Field label="Floor">
+                <Select value={form.floor || 'GF'} onChange={e => f('floor', e.target.value)}>
+                  {FLOORS.map(fl => <option key={fl} value={fl}>{fl} — {FLOOR_LABELS_MAP[fl]}</option>)}
+                </Select>
+              </Field>
+            </div>
             <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Area"><Select value={form.area} onChange={e => f('area', e.target.value)}>{(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}</Select></Field>
@@ -736,19 +766,32 @@ export default function HouseTable() {
         / <span style={{ color: '#dc2626', fontWeight: 600 }}>{exportPreview.pending} Pending</span>&nbsp;
         / {exportPreview.total} Total in selected range
       </p>
-          {/* Filter bar — Account Type, Area, BP Number */}
+          {/* Filter bar — 3-level location + Account Type + BP/App No */}
           <div className="card section-block" style={{ padding: '10px 14px' }}>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-              <select className="gp-select-dark" style={{ width: 160 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
-                <option value="">-- Account Type --</option>
+              {/* Account type */}
+              <select className="gp-select-dark" style={{ width: 140 }} value={filterAcct} onChange={e => { setFilterAcct(e.target.value); reset(); }}>
+                <option value="">All Types</option>
                 {ACCT_TYPES.map(a => <option key={a}>{a}</option>)}
               </select>
-              <select className="gp-select-dark" style={{ width: 160 }} value={filterArea} onChange={e => { setFilterArea(e.target.value); reset(); }}>
-                <option value="">All Areas</option>
-                {(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}
+              {/* GA Location */}
+              <select className="gp-select-dark" style={{ width: 130 }} value={tFilterGA} onChange={e => { setTFilterGA(e.target.value); setTFilterCity('all'); setTFilterArea('all'); reset(); }}>
+                <option value="all">All GA</option>
+                {gaLocations.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
               </select>
-              <input className="gp-input-dark" style={{ width: 130 }} placeholder="BP Number" value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
-              <button className="btn btn-primary" onClick={reset}>Search</button>
+              {/* City */}
+              <select className="gp-select-dark" style={{ width: 120 }} value={tFilterCity} disabled={tFilterGA === 'all'} onChange={e => { setTFilterCity(e.target.value); setTFilterArea('all'); reset(); }}>
+                <option value="all">All Cities</option>
+                {getCitiesForGA(tFilterGA).map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              </select>
+              {/* Area */}
+              <select className="gp-select-dark" style={{ width: 120 }} value={tFilterArea} disabled={tFilterCity === 'all'} onChange={e => { setTFilterArea(e.target.value); reset(); }}>
+                <option value="all">All Areas</option>
+                {getAreasForCity(tFilterCity).map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              {/* BP / App No search */}
+              <input className="gp-input-dark" style={{ width: 140 }} placeholder="BP / App No." value={filterBP} onChange={e => { setFilterBP(e.target.value); reset(); }} />
+              <button className="btn btn-primary" onClick={() => { setFilterAcct(''); setTFilterGA('all'); setTFilterCity('all'); setTFilterArea('all'); setFilterBP(''); reset(); }}>Clear</button>
             </div>
           </div>
 
@@ -786,11 +829,13 @@ export default function HouseTable() {
               ) : paged.map((h, index) => (
                 <tr key={h.id}>
                   <td style={{ textAlign: 'center', color: '#94a3b8' }}>{(page - 1) * PAGE_SIZE + index + 1}</td>
+                  {!hiddenCols.includes('appNo')      && <td style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 600, color: '#1f4e1a' }}>{h.appNo || '—'}</td>}
                   {!hiddenCols.includes('acct')       && <td style={{ fontSize: 11, color: '#64748b' }}>{h.acctType}</td>}
                   {!hiddenCols.includes('bpNo')       && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.bpNo || '—'}</td>}
                   {!hiddenCols.includes('name')       && <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{h.name}</td>}
                   {!hiddenCols.includes('mobile')     && <td style={{ whiteSpace: 'nowrap' }}>{h.mobile}</td>}
-                  {!hiddenCols.includes('houseNo')    && <td style={{ whiteSpace: 'nowrap' }}>{h.houseNo}</td>}
+                  {!hiddenCols.includes('houseNo')    && <td style={{ whiteSpace: 'nowrap' }}>{h.houseNo}{h.floor && h.floor !== 'GF' ? <span style={{ fontSize: 10, color: '#2d6a27', marginLeft: 4, fontWeight: 600 }}>{h.floor}</span> : null}</td>}
+                  {!hiddenCols.includes('floor')      && <td style={{ fontSize: 11, color: '#64748b' }}>{h.floor ? (FLOOR_LABELS_MAP[h.floor] || h.floor) : 'GF'}</td>}
                   {!hiddenCols.includes('area')       && <td>{h.area}</td>}
                   {!hiddenCols.includes('city')       && <td>{h.city}</td>}
                   {!hiddenCols.includes('meterNo')    && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.meterNo || '—'}</td>}

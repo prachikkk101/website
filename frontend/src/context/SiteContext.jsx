@@ -1,10 +1,8 @@
 // src/context/SiteContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
 
-/* ── Default GA Locations (seed data, matches Access.jsx) ── */
-const DEFAULT_SITES = [];
-
-/* ── Read all sites from localStorage (default + custom) ── */
+/* ── Read custom sites from localStorage ── */
 function loadSites() {
   try {
     const raw = localStorage.getItem('gppms_sites');
@@ -13,40 +11,72 @@ function loadSites() {
   } catch { return []; }
 }
 
-/* ── Build dropdown options from live sites ── */
-function buildOptions(siteList) {
-  return [
-    { value: 'all', label: 'GA Locations' },   // <-- renamed from "GA Dashboard"
-    ...siteList.map(s => ({ value: s.id, label: s.name })),
-  ];
-}
-
-/* ── Context ── */
+/* ── Context default ── */
 const SiteContext = createContext({
+  // 3-level selection
+  selGA:    'all',
+  selCity:  'all',
+  selArea:  'all',
+  setSelGA:   () => {},
+  setSelCity: () => {},
+  setSelArea: () => {},
+
+  // Legacy — kept for backward compat
   selectedSite:    'all',
   setSelectedSite: () => {},
-  siteOptions:     [{ value: 'all', label: 'GA Locations' }],
-  siteList:        DEFAULT_SITES,
+  siteOptions:     [],
+  siteList:        [],
 });
 
 export function SiteProvider({ children }) {
-  const [selectedSite,    setSelectedSite]    = useState('all');
-  const [siteList,        setSiteList]        = useState(() => loadSites());
+  // 3-level cascading state
+  const [selGA,   setSelGARaw]   = useState('all');
+  const [selCity, setSelCityRaw] = useState('all');
+  const [selArea, setSelAreaRaw] = useState('all');
 
-  // Re-sync whenever another tab or the Access page writes to localStorage
+  // Legacy single-dropdown (still used by older components)
+  const [selectedSite, setSelectedSite] = useState('all');
+
+  // Custom sites from localStorage (Access page)
+  const [siteList, setSiteList] = useState(() => loadSites());
+
   const syncSites = useCallback(() => setSiteList(loadSites()), []);
-
   useEffect(() => {
     window.addEventListener('storage', syncSites);
-    // Also re-read on mount in case Access already wrote new data
     syncSites();
     return () => window.removeEventListener('storage', syncSites);
   }, [syncSites]);
 
-  const siteOptions = buildOptions(siteList);
+  // Cascading setters — reset children when parent changes
+  function setSelGA(val) {
+    setSelGARaw(val);
+    setSelCityRaw('all');
+    setSelAreaRaw('all');
+    setSelectedSite(val); // keep legacy in sync
+  }
+
+  function setSelCity(val) {
+    setSelCityRaw(val);
+    setSelAreaRaw('all');
+  }
+
+  function setSelArea(val) {
+    setSelAreaRaw(val);
+  }
+
+  // Legacy options built from custom sites list
+  const siteOptions = [
+    { value: 'all', label: 'GA Locations' },
+    ...siteList.map(s => ({ value: s.id, label: s.name || s.label })),
+  ];
 
   return (
-    <SiteContext.Provider value={{ selectedSite, setSelectedSite, siteOptions, siteList }}>
+    <SiteContext.Provider value={{
+      selGA, selCity, selArea,
+      setSelGA, setSelCity, setSelArea,
+      selectedSite, setSelectedSite,
+      siteOptions, siteList,
+    }}>
       {children}
     </SiteContext.Provider>
   );
@@ -56,20 +86,48 @@ export function useSite() {
   return useContext(SiteContext);
 }
 
-/* ── useSiteAreas: returns areas for the selected site (or all merged areas) ── */
+/* ── useSiteAreas: areas visible in current 3-level selection ── */
 export function useSiteAreas() {
-  const { selectedSite, siteList } = useContext(SiteContext);
-  if (!selectedSite || selectedSite === 'all') {
-    // Merge all areas across all sites, deduplicated
-    const all = [];
-    siteList.forEach(s => (s.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
-    return all;
+  const { selGA, selCity, siteList } = useContext(SiteContext);
+
+  // If a city is selected, return its areas from the static hierarchy
+  if (selCity && selCity !== 'all') return getAreasForCity(selCity);
+
+  // If a GA is selected, merge areas of all its cities
+  if (selGA && selGA !== 'all') {
+    const ga = gaLocations.find(g => g.id === selGA);
+    if (ga) {
+      const all = [];
+      ga.cities.forEach(c => c.areas.forEach(a => { if (!all.includes(a)) all.push(a); }));
+      return all;
+    }
+    // Fall through to custom sites
+    const site = siteList.find(s => s.id === selGA);
+    if (site) {
+      // Custom 3-level sites
+      if (site.cities) {
+        const all = [];
+        site.cities.forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
+        return all;
+      }
+      return site.areas || [];
+    }
   }
-  const site = siteList.find(s => s.id === selectedSite);
-  return site?.areas || [];
+
+  // All areas across all static + custom sites
+  const all = [];
+  gaLocations.forEach(ga =>
+    ga.cities.forEach(c => c.areas.forEach(a => { if (!all.includes(a)) all.push(a); }))
+  );
+  siteList.forEach(s => {
+    if (s.cities) {
+      s.cities.forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
+    } else {
+      (s.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); });
+    }
+  });
+  return [...new Set(all)];
 }
 
-/* ── Legacy static export (kept for backwards compatibility with imports) ── */
-// Components that do: import { SITE_OPTIONS } from '../context/SiteContext'
-// now get the default seed — they should switch to useSite().siteOptions for live data
-export const SITE_OPTIONS = buildOptions(DEFAULT_SITES);
+/* ── Legacy static export ── */
+export const SITE_OPTIONS = [{ value: 'all', label: 'GA Locations' }];

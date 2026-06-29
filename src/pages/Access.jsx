@@ -46,15 +46,22 @@ export default function Access() {
   const [showModal, setShowModal] = useState(false);
   const [submitted, setSubmitted] = useState(false);
 
-  // GA Location form state
+  // GA Location form state — 3-level
   const [showLocModal, setShowLocModal] = useState(false);
   const [locName,      setLocName]      = useState('');
-  const [locContract,  setLocContract]  = useState('');
-  const [locZone,      setLocZone]      = useState('');
-  const [locDistrict,  setLocDistrict]  = useState('Ludhiana');
-  const [locCity,      setLocCity]      = useState('');
-  const [locAreas,     setLocAreas]     = useState('');
   const [locStatus,    setLocStatus]    = useState('Active');
+  // Cities array: [{ cityName: '', areasText: '' }]
+  const [locCities, setLocCities] = useState([{ cityName: '', areasText: '' }]);
+
+  function addCityRow() {
+    setLocCities(prev => [...prev, { cityName: '', areasText: '' }]);
+  }
+  function removeCityRow(idx) {
+    setLocCities(prev => prev.filter((_, i) => i !== idx));
+  }
+  function updateCityRow(idx, field, val) {
+    setLocCities(prev => prev.map((c, i) => i === idx ? { ...c, [field]: val } : c));
+  }
 
   // Request form state
   const [rName,   setRName]   = useState(session.name  || '');
@@ -117,24 +124,37 @@ export default function Access() {
     showToast(`${email} has been removed`);
   }
 
-  // ── Add GA Location ──
+  // ── Add GA Location (3-level) ──
   function handleAddLocation() {
     if (!locName.trim()) { showToast('\u26a0 Location name is required'); return; }
-    const areasArray = locAreas.split(',').map(a => a.trim()).filter(Boolean);
+    const citiesBuilt = locCities
+      .filter(c => c.cityName.trim())
+      .map((c, i) => ({
+        id: 'city_' + Date.now() + '_' + i,
+        label: c.cityName.trim(),
+        areas: c.areasText.split(',').map(a => a.trim()).filter(Boolean),
+      }));
+    if (citiesBuilt.length === 0) { showToast('\u26a0 Add at least one city'); return; }
     const newSite = {
       id: 'site_' + Date.now(),
-      name: locName.trim() + (locContract ? ' \u2014 ' + locContract : ''),
-      zone: locZone, district: locDistrict, city: locCity,
-      areas: areasArray, status: locStatus,
-      createdAt: new Date().toISOString(), createdBy: session.name || 'Admin',
+      name: locName.trim(),
+      label: locName.trim(),
+      cities: citiesBuilt,
+      // Flattened areas for backward compat
+      areas: citiesBuilt.flatMap(c => c.areas),
+      status: locStatus,
+      createdAt: new Date().toISOString(),
+      createdBy: session.name || 'Admin',
     };
     const updated = [...sites, newSite];
     setSites(updated);
     localStorage.setItem('gppms_sites', JSON.stringify(updated));
     window.dispatchEvent(new Event('storage'));
     setShowLocModal(false);
-    setLocName(''); setLocContract(''); setLocZone(''); setLocDistrict('Ludhiana'); setLocCity(''); setLocAreas(''); setLocStatus('Active');
-    showToast('\u2713 GA Location added \u2014 ' + newSite.name + ' is now available in the system');
+    setLocName('');
+    setLocStatus('Active');
+    setLocCities([{ cityName: '', areasText: '' }]);
+    showToast('\u2713 GA Location added \u2014 ' + newSite.name);
   }
 
   // ── Add Area to existing site ──
@@ -429,58 +449,63 @@ export default function Access() {
       {/* ── Add GA Location Modal ── */}
       {showLocModal && (
         <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16,overflowY:'auto' }}>
-          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:500,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden',margin:'auto' }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden',margin:'auto' }}>
             <div style={{ background:'#1f4e1a',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
               <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Add New GA Location</span>
               <button onClick={() => setShowLocModal(false)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
             </div>
-            <div style={{ padding:24, display:'flex', flexDirection:'column', gap:14, maxHeight:'70vh', overflowY:'auto' }}>
+            <div style={{ padding:24, display:'flex', flexDirection:'column', gap:14, maxHeight:'75vh', overflowY:'auto' }}>
+              {/* GA Location Name */}
               <div>
                 <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>GA Location Name *</label>
                 <input value={locName} onChange={e => setLocName(e.target.value)}
-                  placeholder="e.g. Ludhiana Zone-3"
+                  placeholder="e.g. Sirsa"
                   style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div>
-                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Contract Number</label>
-                  <input value={locContract} onChange={e => setLocContract(e.target.value)}
-                    placeholder="e.g. CA-12"
-                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Status</label>
-                  <select value={locStatus} onChange={e => setLocStatus(e.target.value)}
-                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,background:'#fff',boxSizing:'border-box' }}>
-                    <option>Active</option>
-                    <option>Inactive</option>
-                  </select>
-                </div>
-              </div>
+              {/* Status */}
               <div>
-                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Zone Details</label>
-                <input value={locZone} onChange={e => setLocZone(e.target.value)}
-                  placeholder="e.g. Zone-03, Ludhiana"
-                  style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
+                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Status</label>
+                <select value={locStatus} onChange={e => setLocStatus(e.target.value)}
+                  style={{ width:140,height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,background:'#fff' }}>
+                  <option>Active</option><option>Inactive</option>
+                </select>
               </div>
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <div>
-                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>District</label>
-                  <input value={locDistrict} onChange={e => setLocDistrict(e.target.value)}
-                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
-                </div>
-                <div>
-                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>City / Village</label>
-                  <input value={locCity} onChange={e => setLocCity(e.target.value)}
-                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
-                </div>
-              </div>
+              {/* Cities section */}
               <div>
-                <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Areas under this location</label>
-                <textarea value={locAreas} onChange={e => setLocAreas(e.target.value)}
-                  placeholder="Enter areas separated by commas e.g. Uttam Nagar, Model Town, Guru Nanak Nagar" rows={3}
-                  style={{ width:'100%',border:'1px solid #d1d5db',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical' }} />
-                <p style={{ fontSize:11,color:'#64748b',marginTop:4 }}>These areas will appear in the Area dropdown when adding house entries</p>
+                <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
+                  <label style={{ fontSize:12,fontWeight:700,color:'#1f4e1a',textTransform:'uppercase',letterSpacing:0.5 }}>Cities under this GA Location</label>
+                  <button type="button" onClick={addCityRow}
+                    style={{ fontSize:12,fontWeight:600,color:'#2d6a27',background:'#f0f7ee',border:'1px dashed #2d6a27',borderRadius:4,padding:'4px 10px',cursor:'pointer' }}>
+                    + Add Another City
+                  </button>
+                </div>
+                <div style={{ display:'flex',flexDirection:'column',gap:10 }}>
+                  {locCities.map((city, idx) => (
+                    <div key={idx} style={{ border:'1px solid #e2e8f0',borderRadius:8,padding:'12px 14px',background:'#f8fafc',position:'relative' }}>
+                      <div style={{ display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8 }}>
+                        <span style={{ fontSize:12,fontWeight:600,color:'#374151' }}>City {idx + 1}</span>
+                        {locCities.length > 1 && (
+                          <button type="button" onClick={() => removeCityRow(idx)}
+                            style={{ background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:4,width:24,height:24,cursor:'pointer',fontSize:14,display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
+                        )}
+                      </div>
+                      <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
+                        <div>
+                          <label style={{ fontSize:11,fontWeight:600,color:'#64748b',display:'block',marginBottom:3 }}>City Name *</label>
+                          <input value={city.cityName} onChange={e => updateCityRow(idx, 'cityName', e.target.value)}
+                            placeholder="e.g. Dabwali"
+                            style={{ width:'100%',height:32,border:'1px solid #d1d5db',borderRadius:4,padding:'0 8px',fontSize:12,boxSizing:'border-box' }} />
+                        </div>
+                        <div>
+                          <label style={{ fontSize:11,fontWeight:600,color:'#64748b',display:'block',marginBottom:3 }}>Areas (comma-separated)</label>
+                          <input value={city.areasText} onChange={e => updateCityRow(idx, 'areasText', e.target.value)}
+                            placeholder="e.g. Ward 1, Ward 2, Main Market"
+                            style={{ width:'100%',height:32,border:'1px solid #d1d5db',borderRadius:4,padding:'0 8px',fontSize:12,boxSizing:'border-box' }} />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div style={{ display:'flex',gap:10 }}>
                 <button onClick={() => setShowLocModal(false)}
