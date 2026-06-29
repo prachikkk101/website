@@ -8,7 +8,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
-import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
+
 
 /* ── Helpers ── */
 function initStore(key, defaults) {
@@ -57,9 +57,9 @@ const METER_MAKES   = ['Select','Itron','Elster','Honeywell','Landis+Gyr'];
 
 // All default/built-in columns — user can hide any of these
 const DEFAULT_COLS = [
-  { key: 'appNo',     label: 'App No.' },
   { key: 'acct',      label: 'Acct' },
   { key: 'bpNo',      label: 'BP No.' },
+  { key: 'appNo',     label: 'App No.' },
   { key: 'name',      label: 'Name' },
   { key: 'mobile',    label: 'Mobile' },
   { key: 'houseNo',   label: 'House No.' },
@@ -136,7 +136,7 @@ function ConfirmDelete({ onConfirm, onCancel }) {
 export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite } = useSite();
+  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity } = useSite();
   const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
 
@@ -289,14 +289,14 @@ export default function HouseTable() {
       if (cityAreas.length > 0 && !cityAreas.includes(h.area)) return false;
     }
     if (tFilterGA !== 'all') {
-      const ga = gaLocations.find(g => g.id === tFilterGA);
+      const ga = mergedGAs.find(g => g.id === tFilterGA);
       if (ga) {
-        const allGaAreas = ga.cities.flatMap(c => c.areas);
+        const allGaAreas = (ga.cities || []).flatMap(c => c.areas || []);
         if (allGaAreas.length > 0 && !allGaAreas.includes(h.area)) return false;
       }
     }
     return true;
-  }), [allHouses, filterAcct, filterBP, tFilterGA, tFilterCity, tFilterArea]);
+  }), [allHouses, filterAcct, filterBP, tFilterGA, tFilterCity, tFilterArea, mergedGAs, getAreasForCity]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
   const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -550,8 +550,10 @@ export default function HouseTable() {
         <div>
           <SectionTitle>1. Customer Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
-            <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
+              <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
+            </div>
             <Field label="Customer Name" required error={errors.name}><Input value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Mobile" required error={errors.mobile}><Input type="tel" value={form.mobile} onChange={e => f('mobile', e.target.value)} error={errors.mobile} /></Field>
@@ -777,7 +779,7 @@ export default function HouseTable() {
               {/* GA Location */}
               <select className="gp-select-dark" style={{ width: 130 }} value={tFilterGA} onChange={e => { setTFilterGA(e.target.value); setTFilterCity('all'); setTFilterArea('all'); reset(); }}>
                 <option value="all">All GA</option>
-                {gaLocations.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
               </select>
               {/* City */}
               <select className="gp-select-dark" style={{ width: 120 }} value={tFilterCity} disabled={tFilterGA === 'all'} onChange={e => { setTFilterCity(e.target.value); setTFilterArea('all'); reset(); }}>

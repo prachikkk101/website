@@ -17,18 +17,17 @@ function initStore(key, defaults) {
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
-// Work Status — only 3 options
-const WK_STATUSES = ['Nil', 'Testing & Flushing', 'Commissioning'];
-const CONN_TYPES   = ['Domestic', 'Commercial', 'Industrial'];
-
-const FLOOR_LABELS = { GF: 'Ground Floor', FF: 'First Floor', SF: 'Second Floor', TF: 'Third Floor', FoF: 'Fourth Floor' };
+// Work Status
+const WK_STATUSES = ['Laying', 'Testing & Flushing', 'Commissioning'];
+const CONN_TYPES  = ['Domestic', 'Commercial', 'Industrial'];
 
 const EMPTY_ENTRY = {
   layDate: '', connType: 'Domestic', area: '', coil: '',
-  d32oc: 0, d32b: 0, d32hdd: 0,
-  d63oc: 0, d63b: 0, d63hdd: 0,
-  d90tot: 0, d125tot: 0,
-  workStatus: 'Nil',
+  d32oc: '', d32b: '', d32hdd: '',
+  d63oc: '', d63b: '', d63hdd: '',
+  d90oc: '', d90b: '', d90hdd: '',
+  d125oc: '', d125b: '', d125hdd: '',
+  workStatus: 'Laying',
 };
 
 export default function PELaying() {
@@ -62,10 +61,10 @@ export default function PELaying() {
 
   // ── KPI totals (all data) ──
   const kpiTotals = useMemo(() => allData.reduce((acc, r) => ({
-    d32:  acc.d32  + (r.d32oc || 0)  + (r.d32b || 0)  + (r.d32hdd || 0),
-    d63:  acc.d63  + (r.d63oc || 0)  + (r.d63b || 0)  + (r.d63hdd || 0),
-    d90:  acc.d90  + (r.d90tot  || 0),
-    d125: acc.d125 + (r.d125tot || 0),
+    d32:  acc.d32  + (Number(r.d32oc)  || 0) + (Number(r.d32b)  || 0) + (Number(r.d32hdd)  || 0),
+    d63:  acc.d63  + (Number(r.d63oc)  || 0) + (Number(r.d63b)  || 0) + (Number(r.d63hdd)  || 0),
+    d90:  acc.d90  + (Number(r.d90oc)  || 0) + (Number(r.d90b)  || 0) + (Number(r.d90hdd)  || 0) + (Number(r.d90tot)  || 0),
+    d125: acc.d125 + (Number(r.d125oc) || 0) + (Number(r.d125b) || 0) + (Number(r.d125hdd) || 0) + (Number(r.d125tot) || 0),
   }), { d32: 0, d63: 0, d90: 0, d125: 0 }), [allData]);
 
   // ── Filtered rows (by tab + area) ──
@@ -78,17 +77,21 @@ export default function PELaying() {
 
   // ── Column totals ──
   const totals = useMemo(() => filtered.reduce((acc, r) => ({
-    d32oc:  acc.d32oc  + (r.d32oc  || 0),
-    d32b:   acc.d32b   + (r.d32b   || 0),
-    d32hdd: acc.d32hdd + (r.d32hdd || 0),
-    d32t:   acc.d32t   + (r.d32oc  || 0) + (r.d32b || 0) + (r.d32hdd || 0),
-    d63oc:  acc.d63oc  + (r.d63oc  || 0),
-    d63b:   acc.d63b   + (r.d63b   || 0),
-    d63h:   acc.d63h   + (r.d63hdd || 0),
-    d63t:   acc.d63t   + (r.d63oc  || 0) + (r.d63b || 0) + (r.d63hdd || 0),
-    d90:    acc.d90    + (r.d90tot || 0),
-    d125:   acc.d125   + (r.d125tot || 0),
-  }), { d32oc:0,d32b:0,d32hdd:0,d32t:0,d63oc:0,d63b:0,d63h:0,d63t:0,d90:0,d125:0 }), [filtered]);
+    d32oc:   acc.d32oc   + (Number(r.d32oc)   || 0),
+    d32b:    acc.d32b    + (Number(r.d32b)    || 0),
+    d32hdd:  acc.d32hdd  + (Number(r.d32hdd)  || 0),
+    d63oc:   acc.d63oc   + (Number(r.d63oc)   || 0),
+    d63b:    acc.d63b    + (Number(r.d63b)    || 0),
+    d63hdd:  acc.d63hdd  + (Number(r.d63hdd)  || 0),
+    d90oc:   acc.d90oc   + (Number(r.d90oc)   || 0),
+    d90b:    acc.d90b    + (Number(r.d90b)    || 0),
+    d90hdd:  acc.d90hdd  + (Number(r.d90hdd)  || 0),
+    d90t:    acc.d90t    + (Number(r.d90oc)   || 0) + (Number(r.d90b)   || 0) + (Number(r.d90hdd) || 0) + (Number(r.d90tot) || 0),
+    d125oc:  acc.d125oc  + (Number(r.d125oc)  || 0),
+    d125b:   acc.d125b   + (Number(r.d125b)   || 0),
+    d125hdd: acc.d125hdd + (Number(r.d125hdd) || 0),
+    d125t:   acc.d125t   + (Number(r.d125oc)  || 0) + (Number(r.d125b)  || 0) + (Number(r.d125hdd) || 0) + (Number(r.d125tot) || 0),
+  }), { d32oc:0,d32b:0,d32hdd:0,d63oc:0,d63b:0,d63hdd:0,d90oc:0,d90b:0,d90hdd:0,d90t:0,d125oc:0,d125b:0,d125hdd:0,d125t:0 }), [filtered]);
 
   function handleExport() { exportPELaying(filtered, exportFromDate, exportToDate); }
 
@@ -114,15 +117,19 @@ export default function PELaying() {
       connType:   row.connType   || 'Domestic',
       area:       row.area       || '',
       coil:       row.coil       || '',
-      d32oc:      row.d32oc      || 0,
-      d32b:       row.d32b       || 0,
-      d32hdd:     row.d32hdd     || 0,
-      d63oc:      row.d63oc      || 0,
-      d63b:       row.d63b       || 0,
-      d63hdd:     row.d63hdd     || 0,
-      d90tot:     row.d90tot     || 0,
-      d125tot:    row.d125tot    || 0,
-      workStatus: row.workStatus || 'Nil',
+      d32oc:      row.d32oc  != null && row.d32oc  !== 0 ? row.d32oc  : '',
+      d32b:       row.d32b   != null && row.d32b   !== 0 ? row.d32b   : '',
+      d32hdd:     row.d32hdd != null && row.d32hdd !== 0 ? row.d32hdd : '',
+      d63oc:      row.d63oc  != null && row.d63oc  !== 0 ? row.d63oc  : '',
+      d63b:       row.d63b   != null && row.d63b   !== 0 ? row.d63b   : '',
+      d63hdd:     row.d63hdd != null && row.d63hdd !== 0 ? row.d63hdd : '',
+      d90oc:      row.d90oc  != null && row.d90oc  !== 0 ? row.d90oc  : '',
+      d90b:       row.d90b   != null && row.d90b   !== 0 ? row.d90b   : '',
+      d90hdd:     row.d90hdd != null && row.d90hdd !== 0 ? row.d90hdd : '',
+      d125oc:     row.d125oc != null && row.d125oc !== 0 ? row.d125oc : '',
+      d125b:      row.d125b  != null && row.d125b  !== 0 ? row.d125b  : '',
+      d125hdd:    row.d125hdd != null && row.d125hdd !== 0 ? row.d125hdd : '',
+      workStatus: row.workStatus || 'Laying',
     });
     setErrors({});
     setPanelOpen(true);
@@ -132,14 +139,18 @@ export default function PELaying() {
     if (!validateForm()) return;
     const entryBase = {
       ...form,
-      d32oc:  Number(form.d32oc)   || 0,
-      d32b:   Number(form.d32b)    || 0,
-      d32hdd: Number(form.d32hdd)  || 0,
-      d63oc:  Number(form.d63oc)   || 0,
-      d63b:   Number(form.d63b)    || 0,
-      d63hdd: Number(form.d63hdd)  || 0,
-      d90tot: Number(form.d90tot)  || 0,
-      d125tot:Number(form.d125tot) || 0,
+      d32oc:   Number(form.d32oc)   || 0,
+      d32b:    Number(form.d32b)    || 0,
+      d32hdd:  Number(form.d32hdd)  || 0,
+      d63oc:   Number(form.d63oc)   || 0,
+      d63b:    Number(form.d63b)    || 0,
+      d63hdd:  Number(form.d63hdd)  || 0,
+      d90oc:   Number(form.d90oc)   || 0,
+      d90b:    Number(form.d90b)    || 0,
+      d90hdd:  Number(form.d90hdd)  || 0,
+      d125oc:  Number(form.d125oc)  || 0,
+      d125b:   Number(form.d125b)   || 0,
+      d125hdd: Number(form.d125hdd) || 0,
     };
     let updated;
     if (editingId !== null) {
@@ -170,9 +181,14 @@ export default function PELaying() {
     showToast('Entry deleted');
   }
 
-  const d32Total = (Number(form.d32oc) || 0) + (Number(form.d32b) || 0) + (Number(form.d32hdd) || 0);
-  const d63Total = (Number(form.d63oc) || 0) + (Number(form.d63b) || 0) + (Number(form.d63hdd) || 0);
-  const num = v => (v > 0 ? v : <span style={{ color: '#cbd5e1' }}>—</span>);
+  const d32Total  = (Number(form.d32oc)  || 0) + (Number(form.d32b)  || 0) + (Number(form.d32hdd)  || 0);
+  const d63Total  = (Number(form.d63oc)  || 0) + (Number(form.d63b)  || 0) + (Number(form.d63hdd)  || 0);
+  const d90Total  = (Number(form.d90oc)  || 0) + (Number(form.d90b)  || 0) + (Number(form.d90hdd)  || 0);
+  const d125Total = (Number(form.d125oc) || 0) + (Number(form.d125b) || 0) + (Number(form.d125hdd) || 0);
+  const num = v => {
+    const n = Number(v);
+    return n > 0 ? n : <span style={{ color: '#cbd5e1' }}>—</span>;
+  };
 
   return (
     <div>
@@ -252,15 +268,19 @@ export default function PELaying() {
                 <th style={{ textAlign: 'right' }}>Ø63 Laying</th>
                 <th style={{ textAlign: 'right' }}>Ø63 Boring</th>
                 <th style={{ textAlign: 'right' }}>Ø63 HDD</th>
-                <th style={{ textAlign: 'right' }}>Ø90</th>
-                <th style={{ textAlign: 'right' }}>Ø125</th>
+                <th style={{ textAlign: 'right' }}>Ø90 Laying</th>
+                <th style={{ textAlign: 'right' }}>Ø90 Boring</th>
+                <th style={{ textAlign: 'right' }}>Ø90 HDD</th>
+                <th style={{ textAlign: 'right' }}>Ø125 Laying</th>
+                <th style={{ textAlign: 'right' }}>Ø125 Boring</th>
+                <th style={{ textAlign: 'right' }}>Ø125 HDD</th>
                 <th>Work Status</th>
                 <th style={{ width: 40 }}>✏</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
-                <tr><td colSpan={14} style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
+                <tr><td colSpan={18} style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8' }}>
                   <div style={{ fontSize: 32 }}>🚧</div>
                   <div style={{ marginTop: 8 }}>No {activeTab} entries found</div>
                 </td></tr>
@@ -272,17 +292,23 @@ export default function PELaying() {
                     <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>
                     <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coil || '—'}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32hdd || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90tot || 0)}</td>
-                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125tot || 0)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32hdd)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63oc)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63b)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d63hdd)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90oc)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90b)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d90hdd)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125oc)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125b)}</td>
+                    <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d125hdd)}</td>
                     <td>
-                      {r.workStatus && r.workStatus !== 'Nil' ? (
+                      {r.workStatus && r.workStatus !== 'Laying' ? (
                         <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: r.workStatus === 'Commissioning' ? '#dcfce7' : '#dbeafe', color: wsColor }}>{r.workStatus}</span>
+                      ) : r.workStatus === 'Laying' ? (
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: '#f0f7ee', color: '#2d6a27' }}>Laying</span>
                       ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                     </td>
                     <td style={{ textAlign: 'center' }}>
@@ -302,9 +328,13 @@ export default function PELaying() {
                   <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32hdd}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63oc}</td>
                   <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63b}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63h}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d63hdd}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90oc}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90b}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d90hdd}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125oc}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125b}</td>
+                  <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d125hdd}</td>
                   <td colSpan={2} />
                 </tr>
               )}
@@ -327,7 +357,7 @@ export default function PELaying() {
             <Field label="Laying Date" required error={errors.layDate}>
               <Input type="date" value={form.layDate} onChange={e => f('layDate', e.target.value)} error={errors.layDate} />
             </Field>
-            <Field label="Connection Type" required error={errors.connType}>
+            <Field label="Laying Type" required error={errors.connType}>
               <Select value={form.connType} onChange={e => f('connType', e.target.value)} error={errors.connType}>
                 {CONN_TYPES.map(t => <option key={t}>{t}</option>)}
               </Select>
@@ -382,13 +412,37 @@ export default function PELaying() {
             </Field>
           </div>
 
-          {/* Ø90 + Ø125 */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Ø90mm — Total">
-              <Input type="number" min={0} value={form.d90tot} onChange={e => n('d90tot', e.target.value)} />
+          {/* Ø90mm */}
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø90mm</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8, marginBottom: 12 }}>
+            <Field label="Open Cut / Laying">
+              <Input type="number" min={0} value={form.d90oc} onChange={e => f('d90oc', e.target.value)} />
             </Field>
-            <Field label="Ø125mm — Total">
-              <Input type="number" min={0} value={form.d125tot} onChange={e => n('d125tot', e.target.value)} />
+            <Field label="Boring">
+              <Input type="number" min={0} value={form.d90b} onChange={e => f('d90b', e.target.value)} />
+            </Field>
+            <Field label="HDD">
+              <Input type="number" min={0} value={form.d90hdd} onChange={e => f('d90hdd', e.target.value)} />
+            </Field>
+            <Field label="Total (auto)">
+              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d90Total}</div>
+            </Field>
+          </div>
+
+          {/* Ø125mm */}
+          <p style={{ fontSize: 11, fontWeight: 600, color: '#1f4e1a', marginBottom: 6 }}>Ø125mm</p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+            <Field label="Open Cut / Laying">
+              <Input type="number" min={0} value={form.d125oc} onChange={e => f('d125oc', e.target.value)} />
+            </Field>
+            <Field label="Boring">
+              <Input type="number" min={0} value={form.d125b} onChange={e => f('d125b', e.target.value)} />
+            </Field>
+            <Field label="HDD">
+              <Input type="number" min={0} value={form.d125hdd} onChange={e => f('d125hdd', e.target.value)} />
+            </Field>
+            <Field label="Total (auto)">
+              <div style={{ height: 34, border: '1px solid #e2e8f0', borderRadius: 5, padding: '0 10px', display: 'flex', alignItems: 'center', background: '#f0f7ee', fontSize: 13, fontWeight: 700, color: '#1f4e1a' }}>{d125Total}</div>
             </Field>
           </div>
         </div>

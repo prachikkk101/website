@@ -5,7 +5,7 @@ import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { ToastContainer } from './Toast';
 import { checkBackend } from '../utils/healthCheck';
-import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
+
 
 const breadcrumbs = {
   '/dashboard': 'GA Dashboard — All Sites Overview',
@@ -34,7 +34,8 @@ function getPendingCount() {
 export default function Layout() {
   const location  = useLocation();
   const navigate  = useNavigate();
-  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea } = useSite();
+  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, mergedGAs, getCitiesForGA, getAreasForCity } = useSite();
+
   const { user, logout } = useContext(AuthContext);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [backendStatus,  setBackendStatus]  = useState('checking'); // 'checking'|'connected'|'offline'
@@ -143,7 +144,7 @@ export default function Layout() {
                   style={{ width: 130, height: 28, background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', fontSize: 11, padding: '0 6px', borderRadius: 4, cursor: 'pointer', outline: 'none' }}
                 >
                   <option value="all" style={{ background: '#1f4e1a' }}>All GA</option>
-                  {gaLocations.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
+                  {mergedGAs.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
                 </select>
                 {/* City */}
                 <select
@@ -283,7 +284,7 @@ export default function Layout() {
               <select value={selGA} onChange={e => setSelGA(e.target.value)}
                 style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
                 <option value="all" style={{ background: '#1f4e1a' }}>All GA Locations</option>
-                {gaLocations.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
+                {mergedGAs.map(g => <option key={g.id} value={g.id} style={{ background: '#1f4e1a' }}>{g.label}</option>)}
               </select>
               {selGA !== 'all' && (
                 <select value={selCity} onChange={e => setSelCity(e.target.value)}

@@ -1,51 +1,9 @@
 // src/data/gaLocations.js
 // 3-level hierarchy: GA Location → City → Area
+// Default is empty — Admin adds GA Locations via Access → GA Locations panel
 
-export const gaLocations = [
-  {
-    id: 'sirsa',
-    label: 'Sirsa',
-    cities: [
-      {
-        id: 'sirsa_city',
-        label: 'Sirsa',
-        areas: ['Model Town', 'Sector 12', 'Civil Lines', 'Old City'],
-      },
-      {
-        id: 'dabwali',
-        label: 'Dabwali',
-        areas: ['Dabwali Road', 'Ward 1', 'Ward 2', 'Main Market'],
-      },
-      {
-        id: 'mansa',
-        label: 'Mansa',
-        areas: ['Mansa City', 'Bus Stand Area'],
-      },
-    ],
-  },
-  {
-    id: 'hisar',
-    label: 'Hisar',
-    cities: [
-      {
-        id: 'hisar_city',
-        label: 'Hisar',
-        areas: ['UE-II', 'PLA Colony', 'Guru Nanak Nagar', 'Uttam Nagar', 'Sector 13', 'Model Town'],
-      },
-    ],
-  },
-  {
-    id: 'ludhiana',
-    label: 'Ludhiana',
-    cities: [
-      {
-        id: 'khanna',
-        label: 'Khanna',
-        areas: ['CA-09', 'Kishangar Village', 'Highway Halt', 'Kohara CA-07'],
-      },
-    ],
-  },
-];
+export const gaLocations = [];
+
 
 // ── Flatten helpers ──────────────────────────────────────────────────────────
 

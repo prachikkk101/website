@@ -1,6 +1,6 @@
 // src/context/SiteContext.jsx
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { gaLocations, getCitiesForGA, getAreasForCity } from '../data/gaLocations';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { gaLocations } from '../data/gaLocations';
 
 /* ── Read custom sites from localStorage ── */
 function loadSites() {
@@ -26,6 +26,9 @@ const SiteContext = createContext({
   setSelectedSite: () => {},
   siteOptions:     [],
   siteList:        [],
+  mergedGAs:       [],
+  getCitiesForGA:  () => [],
+  getAreasForCity: () => [],
 });
 
 export function SiteProvider({ children }) {
@@ -46,6 +49,33 @@ export function SiteProvider({ children }) {
     syncSites();
     return () => window.removeEventListener('storage', syncSites);
   }, [syncSites]);
+
+  // Dynamic merged list
+  const mergedGAs = useMemo(() => {
+    const list = [...gaLocations];
+    siteList.forEach(s => {
+      if (!list.some(x => x.id === s.id)) {
+        list.push(s);
+      }
+    });
+    return list;
+  }, [siteList]);
+
+  // Dynamic helper functions
+  const getCitiesForGA = useCallback((gaId) => {
+    if (gaId === 'all') return [];
+    const ga = mergedGAs.find(g => g.id === gaId);
+    return ga ? (ga.cities || []) : [];
+  }, [mergedGAs]);
+
+  const getAreasForCity = useCallback((cityId) => {
+    if (cityId === 'all') return [];
+    for (const ga of mergedGAs) {
+      const city = (ga.cities || []).find(c => c.id === cityId);
+      if (city) return city.areas || [];
+    }
+    return [];
+  }, [mergedGAs]);
 
   // Cascading setters — reset children when parent changes
   function setSelGA(val) {
@@ -75,7 +105,8 @@ export function SiteProvider({ children }) {
       selGA, selCity, selArea,
       setSelGA, setSelCity, setSelArea,
       selectedSite, setSelectedSite,
-      siteOptions, siteList,
+      siteOptions, siteList, mergedGAs,
+      getCitiesForGA, getAreasForCity
     }}>
       {children}
     </SiteContext.Provider>
@@ -88,44 +119,35 @@ export function useSite() {
 
 /* ── useSiteAreas: areas visible in current 3-level selection ── */
 export function useSiteAreas() {
-  const { selGA, selCity, siteList } = useContext(SiteContext);
+  const { selGA, selCity, mergedGAs } = useContext(SiteContext);
 
-  // If a city is selected, return its areas from the static hierarchy
-  if (selCity && selCity !== 'all') return getAreasForCity(selCity);
+  // Helper inside hook using merged list
+  const helperGetAreasForCity = (cityId) => {
+    for (const ga of mergedGAs) {
+      const city = (ga.cities || []).find(c => c.id === cityId);
+      if (city) return city.areas || [];
+    }
+    return [];
+  };
+
+  // If a city is selected, return its areas
+  if (selCity && selCity !== 'all') return helperGetAreasForCity(selCity);
 
   // If a GA is selected, merge areas of all its cities
   if (selGA && selGA !== 'all') {
-    const ga = gaLocations.find(g => g.id === selGA);
+    const ga = mergedGAs.find(g => g.id === selGA);
     if (ga) {
       const all = [];
-      ga.cities.forEach(c => c.areas.forEach(a => { if (!all.includes(a)) all.push(a); }));
+      (ga.cities || []).forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
       return all;
-    }
-    // Fall through to custom sites
-    const site = siteList.find(s => s.id === selGA);
-    if (site) {
-      // Custom 3-level sites
-      if (site.cities) {
-        const all = [];
-        site.cities.forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
-        return all;
-      }
-      return site.areas || [];
     }
   }
 
-  // All areas across all static + custom sites
+  // All areas across all sites
   const all = [];
-  gaLocations.forEach(ga =>
-    ga.cities.forEach(c => c.areas.forEach(a => { if (!all.includes(a)) all.push(a); }))
+  mergedGAs.forEach(ga =>
+    (ga.cities || []).forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }))
   );
-  siteList.forEach(s => {
-    if (s.cities) {
-      s.cities.forEach(c => (c.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); }));
-    } else {
-      (s.areas || []).forEach(a => { if (!all.includes(a)) all.push(a); });
-    }
-  });
   return [...new Set(all)];
 }
 

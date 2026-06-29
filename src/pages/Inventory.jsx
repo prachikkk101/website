@@ -9,6 +9,18 @@ import { useSite } from '../context/SiteContext';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
+const DEFAULT_COLS = [
+  { key: 'open',    label: 'Opening' },
+  { key: 'recv',    label: 'Received' },
+  { key: 'issued',  label: 'Issued' },
+  { key: 'ret',     label: 'Returned' },
+  { key: 'netUsed', label: 'Net Used' },
+  { key: 'onSite',  label: 'On Site' },
+  { key: 'inStore', label: 'In Store' },
+  { key: 'req',     label: 'Required' },
+];
+
+
 function initStore(key, defaults) {
   try {
     const raw = localStorage.getItem('gppms_' + key);
@@ -252,6 +264,20 @@ export default function Inventory() {
     } catch { return []; }
   });
 
+  const [hiddenCols, setHiddenCols] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_inventory') || '[]'); } catch { return []; }
+  });
+  const [showColManager, setShowColManager] = useState(false);
+
+  function toggleColVisibility(key) {
+    const updated = hiddenCols.includes(key)
+      ? hiddenCols.filter(k => k !== key)
+      : [...hiddenCols, key];
+    setHiddenCols(updated);
+    localStorage.setItem('gppms_hidden_cols_inventory', JSON.stringify(updated));
+  }
+
+
   const handleAddColumn = () => {
     const name = prompt('Enter new column name:');
     if (!name || !name.trim()) return;
@@ -332,6 +358,10 @@ export default function Inventory() {
                   ✕ Remove Column
                 </button>
               )}
+              <button onClick={() => setShowColManager(true)}
+                style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                ⚙ Manage Columns
+              </button>
               <button onClick={openPanel} className="btn btn-primary" style={{ height: 32 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Receive Stock
@@ -349,15 +379,15 @@ export default function Inventory() {
                 <th style={{ width: 40, textAlign:'center' }}>Sr.</th>
                 <th style={{ minWidth: 180 }}>Material</th>
                 <th style={{ width: 60 }}>Unit</th>
-                <th style={{ textAlign:'right' }}>Opening</th>
-                <th style={{ textAlign:'right' }}>Received</th>
-                <th style={{ textAlign:'right' }}>Issued</th>
-                <th style={{ textAlign:'right' }}>Returned</th>
-                <th style={{ textAlign:'right' }}>Net Used</th>
-                <th style={{ textAlign:'right' }}>On Site</th>
-                <th style={{ textAlign:'right' }}>In Store</th>
-                <th style={{ textAlign:'right' }}>Required</th>
-                {customCols.map(col => <th key={col.key}>{col.label}</th>)}
+                {!hiddenCols.includes('open') && <th style={{ textAlign:'right' }}>Opening</th>}
+                {!hiddenCols.includes('recv') && <th style={{ textAlign:'right' }}>Received</th>}
+                {!hiddenCols.includes('issued') && <th style={{ textAlign:'right' }}>Issued</th>}
+                {!hiddenCols.includes('ret') && <th style={{ textAlign:'right' }}>Returned</th>}
+                {!hiddenCols.includes('netUsed') && <th style={{ textAlign:'right' }}>Net Used</th>}
+                {!hiddenCols.includes('onSite') && <th style={{ textAlign:'right' }}>On Site</th>}
+                {!hiddenCols.includes('inStore') && <th style={{ textAlign:'right' }}>In Store</th>}
+                {!hiddenCols.includes('req') && <th style={{ textAlign:'right' }}>Required</th>}
+                {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <th key={col.key}>{col.label}</th>)}
                 <th style={{ minWidth: 140 }}>Status</th>
               </tr>
             </thead>
@@ -372,15 +402,15 @@ export default function Inventory() {
                   <td style={{ textAlign:'center', color:'#94a3b8', fontWeight:500 }}>{r.sr}</td>
                   <td style={{ fontWeight:600, whiteSpace:'nowrap' }}>{r.mat}</td>
                   <td style={{ color:'#64748b' }}>{r.unit}</td>
-                  <td style={{ textAlign:'right' }}>{(r.open||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right', color:'#2d6a27', fontWeight:600 }}>{(r.recv||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right' }}>{(r.issued||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right', color:'#2d6a27' }}>{(r.ret||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right', fontWeight:700 }}>{(r.netUsed||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right', color: onSiteColor(r) }}>{(r.onSite||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right' }}>{(r.inStore||0).toLocaleString()}</td>
-                  <td style={{ textAlign:'right', color: r.req > 0 ? '#c0440a' : '#94a3b8', fontWeight: r.req > 0 ? 600 : 400 }}>{r.req > 0 ? r.req.toLocaleString() : '—'}</td>
-                  {customCols.map(col => (
+                  {!hiddenCols.includes('open') && <td style={{ textAlign:'right' }}>{(r.open||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('recv') && <td style={{ textAlign:'right', color:'#2d6a27', fontWeight:600 }}>{(r.recv||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('issued') && <td style={{ textAlign:'right' }}>{(r.issued||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('ret') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{(r.ret||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('netUsed') && <td style={{ textAlign:'right', fontWeight:700 }}>{(r.netUsed||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('onSite') && <td style={{ textAlign:'right', color: onSiteColor(r) }}>{(r.onSite||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('inStore') && <td style={{ textAlign:'right' }}>{(r.inStore||0).toLocaleString()}</td>}
+                  {!hiddenCols.includes('req') && <td style={{ textAlign:'right', color: r.req > 0 ? '#c0440a' : '#94a3b8', fontWeight: r.req > 0 ? 600 : 400 }}>{r.req > 0 ? r.req.toLocaleString() : '—'}</td>}
+                  {customCols.filter(col => !hiddenCols.includes(col.key)).map(col => (
                     <td
                       key={col.key}
                       onClick={() => handleEditCell(r.sr, col.key, col.label, r[col.key])}
@@ -408,15 +438,15 @@ export default function Inventory() {
               ))}
               <tr style={{ background:'#f0f7ee', fontWeight:700 }}>
                 <td colSpan={3} style={{ textAlign:'right', color:'#1f4e1a' }}>TOTAL</td>
-                <td style={{ textAlign:'right' }}>{totals.open.toLocaleString()}</td>
-                <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.recv.toLocaleString()}</td>
-                <td style={{ textAlign:'right' }}>{totals.issued.toLocaleString()}</td>
-                <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.ret.toLocaleString()}</td>
-                <td style={{ textAlign:'right' }}>{totals.netUsed.toLocaleString()}</td>
-                <td style={{ textAlign:'right' }}>{totals.onSite.toLocaleString()}</td>
-                <td style={{ textAlign:'right' }}>{totals.inStore.toLocaleString()}</td>
-                <td style={{ textAlign:'right' }}>{totals.req.toLocaleString()}</td>
-                {customCols.map(col => <td key={col.key} />)}
+                {!hiddenCols.includes('open') && <td style={{ textAlign:'right' }}>{totals.open.toLocaleString()}</td>}
+                {!hiddenCols.includes('recv') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.recv.toLocaleString()}</td>}
+                {!hiddenCols.includes('issued') && <td style={{ textAlign:'right' }}>{totals.issued.toLocaleString()}</td>}
+                {!hiddenCols.includes('ret') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.ret.toLocaleString()}</td>}
+                {!hiddenCols.includes('netUsed') && <td style={{ textAlign:'right' }}>{totals.netUsed.toLocaleString()}</td>}
+                {!hiddenCols.includes('onSite') && <td style={{ textAlign:'right' }}>{totals.onSite.toLocaleString()}</td>}
+                {!hiddenCols.includes('inStore') && <td style={{ textAlign:'right' }}>{totals.inStore.toLocaleString()}</td>}
+                {!hiddenCols.includes('req') && <td style={{ textAlign:'right' }}>{totals.req.toLocaleString()}</td>}
+                {customCols.filter(col => !hiddenCols.includes(col.key)).map(col => <td key={col.key} />)}
                 <td />
               </tr>
             </tbody>
@@ -467,6 +497,65 @@ export default function Inventory() {
             style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:5, padding:'8px 10px', fontSize:13, resize:'vertical', boxSizing:'border-box' }} />
         </div>
       </SlidePanel>
+
+      {/* ── Column Manager Modal ── */}
+      {showColManager && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContext:'center', padding:20 }}
+          onClick={() => setShowColManager(false)}>
+          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:420, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', maxHeight:'85vh', overflowY:'auto', margin:'auto' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ display:'flex', alignItems:'center', justifyContext:'space-between', marginBottom:18 }}>
+              <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:'#1f4e1a' }}>⚙ Manage Columns</h3>
+              <button onClick={() => setShowColManager(false)}
+                style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#64748b', lineHeight:1 }}>×</button>
+            </div>
+            <p style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>Toggle columns on/off. Hidden columns are saved for your session.</p>
+
+            <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Built-in Columns</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+              {DEFAULT_COLS.map(col => (
+                <label key={col.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#f0f7ee', cursor:'pointer', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#bbf7d0' }}>
+                  <input type="checkbox" checked={!hiddenCols.includes(col.key)}
+                    onChange={() => toggleColVisibility(col.key)}
+                    style={{ accentColor:'#2d6a27', width:15, height:15 }} />
+                  <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#1f4e1a', flex:1 }}>{col.label}</span>
+                  {hiddenCols.includes(col.key) && <span style={{ fontSize:10, color:'#94a3b8', background:'#f1f5f9', padding:'1px 6px', borderRadius:4 }}>hidden</span>}
+                </label>
+              ))}
+            </div>
+
+            {customCols.length > 0 && (
+              <>
+                <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Custom Columns</div>
+                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+                  {customCols.map(col => (
+                    <div key={col.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#fefce8', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#fde68a' }}>
+                      <input type="checkbox" checked={!hiddenCols.includes(col.key)}
+                        onChange={() => toggleColVisibility(col.key)}
+                        style={{ accentColor:'#2d6a27', width:15, height:15 }} />
+                      <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#92400e', flex:1 }}>{col.label}</span>
+                      <button onClick={() => {
+                        const updated = customCols.filter(c => c.key !== col.key);
+                        setCustomCols(updated);
+                        localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+                        setHiddenCols(prev => prev.filter(k => k !== col.key));
+                        showToast(`Column "${col.label}" deleted`);
+                      }} title="Delete this column permanently"
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:4, width:26, height:26, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContext:'center', flexShrink:0 }}>×</button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_inventory'); showToast('All columns visible'); }}
+              style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              ↺ Reset — Show All Columns
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
