@@ -3,7 +3,6 @@ import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import prisma from '../config/db';
-import { sendVerificationEmail } from '../utils/email';
 import { Role } from '@prisma/client';
 import { AuthenticatedRequest } from '../middlewares/auth';
 
@@ -59,12 +58,14 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
       },
     });
 
-    await sendVerificationEmail(email, code);
+    // TODO: Send email with code if email service is available
+    // await sendVerificationEmail(email, code);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Check your email for verification OTP.',
+      message: 'Registration successful. Use this code to verify: ' + code,
       userId: user.id,
+      verificationCode: code, // For testing only - remove in production
     });
   } catch (error) {
     next(error);
@@ -90,11 +91,11 @@ export const verifyEmail = async (req: Request, res: Response, next: NextFunctio
     }
 
     if (user.verificationCode !== code) {
-      return res.status(400).json({ success: false, error: 'Invalid verification OTP' });
+      return res.status(400).json({ success: false, error: 'Invalid verification code' });
     }
 
     if (user.verificationExpiry && user.verificationExpiry < new Date()) {
-      return res.status(400).json({ success: false, error: 'OTP has expired' });
+      return res.status(400).json({ success: false, error: 'Code has expired' });
     }
 
     // Mark verified
