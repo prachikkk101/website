@@ -103,10 +103,10 @@ export default function Layout() {
   }
 
   // Build label for the trigger button
-  const ctx = globalLocationContext;
-  const gaLabel   = ctx.gaId   !== 'all' ? mergedGAs.find(g => g.id === ctx.gaId)?.label   || ctx.gaId   : null;
-  const cityLabel = ctx.cityId !== 'all' ? getCitiesForGA(ctx.gaId).find(c => c.id === ctx.cityId)?.label || ctx.cityId : null;
-  const areaLabel = ctx.area   !== 'all' ? ctx.area : null;
+  const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
+  const gaLabel   = (ctx.gaId && ctx.gaId !== 'all') ? ((mergedGAs || []).find(g => g.id === ctx.gaId)?.label || ctx.gaId) : null;
+  const cityLabel = (ctx.cityId && ctx.cityId !== 'all' && getCitiesForGA) ? ((getCitiesForGA(ctx.gaId) || []).find(c => c.id === ctx.cityId)?.label || ctx.cityId) : null;
+  const areaLabel = (ctx.area && ctx.area !== 'all') ? ctx.area : null;
   const flyoutLabel = gaLabel
     ? [gaLabel, cityLabel, areaLabel].filter(Boolean).join(' → ')
     : 'All GA';
@@ -416,22 +416,22 @@ export default function Layout() {
         </div>
 
         {showSiteSelector && (() => {
-          const mobileCities = ctx.gaId !== 'all' ? getCitiesForGA(ctx.gaId) : [];
-          const mobileAreas  = ctx.cityId !== 'all' ? getAreasForCity(ctx.cityId) : [];
+          const mobileCities = (ctx?.gaId && ctx.gaId !== 'all' && getCitiesForGA) ? getCitiesForGA(ctx.gaId) : [];
+          const mobileAreas  = (ctx?.cityId && ctx.cityId !== 'all' && getAreasForCity) ? getAreasForCity(ctx.cityId) : [];
           return (
             <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: 8 }}>
               <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 2 }}>GA Location Filter</label>
               {/* Level 1: GA */}
-              <select value={ctx.gaId} onChange={e => selectGA(e.target.value)}
+              <select value={ctx?.gaId || 'all'} onChange={e => selectGA(e.target.value)}
                 style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
                 <option value="all" style={{ background: '#1f4e1a' }}>All GA</option>
-                {mergedGAs.map(ga => (
+                {(mergedGAs || []).map(ga => (
                   <option key={ga.id} value={ga.id} style={{ background: '#1f4e1a' }}>{ga.label}</option>
                 ))}
               </select>
               {/* Level 2: City */}
               {mobileCities.length > 0 && (
-                <select value={ctx.cityId} onChange={e => selectGA(ctx.gaId, e.target.value)}
+                <select value={ctx?.cityId || 'all'} onChange={e => selectGA(ctx?.gaId || 'all', e.target.value)}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
                   <option value="all" style={{ background: '#1f4e1a' }}>All Cities</option>
                   {mobileCities.map(city => (
@@ -441,7 +441,7 @@ export default function Layout() {
               )}
               {/* Level 3: Area */}
               {mobileAreas.length > 0 && (
-                <select value={ctx.area} onChange={e => selectGA(ctx.gaId, ctx.cityId, e.target.value)}
+                <select value={ctx?.area || 'all'} onChange={e => selectGA(ctx?.gaId || 'all', ctx?.cityId || 'all', e.target.value)}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
                   <option value="all" style={{ background: '#1f4e1a' }}>All Areas</option>
                   {mobileAreas.map(area => (

@@ -194,7 +194,7 @@ export default function HouseTable() {
         setFormCity(foundCityId || '');
         setFormArea(editEntry.area || '');
       } else {
-        const ctx = globalLocationContext;
+        const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
         setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
         setFormArea(ctx.area !== 'all' ? ctx.area : '');
