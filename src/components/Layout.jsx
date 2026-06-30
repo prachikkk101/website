@@ -5,6 +5,7 @@ import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { ToastContainer } from './Toast';
 import { checkBackend } from '../utils/healthCheck';
+import SiteFlyoutMenu from './SiteFlyoutMenu';
 
 
 const breadcrumbs = {
@@ -95,16 +96,47 @@ export default function Layout() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  // selectGA: sets global context + selGA for filtering tables
-  function selectGA(gaId, cityId = 'all', area = 'all') {
-    setGlobalLocationContext({ gaId, cityId, area });
-    setSelGA(gaId);
-    if (cityId !== 'all') setSelCity(cityId);
-    if (area !== 'all') setSelArea(area);
-    setFlyoutOpen(false);
-    setHoveredGA(null);
-    setHoveredCity(null);
-  }
+  const getSites = () => {
+    return mergedGAs.map(ga => {
+      const allAreas = [];
+      (ga.cities || []).forEach(city => {
+        (city.areas || []).forEach(area => {
+          if (!allAreas.includes(area)) {
+            allAreas.push(area);
+          }
+        });
+      });
+      return {
+        value: ga.id,
+        label: ga.label,
+        areas: allAreas
+      };
+    });
+  };
+
+  const setSelectedSite = ({ ga, area }) => {
+    if (ga === 'all') {
+      setGlobalLocationContext({ gaId: 'all', cityId: 'all', area: 'all' });
+      setSelGA('all');
+      setSelCity('all');
+      setSelArea('all');
+      return;
+    }
+
+    let foundCityId = 'all';
+    const gaObj = mergedGAs.find(g => g.id === ga);
+    if (gaObj && area !== 'all') {
+      const city = (gaObj.cities || []).find(c => (c.areas || []).includes(area));
+      if (city) {
+        foundCityId = city.id;
+      }
+    }
+
+    setGlobalLocationContext({ gaId: ga, cityId: foundCityId, area });
+    setSelGA(ga);
+    setSelCity(foundCityId);
+    setSelArea(area);
+  };
 
   // Build label for the trigger button
   const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
@@ -162,171 +194,12 @@ export default function Layout() {
             </NavLink>
 
             {showSiteSelector && (
-              <div
-                style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}
-                onMouseEnter={openFlyout}
-                onMouseLeave={closeFlyout}
-              >
-                {/* Trigger: single button showing current selection */}
-                <button style={{
-                  height: 28, fontSize: 11,
-                  border: '1px solid rgba(255,255,255,0.3)',
-                  borderRadius: 4,
-                  background: flyoutOpen ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.25)',
-                  color: 'white', padding: '0 10px',
-                  cursor: 'default',
-                  display: 'flex', alignItems: 'center', gap: 5,
-                  maxWidth: 200, whiteSpace: 'nowrap', overflow: 'hidden',
-                }}>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
-                    {flyoutLabel}
-                  </span>
-                  <span style={{ fontSize: 8 }}>▼</span>
-                </button>
-
-                {/* ── Level 1: GA list — drops below the button ── */}
-                {flyoutOpen && (
-                  <div
-                    onMouseEnter={openFlyout}
-                    onMouseLeave={closeFlyout}
-                    style={{
-                    position: 'absolute', top: '100%', left: 0,
-                    background: '#fff', border: '1px solid #e2e8f0',
-                    borderRadius: 6, minWidth: 150,
-                    boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
-                    zIndex: 200,
-                    paddingTop: 4, paddingBottom: 4,
-                  }}>
-                    {/* All GA */}
-                    <div
-                      onClick={() => { selectGA('all'); }}
-                      onMouseEnter={() => { setHoveredGA(null); setHoveredCity(null); }}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                        color: '#1f4e1a', fontWeight: ctx.gaId === 'all' ? 700 : 400,
-                        background: ctx.gaId === 'all' ? '#f0f7ee' : '#fff',
-                        borderBottom: '1px solid #f1f5f9',
-                      }}
-                      onMouseOver={e => e.currentTarget.style.background = '#f0f7ee'}
-                      onMouseOut={e => e.currentTarget.style.background = ctx.gaId === 'all' ? '#f0f7ee' : '#fff'}
-                    >All GA</div>
-
-                    {/* Each GA row */}
-                    {mergedGAs.map(ga => {
-                      const cities = ga.cities || [];
-                      return (
-                        <div key={ga.id}
-                          onMouseEnter={() => { setHoveredGA(ga.id); setHoveredCity(null); }}
-                          onClick={() => selectGA(ga.id)}
-                          style={{
-                            padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            position: 'relative',
-                            fontWeight: ctx.gaId === ga.id ? 700 : 400,
-                            background: hoveredGA === ga.id ? '#f0f7ee' : '#fff',
-                            color: '#1e293b',
-                          }}
-                        >
-                          <span>{ga.label}</span>
-                          {cities.length > 0 && <span style={{ fontSize: 9, color: '#94a3b8' }}>▶</span>}
-
-                          {/* ── Level 2: Cities panel — appears to the RIGHT of GA list ── */}
-                          {hoveredGA === ga.id && cities.length > 0 && (
-                            <div
-                              style={{
-                                position: 'absolute', left: '100%', top: 0,
-                                background: '#fff', border: '1px solid #e2e8f0',
-                                borderRadius: 6, minWidth: 150,
-                                boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
-                                zIndex: 201,
-                                paddingTop: 4, paddingBottom: 4,
-                              }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              {/* All Cities in this GA */}
-                              <div
-                                onClick={() => selectGA(ga.id, 'all')}
-                                onMouseEnter={() => setHoveredCity(null)}
-                                style={{
-                                  padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                                  color: '#1f4e1a', fontWeight: ctx.gaId === ga.id && ctx.cityId === 'all' ? 700 : 400,
-                                  background: ctx.gaId === ga.id && ctx.cityId === 'all' ? '#f0f7ee' : '#fff',
-                                  borderBottom: '1px solid #f1f5f9',
-                                }}
-                                onMouseOver={e => e.currentTarget.style.background = '#f0f7ee'}
-                                onMouseOut={e => e.currentTarget.style.background = ctx.gaId === ga.id && ctx.cityId === 'all' ? '#f0f7ee' : '#fff'}
-                              >All Cities</div>
-
-                              {/* Each City row */}
-                              {cities.map(city => {
-                                const areas = city.areas || [];
-                                return (
-                                  <div key={city.id}
-                                    onMouseEnter={() => setHoveredCity(city.id)}
-                                    onClick={() => selectGA(ga.id, city.id, 'all')}
-                                    style={{
-                                      padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                      position: 'relative',
-                                      fontWeight: ctx.cityId === city.id ? 700 : 400,
-                                      background: hoveredCity === city.id ? '#f0f7ee' : '#fff',
-                                      color: '#1e293b',
-                                    }}
-                                  >
-                                    <span>{city.label}</span>
-                                    {areas.length > 0 && <span style={{ fontSize: 9, color: '#94a3b8' }}>▶</span>}
-
-                                    {/* ── Level 3: Areas panel — appears to the RIGHT of city list ── */}
-                                    {hoveredCity === city.id && areas.length > 0 && (
-                                      <div
-                                        style={{
-                                          position: 'absolute', left: '100%', top: 0,
-                                          background: '#fff', border: '1px solid #e2e8f0',
-                                          borderRadius: 6, minWidth: 150,
-                                          boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
-                                          zIndex: 202,
-                                          paddingTop: 4, paddingBottom: 4,
-                                        }}
-                                        onClick={e => e.stopPropagation()}
-                                      >
-                                        {/* All Areas */}
-                                        <div
-                                          onClick={() => selectGA(ga.id, city.id, 'all')}
-                                          style={{
-                                            padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                                            color: '#1f4e1a', fontWeight: ctx.area === 'all' ? 700 : 400,
-                                            background: ctx.area === 'all' ? '#f0f7ee' : '#fff',
-                                            borderBottom: '1px solid #f1f5f9',
-                                          }}
-                                          onMouseOver={e => e.currentTarget.style.background = '#f0f7ee'}
-                                          onMouseOut={e => e.currentTarget.style.background = ctx.area === 'all' ? '#f0f7ee' : '#fff'}
-                                        >All Areas</div>
-                                        {/* Individual areas */}
-                                        {areas.map(area => (
-                                          <div key={area}
-                                            onClick={() => selectGA(ga.id, city.id, area)}
-                                            style={{
-                                              padding: '9px 14px', cursor: 'pointer', fontSize: 13,
-                                              color: '#1e293b',
-                                              fontWeight: ctx.area === area ? 700 : 400,
-                                              background: ctx.area === area ? '#f0f7ee' : '#fff',
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#f0f7ee'}
-                                            onMouseLeave={e => e.currentTarget.style.background = ctx.area === area ? '#f0f7ee' : '#fff'}
-                                          >{area}</div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+              <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                <SiteFlyoutMenu 
+                  sites={getSites()} 
+                  onSelect={(ga, area) => setSelectedSite({ga, area})} 
+                  selectedLabel={flyoutLabel} 
+                />
               </div>
             )}
 
