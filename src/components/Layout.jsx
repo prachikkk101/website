@@ -157,162 +157,78 @@ export default function Layout() {
               PNG Connections
             </NavLink>
 
-            {showSiteSelector && (
-              <div
-                style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}
-                onMouseEnter={() => setFlyoutOpen(true)}
-                onMouseLeave={() => { setFlyoutOpen(false); setHoveredGA(null); setHoveredCity(null); }}
-              >
-                {/* Trigger button — hover activates, click selects All GA */}
-                <button
-                  onClick={() => selectGA('all')}
-                  style={{
-                    height: '28px', fontSize: '11px',
-                    border: '1px solid rgba(255,255,255,0.3)',
-                    borderRadius: '4px', background: flyoutOpen ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.2)',
-                    color: 'white', padding: '0 10px',
-                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-                    maxWidth: 180, overflow: 'hidden', whiteSpace: 'nowrap',
-                  }}
-                >
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>{flyoutLabel}</span>
-                  <span style={{ fontSize: 8, flexShrink: 0 }}>▼</span>
-                </button>
+            {showSiteSelector && (() => {
+              // derive city + area options from ctx
+              const navCities = ctx.gaId !== 'all'
+                ? (getCitiesForGA(ctx.gaId) || [])
+                : [];
+              const navAreas = ctx.cityId !== 'all'
+                ? (getAreasForCity(ctx.cityId) || [])
+                : [];
+              const selStyle = {
+                height: 28, fontSize: 11,
+                border: '1px solid rgba(255,255,255,0.3)',
+                borderRadius: 4,
+                background: 'rgba(0,0,0,0.25)',
+                color: 'white',
+                padding: '0 6px',
+                cursor: 'pointer',
+                outline: 'none',
+                maxWidth: 130,
+              };
+              return (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                  {/* GA dropdown */}
+                  <select
+                    value={ctx.gaId}
+                    style={selStyle}
+                    onChange={e => {
+                      const gaId = e.target.value;
+                      setGlobalLocationContext({ gaId, cityId: 'all', area: 'all' });
+                      setSelGA(gaId); setSelCity('all'); setSelArea('all');
+                    }}
+                  >
+                    <option value="all">All GA</option>
+                    {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </select>
 
-                {/* Level 1 — GA Locations flyout (opens on hover) */}
-                {flyoutOpen && (
-                  <div style={{
-                    position: 'absolute', top: '100%', left: 0,
-                    background: 'white', border: '1px solid #e2e8f0',
-                    borderRadius: '6px', minWidth: '160px',
-                    boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                    zIndex: 99,
-                    paddingTop: 4, paddingBottom: 4,
-                  }}>
-                    {/* All GA option */}
-                    <div
-                      onClick={() => selectGA('all')}
-                      onMouseEnter={() => { setHoveredGA(null); setHoveredCity(null); }}
-                      style={{
-                        padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
-                        fontWeight: ctx.gaId === 'all' ? 700 : 400, color: '#1f4e1a',
-                        borderBottom: '1px solid #f1f5f9',
-                        background: ctx.gaId === 'all' ? '#f0f7ee' : 'white',
+                  {/* City dropdown — only shown when a GA is selected */}
+                  {ctx.gaId !== 'all' && (
+                    <select
+                      value={ctx.cityId}
+                      style={selStyle}
+                      onChange={e => {
+                        const cityId = e.target.value;
+                        setGlobalLocationContext({ gaId: ctx.gaId, cityId, area: 'all' });
+                        setSelCity(cityId); setSelArea('all');
                       }}
-                      onMouseOver={e => e.currentTarget.style.background = '#f0f7ee'}
-                      onMouseOut={e => e.currentTarget.style.background = ctx.gaId === 'all' ? '#f0f7ee' : 'white'}
                     >
-                      All GA
-                    </div>
+                      <option value="all">All Cities</option>
+                      {navCities.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                  )}
 
-                    {mergedGAs.map(ga => {
-                      const cities = ga.cities || [];
-                      return (
-                        <div
-                          key={ga.id}
-                          onMouseEnter={() => { setHoveredGA(ga.id); setHoveredCity(null); }}
-                          onClick={() => selectGA(ga.id)}
-                          style={{
-                            padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            position: 'relative',
-                            fontWeight: ctx.gaId === ga.id ? 700 : 400,
-                            background: hoveredGA === ga.id ? '#f0f7ee' : 'white',
-                            color: '#1e293b',
-                          }}
-                        >
-                          <span>{ga.label}</span>
-                          {cities.length > 0 && <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: 6 }}>▶</span>}
-
-                          {/* Level 2 — Cities flyout (opens on GA hover) */}
-                          {hoveredGA === ga.id && cities.length > 0 && (
-                            <div style={{
-                              position: 'absolute', left: '100%', top: 0,
-                              background: 'white', border: '1px solid #e2e8f0',
-                              borderRadius: '6px', minWidth: '160px',
-                              boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                              zIndex: 100,
-                              paddingTop: 4, paddingBottom: 4,
-                            }}
-                              onClick={e => e.stopPropagation()}
-                            >
-                              <div
-                                onClick={() => selectGA(ga.id, 'all')}
-                                onMouseEnter={() => setHoveredCity(null)}
-                                style={{
-                                  padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
-                                  color: '#1f4e1a', borderBottom: '1px solid #f1f5f9',
-                                  background: ctx.gaId === ga.id && ctx.cityId === 'all' ? '#f0f7ee' : 'white',
-                                }}
-                                onMouseOver={e => e.currentTarget.style.background = '#f0f7ee'}
-                                onMouseOut={e => e.currentTarget.style.background = ctx.gaId === ga.id && ctx.cityId === 'all' ? '#f0f7ee' : 'white'}
-                              >
-                                All Cities in {ga.label}
-                              </div>
-                              {cities.map(city => {
-                                const areas = city.areas || [];
-                                return (
-                                  <div
-                                    key={city.id}
-                                    onMouseEnter={() => setHoveredCity(city.id)}
-                                    onClick={() => selectGA(ga.id, city.id, 'all')}
-                                    style={{
-                                      padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
-                                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                                      position: 'relative',
-                                      fontWeight: ctx.cityId === city.id ? 700 : 400,
-                                      background: hoveredCity === city.id ? '#f0f7ee' : 'white',
-                                      color: '#1e293b',
-                                    }}
-                                  >
-                                    <span>{city.label}</span>
-                                    {areas.length > 0 && <span style={{ fontSize: '10px', color: '#94a3b8', marginLeft: 6 }}>▶</span>}
-
-                                    {/* Level 3 — Areas flyout (opens on city hover) */}
-                                    {hoveredCity === city.id && areas.length > 0 && (
-                                      <div style={{
-                                        position: 'absolute', left: '100%', top: 0,
-                                        background: 'white', border: '1px solid #e2e8f0',
-                                        borderRadius: '6px', minWidth: '160px',
-                                        boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
-                                        zIndex: 101,
-                                        paddingTop: 4, paddingBottom: 4,
-                                      }}
-                                        onClick={e => e.stopPropagation()}
-                                      >
-                                        {areas.map(area => (
-                                          <div
-                                            key={area}
-                                            onClick={() => selectGA(ga.id, city.id, area)}
-                                            style={{
-                                              padding: '9px 14px', cursor: 'pointer', fontSize: '13px',
-                                              color: '#1e293b',
-                                              fontWeight: ctx.area === area ? 700 : 400,
-                                              background: ctx.area === area ? '#f0f7ee' : 'white',
-                                            }}
-                                            onMouseEnter={e => e.currentTarget.style.background = '#f0f7ee'}
-                                            onMouseLeave={e => e.currentTarget.style.background = ctx.area === area ? '#f0f7ee' : 'white'}
-                                          >
-                                            {area}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-
+                  {/* Area dropdown — only shown when a City is selected */}
+                  {ctx.gaId !== 'all' && ctx.cityId !== 'all' && navAreas.length > 0 && (
+                    <select
+                      value={ctx.area}
+                      style={selStyle}
+                      onChange={e => {
+                        const area = e.target.value;
+                        setGlobalLocationContext({ gaId: ctx.gaId, cityId: ctx.cityId, area });
+                        setSelArea(area);
+                      }}
+                    >
+                      <option value="all">All Areas</option>
+                      {navAreas.map(a => <option key={a} value={a}>{a}</option>)}
+                    </select>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Remaining nav tabs */}
+
             {[
               { label: 'Inventory', to: '/inventory' },
               { label: 'PE Laying', to: '/pe-laying' },
