@@ -193,17 +193,6 @@ export default function Layout() {
               PNG Connections
             </NavLink>
 
-            {showSiteSelector && (
-              <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-                <SiteFlyoutMenu 
-                  sites={getSites()} 
-                  onSelect={(ga, area) => setSelectedSite({ga, area})} 
-                  selectedLabel={flyoutLabel} 
-                />
-              </div>
-            )}
-
-
             {/* Remaining nav tabs */}
 
             {[
@@ -229,6 +218,16 @@ export default function Layout() {
               </NavLink>
             ))}
           </nav>
+
+          {showSiteSelector && (
+            <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+              <SiteFlyoutMenu 
+                sites={getSites()} 
+                onSelect={(ga, area) => setSelectedSite({ga, area})} 
+                selectedLabel={flyoutLabel} 
+              />
+            </div>
+          )}
 
           {/* Right side — desktop */}
           <div className="desktop-right" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', flexShrink: 0, marginLeft: 'auto' }}>

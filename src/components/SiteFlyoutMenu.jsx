@@ -18,10 +18,13 @@ function SiteFlyoutMenu({ sites, onSelect, selectedLabel }) {
     }, 200);
   };
 
+  console.log('sites data:', sites);
+
   return (
     <div 
       style={{ position: 'relative', display: 'inline-block' }}
       onMouseEnter={() => {
+        console.log('GA menu hovered');
         cancelClose();
         if (activeGA === null) {
           setActiveGA('open');
@@ -41,7 +44,7 @@ function SiteFlyoutMenu({ sites, onSelect, selectedLabel }) {
       {activeGA !== null && (
         <div style={{
           position: 'absolute', top: '100%', left: 0,
-          background: 'white', border: '1px solid #e2e8f0',
+          background: 'white', border: '3px solid red',
           borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           minWidth: '200px', zIndex: 9999, marginTop: '4px',
           display: 'flex', isolation: 'isolate'
