@@ -1,6 +1,6 @@
 // src/components/Layout.jsx
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useContext, useEffect } from 'react';
+import { useState, useContext, useEffect, useRef } from 'react';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { ToastContainer } from './Toast';
@@ -44,6 +44,10 @@ export default function Layout() {
   const [flyoutOpen,   setFlyoutOpen]   = useState(false);
   const [hoveredGA,    setHoveredGA]    = useState(null);
   const [hoveredCity,  setHoveredCity]  = useState(null);
+  // Timer ref — prevents flyout closing when cursor moves from button → panel
+  const closeTimer = useRef(null);
+  const openFlyout  = () => { if (closeTimer.current) clearTimeout(closeTimer.current); setFlyoutOpen(true); };
+  const closeFlyout = () => { closeTimer.current = setTimeout(() => { setFlyoutOpen(false); setHoveredGA(null); setHoveredCity(null); }, 120); };
 
   // Close mobile menu on route change
   useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
@@ -158,11 +162,10 @@ export default function Layout() {
             </NavLink>
 
             {showSiteSelector && (
-              /* ── Entire hover zone: button + all cascading panels ── */
               <div
                 style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)', position: 'relative' }}
-                onMouseEnter={() => setFlyoutOpen(true)}
-                onMouseLeave={() => { setFlyoutOpen(false); setHoveredGA(null); setHoveredCity(null); }}
+                onMouseEnter={openFlyout}
+                onMouseLeave={closeFlyout}
               >
                 {/* Trigger: single button showing current selection */}
                 <button style={{
@@ -183,7 +186,10 @@ export default function Layout() {
 
                 {/* ── Level 1: GA list — drops below the button ── */}
                 {flyoutOpen && (
-                  <div style={{
+                  <div
+                    onMouseEnter={openFlyout}
+                    onMouseLeave={closeFlyout}
+                    style={{
                     position: 'absolute', top: '100%', left: 0,
                     background: '#fff', border: '1px solid #e2e8f0',
                     borderRadius: 6, minWidth: 150,
