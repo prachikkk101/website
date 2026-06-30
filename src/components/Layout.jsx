@@ -96,46 +96,34 @@ export default function Layout() {
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
-  const getSites = () => {
-    return mergedGAs.map(ga => {
-      const allAreas = [];
-      (ga.cities || []).forEach(city => {
-        (city.areas || []).forEach(area => {
-          if (!allAreas.includes(area)) {
-            allAreas.push(area);
-          }
-        });
-      });
-      return {
-        value: ga.id,
-        label: ga.label,
-        areas: allAreas
-      };
-    });
-  };
+  // Build nested GA → Cities → Areas structure for the 3-column flyout
+  const getGALocations = () => (mergedGAs || []).map(ga => ({
+    id:     ga.id,
+    name:   ga.label,
+    cities: (ga.cities || []).map(city => ({
+      id:    city.id,
+      name:  city.label,
+      areas: city.areas || []
+    }))
+  }));
 
-  const setSelectedSite = ({ ga, area }) => {
-    if (ga === 'all') {
+  // Called by SiteFlyoutMenu with (gaName, cityName, area) — all are label strings
+  const handleFlyoutSelect = (gaName, cityName, area) => {
+    if (!gaName) {
+      // Reset to All GA
       setGlobalLocationContext({ gaId: 'all', cityId: 'all', area: 'all' });
-      setSelGA('all');
-      setSelCity('all');
-      setSelArea('all');
+      setSelGA('all'); setSelCity('all'); setSelArea('all');
       return;
     }
-
-    let foundCityId = 'all';
-    const gaObj = mergedGAs.find(g => g.id === ga);
-    if (gaObj && area !== 'all') {
-      const city = (gaObj.cities || []).find(c => (c.areas || []).includes(area));
-      if (city) {
-        foundCityId = city.id;
-      }
-    }
-
-    setGlobalLocationContext({ gaId: ga, cityId: foundCityId, area });
-    setSelGA(ga);
-    setSelCity(foundCityId);
-    setSelArea(area);
+    const gaObj    = mergedGAs.find(g => g.label === gaName);
+    const gaId     = gaObj?.id || 'all';
+    const cityObj  = (gaObj?.cities || []).find(c => c.label === cityName);
+    const cityId   = cityObj?.id || 'all';
+    const areaVal  = area || 'all';
+    setGlobalLocationContext({ gaId, cityId, area: areaVal });
+    setSelGA(gaId);
+    setSelCity(cityId);
+    setSelArea(areaVal);
   };
 
   // Build label for the trigger button
@@ -222,8 +210,8 @@ export default function Layout() {
           {showSiteSelector && (
             <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
               <SiteFlyoutMenu 
-                sites={getSites()} 
-                onSelect={(ga, area) => setSelectedSite({ga, area})} 
+                gaLocations={getGALocations()} 
+                onSelect={handleFlyoutSelect} 
                 selectedLabel={flyoutLabel} 
               />
             </div>
