@@ -50,8 +50,50 @@ const EMPTY_ENTRY = {
 
 export default function PELaying() {
   const { showToast } = useToast();
-  const { siteList, selGA, mergedGAs }  = useSite();
+  const { siteList, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext }  = useSite();
   const [allData, setAllData] = useState([]);
+
+  // 3-level form states for GA Location, City, Area
+  const [formGA,   setFormGA]   = useState('');
+  const [formCity, setFormCity] = useState('');
+  const [formArea, setFormArea] = useState('');
+
+  // Option lists
+  const getAllCities = () => {
+    return mergedGAs.flatMap(ga => ga.cities || []);
+  };
+  const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
+  const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
+
+  // Pre-fill and restrict GA / City / Area fields when panel opens or editingId changes
+  useEffect(() => {
+    if (panelOpen) {
+      if (editingId) {
+        const row = allData.find(r => r.id === editingId || r.sr === editingId);
+        if (row) {
+          // Resolve GA & City from row.area
+          let foundGAId = '';
+          let foundCityId = '';
+          for (const ga of mergedGAs) {
+            const city = (ga.cities || []).find(c => (c.areas || []).includes(row.area));
+            if (city) {
+              foundGAId = ga.id;
+              foundCityId = city.id;
+              break;
+            }
+          }
+          setFormGA(foundGAId || '');
+          setFormCity(foundCityId || '');
+          setFormArea(row.area || '');
+        }
+      } else {
+        const ctx = globalLocationContext;
+        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      }
+    }
+  }, [panelOpen, editingId, globalLocationContext, mergedGAs, allData]);
 
   useEffect(() => {
     document.title = 'GP-PMS — PE Laying';
@@ -143,6 +185,9 @@ export default function PELaying() {
     const e = {};
     if (!form.layDate)        e.layDate   = 'Laying Date is required';
     if (!form.connType)       e.connType  = 'Connection Type is required';
+    if (!formGA)   e.ga   = 'Required';
+    if (!formCity) e.city = 'Required';
+    if (!formArea) e.area = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -187,6 +232,7 @@ export default function PELaying() {
     if (!validateForm()) return;
     const entryBase = {
       ...form,
+      area:    formArea,
       d32oc:   Number(form.d32oc)   || 0,
       d32b:    Number(form.d32b)    || 0,
       d32hdd:  Number(form.d32hdd)  || 0,
@@ -456,26 +502,68 @@ export default function PELaying() {
       >
         <div>
           <SectionTitle>Entry Details</SectionTitle>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Laying Date" required error={errors.layDate}>
-              <Input type="date" value={form.layDate} onChange={e => f('layDate', e.target.value)} error={errors.layDate} />
-            </Field>
-            <Field label="Laying Type" required error={errors.connType}>
-              <Select value={form.connType} onChange={e => f('connType', e.target.value)} error={errors.connType}>
-                {CONN_TYPES.map(t => <option key={t}>{t}</option>)}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Laying Date" required error={errors.layDate}>
+                <Input type="date" value={form.layDate} onChange={e => f('layDate', e.target.value)} error={errors.layDate} />
+              </Field>
+              <Field label="Laying Type" required error={errors.connType}>
+                <Select value={form.connType} onChange={e => f('connType', e.target.value)} error={errors.connType}>
+                  {CONN_TYPES.map(t => <option key={t}>{t}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Coil / Batch No.">
+                <Input value={form.coil} onChange={e => f('coil', e.target.value)} />
+              </Field>
+              <Field label="Work Status">
+                <Select value={form.workStatus} onChange={e => f('workStatus', e.target.value)}>
+                  {WK_STATUSES.map(s => <option key={s}>{s}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <Field label="GA Location" required error={errors.ga}>
+              <Select
+                value={formGA}
+                disabled={globalLocationContext.gaId !== 'all'}
+                onChange={e => {
+                  setFormGA(e.target.value);
+                  setFormCity('');
+                  setFormArea('');
+                }}
+                error={errors.ga}
+              >
+                <option value="">Select GA Location</option>
+                {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
               </Select>
             </Field>
-            <Field label="Area / Society">
-              <Input value={form.area} onChange={e => f('area', e.target.value)} placeholder="e.g. UE-II Block A" />
-            </Field>
-            <Field label="Coil / Batch No.">
-              <Input value={form.coil} onChange={e => f('coil', e.target.value)} />
-            </Field>
-            <Field label="Work Status">
-              <Select value={form.workStatus} onChange={e => f('workStatus', e.target.value)}>
-                {WK_STATUSES.map(s => <option key={s}>{s}</option>)}
-              </Select>
-            </Field>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="City" required error={errors.city}>
+                <Select
+                  value={formCity}
+                  disabled={globalLocationContext.cityId !== 'all'}
+                  onChange={e => {
+                    setFormCity(e.target.value);
+                    setFormArea('');
+                  }}
+                  error={errors.city}
+                >
+                  <option value="">Select City</option>
+                  {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </Select>
+              </Field>
+              <Field label="Area / Society" required error={errors.area}>
+                <Select
+                  value={formArea}
+                  onChange={e => setFormArea(e.target.value)}
+                  error={errors.area}
+                >
+                  <option value="">Select Area</option>
+                  {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                </Select>
+              </Field>
+            </div>
           </div>
         </div>
 
@@ -492,30 +580,78 @@ export default function PELaying() {
 
             {/* Row 2: Ø32 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø32mm</div>
-            <Input type="number" min={0} value={form.d32oc} onChange={e => f('d32oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d32b} onChange={e => f('d32b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d32hdd} onChange={e => f('d32hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d32oc === 0 || form.d32oc === '' ? '' : form.d32oc}
+              onChange={e => { const val = e.target.value; f('d32oc', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d32oc', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d32b === 0 || form.d32b === '' ? '' : form.d32b}
+              onChange={e => { const val = e.target.value; f('d32b', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d32b', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d32hdd === 0 || form.d32hdd === '' ? '' : form.d32hdd}
+              onChange={e => { const val = e.target.value; f('d32hdd', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d32hdd', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
             <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d32Total}</div>
 
             {/* Row 3: Ø63 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø63mm</div>
-            <Input type="number" min={0} value={form.d63oc} onChange={e => f('d63oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d63b} onChange={e => f('d63b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d63hdd} onChange={e => f('d63hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d63oc === 0 || form.d63oc === '' ? '' : form.d63oc}
+              onChange={e => { const val = e.target.value; f('d63oc', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d63oc', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d63b === 0 || form.d63b === '' ? '' : form.d63b}
+              onChange={e => { const val = e.target.value; f('d63b', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d63b', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d63hdd === 0 || form.d63hdd === '' ? '' : form.d63hdd}
+              onChange={e => { const val = e.target.value; f('d63hdd', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d63hdd', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
             <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d63Total}</div>
 
             {/* Row 4: Ø90 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø90mm</div>
-            <Input type="number" min={0} value={form.d90oc} onChange={e => f('d90oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d90b} onChange={e => f('d90b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d90hdd} onChange={e => f('d90hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d90oc === 0 || form.d90oc === '' ? '' : form.d90oc}
+              onChange={e => { const val = e.target.value; f('d90oc', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d90oc', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d90b === 0 || form.d90b === '' ? '' : form.d90b}
+              onChange={e => { const val = e.target.value; f('d90b', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d90b', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d90hdd === 0 || form.d90hdd === '' ? '' : form.d90hdd}
+              onChange={e => { const val = e.target.value; f('d90hdd', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d90hdd', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
             <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d90Total}</div>
 
             {/* Row 5: Ø125 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø125mm</div>
-            <Input type="number" min={0} value={form.d125oc} onChange={e => f('d125oc', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d125b} onChange={e => f('d125b', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
-            <Input type="number" min={0} value={form.d125hdd} onChange={e => f('d125hdd', e.target.value)} style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d125oc === 0 || form.d125oc === '' ? '' : form.d125oc}
+              onChange={e => { const val = e.target.value; f('d125oc', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d125oc', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d125b === 0 || form.d125b === '' ? '' : form.d125b}
+              onChange={e => { const val = e.target.value; f('d125b', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d125b', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
+            <Input type="number" min={0} value={form.d125hdd === 0 || form.d125hdd === '' ? '' : form.d125hdd}
+              onChange={e => { const val = e.target.value; f('d125hdd', val === '' ? 0 : Number(val)); }}
+              onBlur={e => { if (e.target.value === '') f('d125hdd', 0); }}
+              placeholder="0"
+              style={{ textAlign: 'center', height: 28 }} />
             <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d125Total}</div>
           </div>
         </div>

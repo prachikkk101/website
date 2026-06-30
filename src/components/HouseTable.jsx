@@ -136,9 +136,21 @@ function ConfirmDelete({ onConfirm, onCancel }) {
 export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity } = useSite();
+  const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
   const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
+
+  // 3-level form states for GA Location, City, Area
+  const [formGA,   setFormGA]   = useState('');
+  const [formCity, setFormCity] = useState('');
+  const [formArea, setFormArea] = useState('');
+
+  // Option lists
+  const getAllCities = () => {
+    return mergedGAs.flatMap(ga => ga.cities || []);
+  };
+  const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
+  const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
 
   useEffect(() => {
     document.title = 'GP-PMS — PNG Connections';
@@ -152,6 +164,43 @@ export default function HouseTable() {
     setTFilterArea('all');
     setPage(1);
   }, [selGA]);
+
+  // Pre-fill and restrict GA / City / Area fields when panel opens or editEntry changes
+  useEffect(() => {
+    if (panelOpen) {
+      if (editEntry) {
+        // Resolve GA & City from editEntry's city and area
+        let foundGAId = '';
+        let foundCityId = '';
+        for (const ga of mergedGAs) {
+          const city = (ga.cities || []).find(c => c.label.toLowerCase() === (editEntry.city || '').toLowerCase() || c.id === editEntry.city);
+          if (city) {
+            foundGAId = ga.id;
+            foundCityId = city.id;
+            break;
+          }
+        }
+        if (!foundGAId && editEntry.area) {
+          for (const ga of mergedGAs) {
+            const city = (ga.cities || []).find(c => (c.areas || []).includes(editEntry.area));
+            if (city) {
+              foundGAId = ga.id;
+              foundCityId = city.id;
+              break;
+            }
+          }
+        }
+        setFormGA(foundGAId || '');
+        setFormCity(foundCityId || '');
+        setFormArea(editEntry.area || '');
+      } else {
+        const ctx = globalLocationContext;
+        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      }
+    }
+  }, [panelOpen, editEntry, globalLocationContext, mergedGAs]);
 
   // Auth / role checks
   const session    = getSession();
@@ -372,6 +421,9 @@ export default function HouseTable() {
     if (!form.name.trim())    e.name    = 'Required';
     if (!form.mobile.trim())  e.mobile  = 'Required';
     if (!form.houseNo.trim()) e.houseNo = 'Required';
+    if (!formGA)   e.ga   = 'Required';
+    if (!formCity) e.city = 'Required';
+    if (!formArea) e.area = 'Required';
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -455,6 +507,10 @@ export default function HouseTable() {
       if (qty > 0) materialsUsed[mat.label] = { qty, unit: mat.unit };
     });
 
+    const finalCityLabel = mergedGAs
+      .flatMap(g => g.cities || [])
+      .find(c => c.id === formCity)?.label || formCity;
+
     if (editEntry) {
       // Update existing
       const updated = (allHouses || []).map(h =>
@@ -464,7 +520,7 @@ export default function HouseTable() {
               bpNo: form.bpNo, appNo: form.appNo, name: form.name,
               mobile: form.mobile, altMobile: form.altMobile,
               acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
-              address1: form.address1, area: form.area, city: form.city,
+              address1: form.address1, area: formArea, city: finalCityLabel,
               gcStatus: form.gcStatus, giStatus: form.giStatus,
               rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
               plumbingDate: form.plumbingDate, meterNo: form.meterNo,
@@ -491,7 +547,7 @@ export default function HouseTable() {
         id: Date.now(), bpNo: form.bpNo, name: form.name, mobile: form.mobile,
         appNo: form.appNo, altMobile: form.altMobile,
         acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
-        address1: form.address1, area: form.area, city: form.city,
+        address1: form.address1, area: formArea, city: finalCityLabel,
         meterNo: form.meterNo, meterDate: form.meterDate,
         meterMake: form.meterMake, meterReading: form.meterReading,
         gcStatus: form.gcStatus, giStatus: form.giStatus,
@@ -587,11 +643,50 @@ export default function HouseTable() {
                 </Select>
               </Field>
             </div>
-            <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Area"><Select value={form.area} onChange={e => f('area', e.target.value)}>{(liveAreas.length > 0 ? liveAreas : AREAS_LIST).map(a => <option key={a}>{a}</option>)}</Select></Field>
-              <Field label="City"><Input value={form.city} onChange={e => f('city', e.target.value)} /></Field>
-            </div>
+             <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+               <Field label="GA Location" required error={errors.ga}>
+                 <Select
+                   value={formGA}
+                   disabled={globalLocationContext.gaId !== 'all'}
+                   onChange={e => {
+                     setFormGA(e.target.value);
+                     setFormCity('');
+                     setFormArea('');
+                   }}
+                   error={errors.ga}
+                 >
+                   <option value="">Select GA Location</option>
+                   {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                 </Select>
+               </Field>
+               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                 <Field label="City" required error={errors.city}>
+                   <Select
+                     value={formCity}
+                     disabled={globalLocationContext.cityId !== 'all'}
+                     onChange={e => {
+                       setFormCity(e.target.value);
+                       setFormArea('');
+                     }}
+                     error={errors.city}
+                   >
+                     <option value="">Select City</option>
+                     {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                   </Select>
+                 </Field>
+                 <Field label="Area / Society" required error={errors.area}>
+                   <Select
+                     value={formArea}
+                     onChange={e => setFormArea(e.target.value)}
+                     error={errors.area}
+                   >
+                     <option value="">Select Area</option>
+                     {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                   </Select>
+                 </Field>
+               </div>
+             </div>
           </div>
         </div>
         <div>
@@ -684,7 +779,12 @@ export default function HouseTable() {
               <div key={mat.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{mat.label}</label>
                 <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{mat.unit}</span>
-                <input type="number" min={0} value={form[mat.key] !== undefined && form[mat.key] !== null ? form[mat.key] : ''} onChange={e => f(mat.key, e.target.value === '' ? '' : Number(e.target.value))}
+                <input type="number" min={0}
+                  value={form[mat.key] !== undefined && form[mat.key] !== null && form[mat.key] !== 0 ? form[mat.key] : ''}
+                  onFocus={e => e.target.select()}
+                  onChange={e => f(mat.key, e.target.value === '' ? 0 : Number(e.target.value))}
+                  onBlur={e => { if (e.target.value === '') f(mat.key, 0); }}
+                  placeholder="0"
                   style={{ width: 72, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }} />
                 {/* × hide for this entry only */}
                 <button type="button"
@@ -717,8 +817,11 @@ export default function HouseTable() {
                 />
                 <input
                   type="number" min={0}
-                  value={mat.qty}
-                  onChange={e => setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, qty: Number(e.target.value) } : m))}
+                  value={mat.qty !== 0 ? mat.qty : ''}
+                  onFocus={e => e.target.select()}
+                  onChange={e => setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, qty: e.target.value === '' ? 0 : Number(e.target.value) } : m))}
+                  onBlur={e => { if (e.target.value === '') setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, qty: 0 } : m)); }}
+                  placeholder="0"
                   style={{ width: 68, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 13 }}
                 />
                 <button type="button" onClick={() => setCustomMaterials(prev => prev.filter((_, i) => i !== idx))}

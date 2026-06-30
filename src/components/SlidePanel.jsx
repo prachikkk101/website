@@ -32,17 +32,28 @@ export function Field({ label, required, error, children }) {
   );
 }
 
-export function Input({ error, style, ...props }) {
+export function Input({ error, style, onFocus: externalOnFocus, onBlur: externalOnBlur, type, ...props }) {
   return (
     <input
+      type={type}
       style={{
         ...fieldStyle,
         borderColor: error ? '#ef4444' : '#d1d5db',
         boxShadow: error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none',
         ...style,
       }}
-      onFocus={e => { e.target.style.borderColor = error ? '#ef4444' : '#2d6a27'; e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)'; }}
-      onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#d1d5db'; e.target.style.boxShadow = error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none'; }}
+      onFocus={e => {
+        e.target.style.borderColor = error ? '#ef4444' : '#2d6a27';
+        e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)';
+        // Auto-select all text for number inputs so typing replaces the 0
+        if (type === 'number') e.target.select();
+        if (externalOnFocus) externalOnFocus(e);
+      }}
+      onBlur={e => {
+        e.target.style.borderColor = error ? '#ef4444' : '#d1d5db';
+        e.target.style.boxShadow = error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none';
+        if (externalOnBlur) externalOnBlur(e);
+      }}
       {...props}
     />
   );

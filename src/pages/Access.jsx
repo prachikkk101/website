@@ -45,6 +45,7 @@ export default function Access() {
   const [sites,     setSites]     = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedMessage, setSubmittedMessage] = useState('');
 
   // GA Location form state — 3-level
   const [showLocModal, setShowLocModal] = useState(false);
@@ -84,7 +85,13 @@ export default function Access() {
     const newReq = { id: Date.now(), name: rName, email: rEmail, site: rSite, reason: rReason, status: 'pending', requestedAt: new Date().toISOString() };
     const updated = [...requests, newReq];
     setRequests(updated); saveRequests(updated);
-    setSubmitted(true);
+    // CRITICAL: close the modal immediately
+    setShowModal(false);
+    setSubmitted(false);
+    // Show inline non-blocking banner on the page
+    setSubmittedMessage('Request sent — waiting for admin approval. You can continue browsing in view-only mode.');
+    // Auto-clear after 6 seconds
+    setTimeout(() => setSubmittedMessage(''), 6000);
   }
 
   // ── Approve / Reject ──
@@ -250,6 +257,20 @@ export default function Access() {
           <p style={{ fontSize:13, color:'#64748b', margin:'4px 0 0' }}>Manage user roles, site access, and permissions</p>
         </div>
       </div>
+
+      {/* Non-blocking success banner */}
+      {submittedMessage && (
+        <div style={{
+          background: '#d1fae5', color: '#166534',
+          padding: '12px 16px', borderRadius: '6px',
+          fontSize: '13px', fontWeight: 500,
+          marginBottom: '16px', display: 'flex',
+          alignItems: 'center', gap: '8px',
+          border: '1px solid #6ee7b7',
+        }}>
+          ✓ {submittedMessage}
+        </div>
+      )}
 
       {/* Supervisor without access — Request panel (NOT shown to admins) */}
       {!isAdmin && (
@@ -481,64 +502,53 @@ export default function Access() {
         Full RBAC will be enforced once backend is connected. Currently using local mode authentication.
       </div>
 
-      {/* ── Request Access Modal ── */}
+      {/* ── Request Access Modal — conditionally rendered, not just hidden ── */}
       {showModal && (
-        <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}>
-          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:460,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden' }}>
+        <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:460,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden' }}
+            onClick={e => e.stopPropagation()}>
             <div style={{ background:'#1f4e1a',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
               <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Request Site Editing Access</span>
               <button onClick={() => setShowModal(false)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
             </div>
             <div style={{ padding:24 }}>
-              {submitted ? (
-                <div style={{ textAlign:'center', padding:'20px 0' }}>
-                  <div style={{ fontSize:40,marginBottom:12 }}>✅</div>
-                  <p style={{ fontSize:15,fontWeight:700,color:'#15803d',marginBottom:8 }}>Request submitted!</p>
-                  <p style={{ fontSize:13,color:'#64748b' }}>Your admin will review and approve your access.</p>
-                  <button onClick={() => setShowModal(false)}
-                    style={{ marginTop:16,background:'#2d6a27',color:'#fff',border:'none',borderRadius:7,padding:'10px 24px',fontSize:13,fontWeight:600,cursor:'pointer' }}>
-                    Close
-                  </button>
+              <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Your Name</label>
+                  <input value={rName} onChange={e => setRName(e.target.value)}
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
                 </div>
-              ) : (
-                <>
-                  <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-                    <div>
-                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Your Name</label>
-                      <input value={rName} onChange={e => setRName(e.target.value)}
-                        style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Your Email</label>
-                      <input value={rEmail} readOnly
-                        style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#f8fafc',color:'#94a3b8' }} />
-                    </div>
-                    <div>
-                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Select Site</label>
-                      <select value={rSite} onChange={e => setRSite(e.target.value)}
-                        style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#fff' }}>
-                        {allSiteNames.map(s => <option key={s}>{s}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Reason (optional)</label>
-                      <textarea value={rReason} onChange={e => setRReason(e.target.value)}
-                        placeholder="e.g. I am the supervisor for this site" rows={3}
-                        style={{ width:'100%',border:'1px solid #d1d5db',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical' }} />
-                    </div>
-                  </div>
-                  <div style={{ display:'flex',gap:10,marginTop:20 }}>
-                    <button onClick={() => setShowModal(false)}
-                      style={{ flex:1,height:38,background:'#f1f5f9',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
-                      Cancel
-                    </button>
-                    <button onClick={handleSubmitRequest}
-                      style={{ flex:1,height:38,background:'#2d6a27',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#fff' }}>
-                      Submit Request
-                    </button>
-                  </div>
-                </>
-              )}
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Your Email</label>
+                  <input value={rEmail} readOnly
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#f8fafc',color:'#94a3b8' }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Select Site</label>
+                  <select value={rSite} onChange={e => setRSite(e.target.value)}
+                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#fff' }}>
+                    {allSiteNames.map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Reason (optional)</label>
+                  <textarea value={rReason} onChange={e => setRReason(e.target.value)}
+                    placeholder="e.g. I am the supervisor for this site" rows={3}
+                    style={{ width:'100%',border:'1px solid #d1d5db',borderRadius:5,padding:'8px 10px',fontSize:13,boxSizing:'border-box',resize:'vertical' }} />
+                </div>
+              </div>
+              <div style={{ display:'flex',gap:10,marginTop:20 }}>
+                <button onClick={() => setShowModal(false)}
+                  style={{ flex:1,height:38,background:'#f1f5f9',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
+                  Cancel
+                </button>
+                <button onClick={handleSubmitRequest}
+                  disabled={!rName.trim() || !rSite}
+                  style={{ flex:1,height:38,background: (!rName.trim() || !rSite) ? '#94a3b8' : '#2d6a27',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:(!rName.trim() || !rSite)?'not-allowed':'pointer',color:'#fff' }}>
+                  Submit Request
+                </button>
+              </div>
             </div>
           </div>
         </div>

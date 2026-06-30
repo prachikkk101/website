@@ -110,39 +110,65 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
               <div style={{ padding: '12px 16px', background: 'white' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: readOnly ? 0 : 10 }}>
                   {cat.items.map(item => {
-                    const val = readOnly ? (quantities[item] ?? 0) : (quantities[`${cat.id}__${item}`] ?? 0);
+                    if (readOnly) {
+                      // readOnly mode: quantities[item] is an object { recv, issued, inStore }
+                      const stats = quantities[item] || {};
+                      const recv    = stats.recv    ?? 0;
+                      const issued  = stats.issued  ?? 0;
+                      const inStore = stats.inStore ?? 0;
+                      return (
+                        <div key={item} style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '8px 12px', fontSize: '12px',
+                          borderBottom: '1px solid #f1f5f9',
+                          background: '#fafafa', borderRadius: 4,
+                        }}>
+                          <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: '#374151' }}>{item}</span>
+                          <div style={{ display: 'flex', gap: 12, fontSize: '11px' }}>
+                            <span style={{ color: '#64748b' }}>
+                              Received: <b style={{ color: '#1f4e1a' }}>{recv}</b>
+                            </span>
+                            <span style={{ color: '#64748b' }}>
+                              Used: <b style={{ color: '#c0440a' }}>{issued}</b>
+                            </span>
+                            <span style={{ color: '#64748b' }}>
+                              Available: <b style={{ color: inStore > 0 ? '#1f4e1a' : '#dc2626' }}>{inStore}</b>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    // Edit mode
+                    const val = quantities[`${cat.id}__${item}`] ?? 0;
                     return (
                       <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
-                        {readOnly ? (
-                          <span style={{
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            color: '#1e293b',
-                            background: '#f1f5f9',
-                            padding: '3px 10px',
-                            borderRadius: '4px',
-                            minWidth: '50px',
-                            textAlign: 'right'
-                          }}>
-                            {val}
-                          </span>
-                        ) : (
-                          <>
-                            <input
-                              type="number" min="0"
-                              value={val}
-                              onChange={e => updateQty(cat.id, item, Number(e.target.value))}
-                              style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(cat.id, item)}
-                              title={`Remove "${item}"`}
-                              style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                            >×</button>
-                          </>
-                        )}
+                        <>
+                          <input
+                            type="number" min="0"
+                            value={val === 0 ? '' : val}
+                            onFocus={(e) => e.target.select()}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const num = raw === '' ? 0 : Number(raw);
+                              updateQty(cat.id, item, num);
+                            }}
+                            onBlur={(e) => {
+                              if (e.target.value === '') {
+                                updateQty(cat.id, item, 0);
+                              }
+                            }}
+                            placeholder="0"
+                            style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(cat.id, item)}
+                            title={`Remove "${item}"`}
+                            style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                          >×</button>
+                        </>
                       </div>
                     );
                   })}
@@ -168,7 +194,7 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
 export default function Inventory() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { siteList }  = useSite();
+  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext }  = useSite();
 
   const sites = useMemo(() => {
     return siteList.map(s => s.name);
@@ -200,14 +226,32 @@ export default function Inventory() {
   const [openCategory,  setOpenCategory]  = useState(null);
   const [quantities,    setQuantities]    = useState({});
 
+  // 3-level form states for GA Location, City, Area
+  const [formGA,   setFormGA]   = useState('');
+  const [formCity, setFormCity] = useState('');
+  const [formArea, setFormArea] = useState('');
+
+  // Option lists
+  const getAllCities = () => {
+    return mergedGAs.flatMap(ga => ga.cities || []);
+  };
+  const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
+  const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
+
   // Summary accordion & return stock states
   const [openCategoryAccordion, setOpenCategoryAccordion] = useState(null);
   const [returnStockOpen, setReturnStockOpen] = useState(false);
 
   const summaryQuantities = useMemo(() => {
+    // For readOnly accordion, pass objects with recv/issued/inStore per item name
     const q = {};
     (stockData || []).forEach(item => {
-      q[item.mat || item.material] = item.inStore || 0;
+      const name = item.mat || item.material;
+      q[name] = {
+        recv:    item.recv    ?? 0,
+        issued:  item.issued  ?? 0,
+        inStore: item.inStore ?? 0,
+      };
     });
     return q;
   }, [stockData]);
@@ -218,10 +262,22 @@ export default function Inventory() {
   }, []);
 
   useEffect(() => {
-    if (sites.length > 0 && !site) {
-      setSite(sites[0]);
+    if (panelOpen) {
+      const ctx = globalLocationContext;
+      setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+      setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+      setFormArea(ctx.area !== 'all' ? ctx.area : '');
     }
-  }, [sites, site]);
+  }, [panelOpen, globalLocationContext]);
+
+  useEffect(() => {
+    if (returnStockOpen) {
+      const ctx = globalLocationContext;
+      setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+      setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+      setFormArea(ctx.area !== 'all' ? ctx.area : '');
+    }
+  }, [returnStockOpen, globalLocationContext]);
 
   const rows = useMemo(() => (stockData || []).map(s => {
     const netUsed = s.issued - s.ret;
@@ -251,7 +307,9 @@ export default function Inventory() {
 
   function handleSaveReturn() {
     const e = {};
-    if (!retSite.trim()) e.retSite = 'Site is required';
+    if (!formGA)   e.ga   = 'GA Location is required';
+    if (!formCity) e.city = 'City is required';
+    if (!formArea) e.area = 'Area is required';
     if (!retRemark.trim()) e.retRemark = 'Remark/Reason is required';
     if (remarkWordCount > 30) e.retRemark = 'Remark cannot exceed 30 words';
     setRetFormErr(e);
@@ -293,7 +351,7 @@ export default function Inventory() {
     const newReturn = {
       id: Date.now(),
       date: retDate,
-      site: retSite.trim(),
+      site: formArea, // Store the selected area/site
       remark: retRemark.trim(),
       items: returnedItems,
       returnedBy: session.name || 'Supervisor',
@@ -327,7 +385,10 @@ export default function Inventory() {
 
   function handleSave() {
     const e = {};
-    if (!dateRcv)        e.dateRcv = 'Date is required';
+    if (!dateRcv)  e.dateRcv = 'Date is required';
+    if (!formGA)   e.ga      = 'GA Location is required';
+    if (!formCity) e.city    = 'City is required';
+    if (!formArea) e.area    = 'Area is required';
     setFormErr(e);
     if (Object.keys(e).length > 0) return;
 
@@ -612,15 +673,53 @@ export default function Inventory() {
             <Field label="Challan / DC Number (optional)">
               <Input value={challan} onChange={e => setChallan(e.target.value)} placeholder="e.g. DC-2026-001" />
             </Field>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
                 <Input type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
               </Field>
-              <Field label="Site">
-                <Select value={site} onChange={e => setSite(e.target.value)}>
-                  {sites.map(s => <option key={s}>{s}</option>)}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+              <Field label="GA Location" required error={formErr.ga}>
+                <Select
+                  value={formGA}
+                  disabled={globalLocationContext.gaId !== 'all'}
+                  onChange={e => {
+                    setFormGA(e.target.value);
+                    setFormCity('');
+                    setFormArea('');
+                  }}
+                  error={formErr.ga}
+                >
+                  <option value="">Select GA Location</option>
+                  {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
                 </Select>
               </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="City" required error={formErr.city}>
+                  <Select
+                    value={formCity}
+                    disabled={globalLocationContext.cityId !== 'all'}
+                    onChange={e => {
+                      setFormCity(e.target.value);
+                      setFormArea('');
+                    }}
+                    error={formErr.city}
+                  >
+                    <option value="">Select City</option>
+                    {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Area / Site" required error={formErr.area}>
+                  <Select
+                    value={formArea}
+                    onChange={e => setFormArea(e.target.value)}
+                    error={formErr.area}
+                  >
+                    <option value="">Select Area</option>
+                    {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                  </Select>
+                </Field>
+              </div>
             </div>
           </div>
         </div>
@@ -655,13 +754,53 @@ export default function Inventory() {
         <div>
           <SectionTitle>Return Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               <Field label="Return Date" required error={retFormErr.retDate}>
                 <Input type="date" value={retDate} onChange={e => setRetDate(e.target.value)} error={retFormErr.retDate} />
               </Field>
-              <Field label="Site" required error={retFormErr.retSite}>
-                <Input value={retSite} onChange={e => setRetSite(e.target.value)} error={retFormErr.retSite} placeholder="Enter Site Name" />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+              <Field label="GA Location" required error={retFormErr.ga}>
+                <Select
+                  value={formGA}
+                  disabled={globalLocationContext.gaId !== 'all'}
+                  onChange={e => {
+                    setFormGA(e.target.value);
+                    setFormCity('');
+                    setFormArea('');
+                  }}
+                  error={retFormErr.ga}
+                >
+                  <option value="">Select GA Location</option>
+                  {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                </Select>
               </Field>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <Field label="City" required error={retFormErr.city}>
+                  <Select
+                    value={formCity}
+                    disabled={globalLocationContext.cityId !== 'all'}
+                    onChange={e => {
+                      setFormCity(e.target.value);
+                      setFormArea('');
+                    }}
+                    error={retFormErr.city}
+                  >
+                    <option value="">Select City</option>
+                    {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </Select>
+                </Field>
+                <Field label="Area / Site" required error={retFormErr.area}>
+                  <Select
+                    value={formArea}
+                    onChange={e => setFormArea(e.target.value)}
+                    error={retFormErr.area}
+                  >
+                    <option value="">Select Area</option>
+                    {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                  </Select>
+                </Field>
+              </div>
             </div>
           </div>
         </div>

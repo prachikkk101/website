@@ -21,6 +21,10 @@ const SiteContext = createContext({
   setSelCity: () => {},
   setSelArea: () => {},
 
+  // Global location context (from navbar flyout) — for pre-filling entry forms
+  globalLocationContext: { gaId: 'all', cityId: 'all', area: 'all' },
+  setGlobalLocationContext: () => {},
+
   // Legacy — kept for backward compat
   selectedSite:    'all',
   setSelectedSite: () => {},
@@ -36,6 +40,9 @@ export function SiteProvider({ children }) {
   const [selGA,   setSelGARaw]   = useState('all');
   const [selCity, setSelCityRaw] = useState('all');
   const [selArea, setSelAreaRaw] = useState('all');
+
+  // Global location context (navbar flyout selection — feeds entry forms)
+  const [globalLocationContext, setGlobalLocationContext] = useState({ gaId: 'all', cityId: 'all', area: 'all' });
 
   // Legacy single-dropdown (still used by older components)
   const [selectedSite, setSelectedSite] = useState('all');
@@ -104,6 +111,7 @@ export function SiteProvider({ children }) {
     <SiteContext.Provider value={{
       selGA, selCity, selArea,
       setSelGA, setSelCity, setSelArea,
+      globalLocationContext, setGlobalLocationContext,
       selectedSite, setSelectedSite,
       siteOptions, siteList, mergedGAs,
       getCitiesForGA, getAreasForCity
