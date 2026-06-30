@@ -152,6 +152,18 @@ export default function HouseTable() {
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
   const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
 
+  // ── Panel + edit state — MUST be declared BEFORE any useEffect that reads them ──
+  const [panelOpen,    setPanelOpen]    = useState(false);
+  const [editEntry,    setEditEntry]    = useState(null);
+
+  // ── Table filter state — MUST be declared BEFORE the selGA sync useEffect ──
+  const [filterAcct, setFilterAcct] = useState('');
+  const [filterBP,   setFilterBP]   = useState('');
+  const [page,       setPage]       = useState(1);
+  const [tFilterGA,   setTFilterGA]   = useState('all');
+  const [tFilterCity, setTFilterCity] = useState('all');
+  const [tFilterArea, setTFilterArea] = useState('all');
+
   useEffect(() => {
     document.title = 'GP-PMS — PNG Connections';
     setAllHouses(initStore('houses', defaultHouses));
@@ -214,13 +226,6 @@ export default function HouseTable() {
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
   const canWrite     = !isViewOnly;
 
-  const [filterAcct, setFilterAcct] = useState('');
-  const [filterBP,   setFilterBP]   = useState('');
-  const [page,       setPage]       = useState(1);
-  // 3-level filter (local to table, independent of navbar)
-  const [tFilterGA,   setTFilterGA]   = useState('all');
-  const [tFilterCity, setTFilterCity] = useState('all');
-  const [tFilterArea, setTFilterArea] = useState('all');
   const [modalHouse, setModalHouse] = useState(null);
 
   // Export state — default from 2020 to capture all historical data
@@ -228,8 +233,6 @@ export default function HouseTable() {
   const [exportTo,     setExportTo]     = useState(todayStr());
   const [exportFilter, setExportFilter] = useState('all');
 
-  const [panelOpen,    setPanelOpen]    = useState(false);
-  const [editEntry,    setEditEntry]    = useState(null);
   // Dynamic global materials list (persistent)
   const [matList, setMatList] = useState(() => loadMatList());
   const EMPTY_FORM = makeEmptyForm(matList);

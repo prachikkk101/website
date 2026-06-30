@@ -65,6 +65,15 @@ export default function PELaying() {
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
   const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
 
+  // ── Panel + edit state — MUST be declared BEFORE the useEffect that reads them ──
+  const [panelOpen,  setPanelOpen]  = useState(false);
+  const [editingId,  setEditingId]  = useState(null);
+  const [showDelete, setShowDelete] = useState(false);
+  const [form,       setForm]       = useState(EMPTY_ENTRY);
+  const [errors,     setErrors]     = useState({});
+
+  const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
+
   // Pre-fill and restrict GA / City / Area fields when panel opens or editingId changes
   useEffect(() => {
     if (panelOpen) {
@@ -108,15 +117,6 @@ export default function PELaying() {
   const [exportFromDate, setExportFromDate] = useState(todayStr());
   const [exportToDate,   setExportToDate]   = useState(todayStr());
   const dateError = exportFromDate && exportToDate && exportFromDate > exportToDate;
-
-  // Panel state — also used for edit
-  const [panelOpen, setPanelOpen]   = useState(false);
-  const [editingId, setEditingId]   = useState(null);
-  const [showDelete, setShowDelete] = useState(false);
-  const [form,      setForm]        = useState(EMPTY_ENTRY);
-  const [errors,    setErrors]      = useState({});
-
-  const f = (key, val) => setForm(prev => ({ ...prev, [key]: val }));
 
   // Custom and hidden columns state
   const [customCols, setCustomCols] = useState(() => {
