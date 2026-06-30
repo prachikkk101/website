@@ -145,6 +145,14 @@ export default function HouseTable() {
     setAllHouses(initStore('houses', defaultHouses));
   }, []);
 
+  // Sync with global navbar GA selection
+  useEffect(() => {
+    setTFilterGA(selGA);
+    setTFilterCity('all');
+    setTFilterArea('all');
+    setPage(1);
+  }, [selGA]);
+
   // Auth / role checks
   const session    = getSession();
   const isSupervisor = user?.role === 'SUPERVISOR';

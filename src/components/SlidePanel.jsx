@@ -82,12 +82,14 @@ export function Textarea({ error, style, ...props }) {
   );
 }
 
-export default function SlidePanel({ isOpen, onClose, title, children, onSave, saving, saveLabel, extraFooter }) {
+export default function SlidePanel({ isOpen, onClose, title, children, onSave, saving, saveLabel, extraFooter, saveDisabled }) {
   // Prevent body scroll when open
   useEffect(() => {
     document.body.style.overflow = isOpen ? 'hidden' : '';
     return () => { document.body.style.overflow = ''; };
   }, [isOpen]);
+
+  const isBtnDisabled = saving || saveDisabled;
 
   return (
     <>
@@ -167,11 +169,11 @@ export default function SlidePanel({ isOpen, onClose, title, children, onSave, s
               </button>
               <button
                 onClick={onSave}
-                disabled={saving}
+                disabled={isBtnDisabled}
                 style={{
-                  background: saving ? '#4a7c2f' : '#2d6a27', color: '#fff',
+                  background: isBtnDisabled ? '#a3a3a3' : '#2d6a27', color: '#fff',
                   border: 'none', padding: '8px 24px', borderRadius: 5,
-                  fontSize: 13, fontWeight: 600, cursor: saving ? 'not-allowed' : 'pointer',
+                  fontSize: 13, fontWeight: 600, cursor: isBtnDisabled ? 'not-allowed' : 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6,
                 }}
               >

@@ -157,6 +157,35 @@ export default function Access() {
     showToast('\u2713 GA Location added \u2014 ' + newSite.name);
   }
 
+  // ── Add City to existing site ──
+  function handleAddCity(siteId) {
+    const cityName = prompt('Enter new city name to add to this GA location:');
+    if (!cityName || !cityName.trim()) return;
+    const areasInput = prompt('Enter areas for this city (comma-separated, optional):') || '';
+    const newCity = {
+      id: 'city_' + Date.now(),
+      label: cityName.trim(),
+      areas: areasInput.split(',').map(a => a.trim()).filter(Boolean)
+    };
+
+    const updated = sites.map(s => {
+      if (s.id === siteId) {
+        const updatedCities = [...(s.cities || []), newCity];
+        return {
+          ...s,
+          cities: updatedCities,
+          areas: [...(s.areas || []), ...newCity.areas]
+        };
+      }
+      return s;
+    });
+
+    setSites(updated);
+    localStorage.setItem('gppms_sites', JSON.stringify(updated));
+    window.dispatchEvent(new Event('storage'));
+    showToast(`✓ City "${cityName.trim()}" added to location`);
+  }
+
   // ── Add Area to existing site ──
   function handleAddArea(siteId) {
     const areaName = prompt('Enter new area name to add to this location:');
@@ -340,28 +369,97 @@ export default function Access() {
                     </span>
                   </div>
                   <p style={{ margin:0, fontSize:11, color:'#64748b' }}>{s.zone || s.district || ''}</p>
-                  {/* Areas as removable chips */}
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:5, minHeight: 22 }}>
-                    {(s.areas || []).length === 0
-                      ? <span style={{ color:'#94a3b8', fontStyle:'italic', fontSize:11 }}>No areas yet</span>
-                      : (s.areas || []).map(area => (
-                          <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:12, padding:'2px 8px 2px 9px', fontSize:11, fontWeight:500 }}>
-                            {area}
-                            <button
-                              onClick={() => handleRemoveArea(s.id, area)}
-                              title={`Remove area "${area}"`}
-                              style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:13, lineHeight:1, padding:'0 0 0 2px', display:'flex', alignItems:'center', fontWeight:700 }}
-                            >×</button>
+                  {/* Cities and Areas hierarchy */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4, marginBottom: 4 }}>
+                    {(s.cities || []).length === 0 ? (
+                      <div>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Areas (Flat List):</div>
+                        <div style={{ display:'flex', flexWrap:'wrap', gap:5, minHeight: 22 }}>
+                          {(s.areas || []).map(area => (
+                            <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:12, padding:'2px 8px 2px 9px', fontSize:11, fontWeight:500 }}>
+                              {area}
+                              <button
+                                onClick={() => handleRemoveArea(s.id, area)}
+                                title={`Remove area "${area}"`}
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:13, lineHeight:1, padding:'0 0 0 2px', display:'flex', alignItems:'center', fontWeight:700 }}
+                              >×</button>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      (s.cities || []).map(city => (
+                        <div key={city.id} style={{ borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
+                            🌆 {city.label}
                           </span>
-                        ))
-                    }
+                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems: 'center' }}>
+                            {(city.areas || []).map(area => (
+                              <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:10, padding:'1px 6px 1px 7px', fontSize:10, fontWeight:500 }}>
+                                {area}
+                                <button
+                                  onClick={() => {
+                                    const updated = sites.map(site => {
+                                      if (site.id === s.id) {
+                                        const updatedCities = (site.cities || []).map(c => 
+                                          c.id === city.id ? { ...c, areas: (c.areas || []).filter(a => a !== area) } : c
+                                        );
+                                        return {
+                                          ...site,
+                                          cities: updatedCities,
+                                          areas: (site.areas || []).filter(a => a !== area)
+                                        };
+                                      }
+                                      return site;
+                                    });
+                                    setSites(updated);
+                                    localStorage.setItem('gppms_sites', JSON.stringify(updated));
+                                    window.dispatchEvent(new Event('storage'));
+                                    showToast(`Area "${area}" removed`);
+                                  }}
+                                  title={`Remove area "${area}"`}
+                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:11, padding:'0 0 0 2px', fontWeight:700 }}
+                                >×</button>
+                              </span>
+                            ))}
+                            <button
+                              onClick={() => {
+                                const areaName = prompt(`Enter new area name for city "${city.label}":`);
+                                if (!areaName || !areaName.trim()) return;
+                                const updated = sites.map(site => {
+                                  if (site.id === s.id) {
+                                    const updatedCities = (site.cities || []).map(c => 
+                                      c.id === city.id ? { ...c, areas: [...(c.areas || []), areaName.trim()] } : c
+                                    );
+                                    return {
+                                      ...site,
+                                      cities: updatedCities,
+                                      areas: [...(site.areas || []), areaName.trim()]
+                                    };
+                                  }
+                                  return site;
+                                });
+                                setSites(updated);
+                                localStorage.setItem('gppms_sites', JSON.stringify(updated));
+                                window.dispatchEvent(new Event('storage'));
+                                showToast(`✓ Area "${areaName.trim()}" added to "${city.label}"`);
+                              }}
+                              style={{ background:'none', border: '1px dashed #2d6a27', borderRadius:10, padding:'1px 6px', fontSize:10, color:'#2d6a27', cursor:'pointer', fontWeight:600 }}
+                            >
+                              + Area
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  <div style={{ display:'flex', gap:6, marginTop:4 }}>
+
+                  <div style={{ display:'flex', gap:6, marginTop:8 }}>
                     <button
-                      onClick={() => handleAddArea(s.id)}
+                      onClick={() => handleAddCity(s.id)}
                       style={{ flex:1, height:28, background:'#2d6a27', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
                     >
-                      + Add Area
+                      + Add City
                     </button>
                     <button
                       onClick={() => handleRemoveSite(s.id, s.name)}

@@ -43,7 +43,7 @@ function getStatus(onSite, inStore, open, recv) {
 
 
 /* ── Category Accordion for Receive Stock ── */
-function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuantities }) {
+function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuantities, readOnly = false }) {
   // Load categories from localStorage so custom items persist
   const [categories, setCategories] = useState(() => {
     try {
@@ -108,32 +108,54 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
             {/* Expanded items */}
             {isOpen && (
               <div style={{ padding: '12px 16px', background: 'white' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                  {cat.items.map(item => (
-                    <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
-                      <input
-                        type="number" min="0"
-                        defaultValue={0}
-                        onChange={e => updateQty(cat.id, item, Number(e.target.value))}
-                        style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(cat.id, item)}
-                        title={`Remove "${item}"`}
-                        style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                      >×</button>
-                    </div>
-                  ))}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: readOnly ? 0 : 10 }}>
+                  {cat.items.map(item => {
+                    const val = readOnly ? (quantities[item] ?? 0) : (quantities[`${cat.id}__${item}`] ?? 0);
+                    return (
+                      <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
+                        {readOnly ? (
+                          <span style={{
+                            fontSize: '12px',
+                            fontWeight: '600',
+                            color: '#1e293b',
+                            background: '#f1f5f9',
+                            padding: '3px 10px',
+                            borderRadius: '4px',
+                            minWidth: '50px',
+                            textAlign: 'right'
+                          }}>
+                            {val}
+                          </span>
+                        ) : (
+                          <>
+                            <input
+                              type="number" min="0"
+                              value={val}
+                              onChange={e => updateQty(cat.id, item, Number(e.target.value))}
+                              style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(cat.id, item)}
+                              title={`Remove "${item}"`}
+                              style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                            >×</button>
+                          </>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleAddItem(cat.id)}
-                  style={{ width: '100%', height: 30, background: '#f0f7ee', color: '#2d6a27', border: '1px dashed #2d6a27', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                >
-                  + Add Item to {cat.label}
-                </button>
+                {!readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddItem(cat.id)}
+                    style={{ width: '100%', height: 30, background: '#f0f7ee', color: '#2d6a27', border: '1px dashed #2d6a27', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    + Add Item to {cat.label}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -178,6 +200,18 @@ export default function Inventory() {
   const [openCategory,  setOpenCategory]  = useState(null);
   const [quantities,    setQuantities]    = useState({});
 
+  // Summary accordion & return stock states
+  const [openCategoryAccordion, setOpenCategoryAccordion] = useState(null);
+  const [returnStockOpen, setReturnStockOpen] = useState(false);
+
+  const summaryQuantities = useMemo(() => {
+    const q = {};
+    (stockData || []).forEach(item => {
+      q[item.mat || item.material] = item.inStore || 0;
+    });
+    return q;
+  }, [stockData]);
+
   useEffect(() => {
     document.title = 'GP-PMS \u2014 Stock Management';
     setStockData(initStore('stock', defaultStockData));
@@ -202,6 +236,87 @@ export default function Inventory() {
     netUsed: acc.netUsed + r.netUsed, onSite: acc.onSite + r.onSite,
     inStore: acc.inStore + r.inStore, req: acc.req + r.req,
   }), { open:0, recv:0, issued:0, ret:0, netUsed:0, onSite:0, inStore:0, req:0 }), [rows]);
+
+  // Return Stock Panel form
+  const [retDate, setRetDate] = useState(todayStr);
+  const [retSite, setRetSite] = useState('');
+  const [retRemark, setRetRemark] = useState('');
+  const [retQuantities, setRetQuantities] = useState({});
+  const [retOpenCategory, setRetOpenCategory] = useState(null);
+  const [retFormErr, setRetFormErr] = useState({});
+
+  const remarkWordCount = useMemo(() => {
+    return retRemark.trim().split(/\s+/).filter(Boolean).length;
+  }, [retRemark]);
+
+  function handleSaveReturn() {
+    const e = {};
+    if (!retSite.trim()) e.retSite = 'Site is required';
+    if (!retRemark.trim()) e.retRemark = 'Remark/Reason is required';
+    if (remarkWordCount > 30) e.retRemark = 'Remark cannot exceed 30 words';
+    setRetFormErr(e);
+    if (Object.keys(e).length > 0) return;
+
+    // Collect items with qty > 0
+    const returnedItems = [];
+    Object.entries(retQuantities).forEach(([key, qty]) => {
+      if (qty > 0) {
+        const [catId, ...itemParts] = key.split('__');
+        const name = itemParts.join('__');
+        const stockItem = stockData.find(s => s.mat === name || s.material === name);
+        const unit = stockItem?.unit || 'pcs';
+        returnedItems.push({ name, qty, unit, category: catId });
+      }
+    });
+
+    if (returnedItems.length === 0) {
+      showToast('⚠️ No quantities entered');
+      return;
+    }
+
+    // Update inStore for returned items: inStore -= qty, and save updated stockData
+    let updatedStock = (stockData || []).map(s => {
+      const match = returnedItems.find(r => r.name === s.mat || r.name === s.material);
+      if (match) {
+        return {
+          ...s,
+          inStore: (s.inStore || 0) - match.qty
+        };
+      }
+      return s;
+    });
+
+    setStockData(updatedStock);
+    localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+
+    // Save transaction to localStorage 'gppms_returns'
+    const newReturn = {
+      id: Date.now(),
+      date: retDate,
+      site: retSite.trim(),
+      remark: retRemark.trim(),
+      items: returnedItems,
+      returnedBy: session.name || 'Supervisor',
+      createdAt: new Date().toISOString()
+    };
+
+    let existingReturns = [];
+    try {
+      existingReturns = JSON.parse(localStorage.getItem('gppms_returns') || '[]');
+    } catch {}
+    localStorage.setItem('gppms_returns', JSON.stringify([newReturn, ...existingReturns]));
+
+    // Reset panel form and close
+    setRetDate(todayStr());
+    setRetSite('');
+    setRetRemark('');
+    setRetQuantities({});
+    setRetOpenCategory(null);
+    setRetFormErr({});
+    setReturnStockOpen(false);
+
+    showToast(`✓ Stock returned — ${returnedItems.length} items updated`);
+  }
 
   function openPanel() {
     setQuantities({});
@@ -362,6 +477,23 @@ export default function Inventory() {
                 style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
                 ⚙ Manage Columns
               </button>
+              <button onClick={() => setReturnStockOpen(true)}
+                style={{
+                  padding: '0 16px',
+                  height: '38px',
+                  background: 'white',
+                  border: '1px solid #c0440a',
+                  color: '#c0440a',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px'
+                }}>
+                ↩ Return Stock
+              </button>
               <button onClick={openPanel} className="btn btn-primary" style={{ height: 32 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 Receive Stock
@@ -369,6 +501,20 @@ export default function Inventory() {
             </>
           )}
         </div>
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, 
+          color: '#1f4e1a', marginBottom: 10 }}>
+          Stock by Category Summary
+        </h3>
+        <CategoryAccordion 
+          openCategory={openCategoryAccordion}
+          setOpenCategory={setOpenCategoryAccordion}
+          quantities={summaryQuantities}
+          setQuantities={() => {}} 
+          readOnly={true}
+        />
       </div>
 
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -495,6 +641,69 @@ export default function Inventory() {
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
             placeholder="Optional notes about this delivery..." rows={3}
             style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:5, padding:'8px 10px', fontSize:13, resize:'vertical', boxSizing:'border-box' }} />
+        </div>
+      </SlidePanel>
+
+      {/* Return Stock Slide Panel */}
+      <SlidePanel
+        isOpen={returnStockOpen}
+        onClose={() => { setReturnStockOpen(false); setRetFormErr({}); }}
+        title="Return Stock"
+        onSave={handleSaveReturn}
+        saveDisabled={remarkWordCount > 30}
+      >
+        <div>
+          <SectionTitle>Return Details</SectionTitle>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <Field label="Return Date" required error={retFormErr.retDate}>
+                <Input type="date" value={retDate} onChange={e => setRetDate(e.target.value)} error={retFormErr.retDate} />
+              </Field>
+              <Field label="Site" required error={retFormErr.retSite}>
+                <Input value={retSite} onChange={e => setRetSite(e.target.value)} error={retFormErr.retSite} placeholder="Enter Site Name" />
+              </Field>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <SectionTitle>Materials Returned</SectionTitle>
+          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
+            Click a category to expand. Enter quantities returned (leave 0 to skip).
+          </p>
+          <CategoryAccordion
+            openCategory={retOpenCategory}
+            setOpenCategory={setRetOpenCategory}
+            quantities={retQuantities}
+            setQuantities={setRetQuantities}
+          />
+        </div>
+
+        <div>
+          <SectionTitle>Reason / Remark</SectionTitle>
+          <textarea
+            value={retRemark}
+            onChange={e => setRetRemark(e.target.value)}
+            placeholder="Enter reason or remark..."
+            rows={3}
+            style={{
+              width: '100%',
+              border: retFormErr.retRemark ? '1px solid #dc2626' : '1px solid #d1d5db',
+              borderRadius: 5,
+              padding: '8px 10px',
+              fontSize: 13,
+              resize: 'vertical',
+              boxSizing: 'border-box'
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: retFormErr.retRemark ? '#dc2626' : '#64748b' }}>
+              {retFormErr.retRemark || 'Word limit: max 30 words'}
+            </span>
+            <span style={{ fontSize: 11, fontWeight: '600', color: remarkWordCount > 30 ? '#dc2626' : '#64748b' }}>
+              {remarkWordCount} / 30 words
+            </span>
+          </div>
         </div>
       </SlidePanel>
 

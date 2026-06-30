@@ -50,7 +50,7 @@ const EMPTY_ENTRY = {
 
 export default function PELaying() {
   const { showToast } = useToast();
-  const { siteList }  = useSite();
+  const { siteList, selGA, mergedGAs }  = useSite();
   const [allData, setAllData] = useState([]);
 
   useEffect(() => {
@@ -101,13 +101,23 @@ export default function PELaying() {
     d125: acc.d125 + (Number(r.d125oc) || 0) + (Number(r.d125b) || 0) + (Number(r.d125hdd) || 0) + (Number(r.d125tot) || 0),
   }), { d32: 0, d63: 0, d90: 0, d125: 0 }), [allData]);
 
-  // ── Filtered rows (by tab + area) ──
+  // ── Filtered rows (by tab + area + global GA) ──
   const filtered = useMemo(() => allData.filter(r => {
     const tab = r.connType || 'Domestic';
     if (tab !== activeTab) return false;
+    
+    // Global GA location filter
+    if (selGA && selGA !== 'all') {
+      const ga = mergedGAs.find(g => g.id === selGA);
+      if (ga) {
+        const allGaAreas = (ga.cities || []).flatMap(c => c.areas || []);
+        if (allGaAreas.length > 0 && !allGaAreas.includes(r.area)) return false;
+      }
+    }
+
     if (filterArea && !(r.area || '').toLowerCase().includes(filterArea.toLowerCase())) return false;
     return true;
-  }), [allData, activeTab, filterArea]);
+  }), [allData, activeTab, filterArea, selGA, mergedGAs]);
 
   // ── Column totals ──
   const totals = useMemo(() => filtered.reduce((acc, r) => ({
@@ -266,21 +276,62 @@ export default function PELaying() {
       </div>
 
       {/* Connection Type Tabs */}
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 12, 
+        alignItems: 'center', flexWrap: 'wrap' }}>
         {CONN_TYPES.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
-            style={{ padding: '5px 18px', borderRadius: 5, fontSize: 12, fontWeight: 600, border: activeTab === tab ? 'none' : '1px solid #d1d5db', background: activeTab === tab ? '#2d6a27' : '#fff', color: activeTab === tab ? '#fff' : '#64748b', cursor: 'pointer', transition: 'all 0.15s' }}>
+            style={{ 
+              padding: '8px 20px', 
+              borderRadius: 6, 
+              fontSize: 13, 
+              fontWeight: 600,
+              height: '38px',
+              border: activeTab === tab ? 'none' : '1px solid #d1d5db',
+              background: activeTab === tab ? '#2d6a27' : '#fff',
+              color: activeTab === tab ? '#fff' : '#64748b',
+              cursor: 'pointer', 
+              transition: 'all 0.15s',
+              display: 'flex', alignItems: 'center'
+            }}>
             {tab}
           </button>
         ))}
       </div>
 
       {/* Filter bar */}
-      <div className="card section-block" style={{ padding: '10px 14px', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', marginBottom: 10 }}>
-        <input className="gp-input" placeholder="Filter by Area..."
-          style={{ width: 160 }} value={filterArea}
+      <div className="card section-block" style={{ 
+        padding: '12px 14px', 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: 10, 
+        alignItems: 'center', 
+        marginBottom: 12 }}>
+        <input className="gp-input" 
+          placeholder="Filter by Area..."
+          style={{ 
+            width: 220, 
+            height: '38px', 
+            fontSize: 13, 
+            padding: '0 14px',
+            border: '1px solid #d1d5db',
+            borderRadius: '6px'
+          }} 
+          value={filterArea}
           onChange={e => setFilterArea(e.target.value)} />
-        <button className="btn btn-primary" onClick={() => setFilterArea('')}>Clear</button>
+        <button onClick={() => setFilterArea('')}
+          style={{
+            padding: '0 20px', 
+            height: '38px', 
+            fontSize: 13, 
+            fontWeight: 600,
+            background: 'white', 
+            border: '1px solid #2d6a27',
+            color: '#2d6a27', 
+            borderRadius: '6px',
+            cursor: 'pointer'
+          }}>
+          Clear
+        </button>
 
         {/* Export */}
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

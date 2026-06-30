@@ -131,6 +131,24 @@ export default function Layout() {
               PNG Connections
             </NavLink>
 
+            {showSiteSelector && (
+              <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
+                <select value={selGA} onChange={e => setSelGA(e.target.value)}
+                  style={{
+                    height: '28px', fontSize: '11px',
+                    border: '1px solid rgba(255,255,255,0.3)',
+                    borderRadius: '4px', background: 'rgba(0,0,0,0.2)',
+                    color: 'white', padding: '0 6px',
+                    cursor: 'pointer'
+                  }}>
+                  <option value="all" style={{ background: '#1f4e1a' }}>All GA</option>
+                  {mergedGAs.map(ga => (
+                    <option key={ga.id} value={ga.id} style={{ background: '#1f4e1a' }}>{ga.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
 
 
             {/* Remaining nav tabs */}
@@ -239,6 +257,19 @@ export default function Layout() {
           <span style={{ color: '#fff', fontWeight: 700, fontSize: 16 }}>🔥 GP-PMS Menu</span>
           <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 24, cursor: 'pointer' }}>✕</button>
         </div>
+
+        {showSiteSelector && (
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+            <label style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', display: 'block', marginBottom: 6 }}>GA Location Filter</label>
+            <select value={selGA} onChange={e => setSelGA(e.target.value)}
+              style={{ width: '100%', background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.15)', color: '#fff', borderRadius: 6, padding: '8px 10px', fontSize: 13 }}>
+              <option value="all" style={{ background: '#1f4e1a' }}>All GA</option>
+              {mergedGAs.map(ga => (
+                <option key={ga.id} value={ga.id} style={{ background: '#1f4e1a' }}>{ga.label}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Nav items */}
         {navItems.map(item => (
