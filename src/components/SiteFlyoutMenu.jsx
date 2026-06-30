@@ -43,8 +43,8 @@ function SiteFlyoutMenu({ sites, onSelect, selectedLabel }) {
           position: 'absolute', top: '100%', left: 0,
           background: 'white', border: '1px solid #e2e8f0',
           borderRadius: '6px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          minWidth: '200px', zIndex: 1000, marginTop: '4px',
-          display: 'flex'
+          minWidth: '200px', zIndex: 9999, marginTop: '4px',
+          display: 'flex', isolation: 'isolate'
         }}
           onMouseEnter={cancelClose}
         >

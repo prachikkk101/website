@@ -165,8 +165,8 @@ export default function Layout() {
       <ToastContainer />
 
       {/* ── Top Navbar ── */}
-      <header style={{ background: '#1f4e1a', position: 'sticky', top: 0, zIndex: 100, boxShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', height: 48 }}>
+      <header style={{ background: '#1f4e1a', position: 'sticky', top: 0, zIndex: 1000, boxShadow: '0 1px 6px rgba(0,0,0,0.25)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', height: 48, position: 'relative', zIndex: 10 }}>
 
           {/* Logo */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 14px', flexShrink: 0, borderRight: '1px solid rgba(255,255,255,0.1)' }}>
@@ -287,7 +287,7 @@ export default function Layout() {
         </div>
 
         {/* Breadcrumb */}
-        <div style={{ background: '#2d6a27', padding: '5px 16px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ background: '#2d6a27', padding: '5px 16px', display: 'flex', alignItems: 'center', gap: 6, position: 'relative', zIndex: 1 }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7ec56f" strokeWidth="2">
             <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
           </svg>
