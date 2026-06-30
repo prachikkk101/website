@@ -53,7 +53,7 @@ function SiteFlyoutMenu({ gaLocations, onSelect, selectedLabel }) {
       {activeGA !== null && (
         <div
           style={{
-            position: 'absolute', top: '100%', left: 0,
+            position: 'absolute', top: '100%', right: 0,
             background: 'white', border: '1px solid #e2e8f0',
             borderRadius: '6px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
             zIndex: 9999, marginTop: '4px',
