@@ -682,7 +682,7 @@ export default function Inventory() {
               <Field label="GA Location" required error={formErr.ga}>
                 <Select
                   value={formGA}
-                  disabled={globalLocationContext.gaId !== 'all'}
+                  disabled={globalLocationContext?.gaId !== 'all'}
                   onChange={e => {
                     setFormGA(e.target.value);
                     setFormCity('');
@@ -698,7 +698,7 @@ export default function Inventory() {
                 <Field label="City" required error={formErr.city}>
                   <Select
                     value={formCity}
-                    disabled={globalLocationContext.cityId !== 'all'}
+                    disabled={globalLocationContext?.cityId !== 'all'}
                     onChange={e => {
                       setFormCity(e.target.value);
                       setFormArea('');
@@ -763,7 +763,7 @@ export default function Inventory() {
               <Field label="GA Location" required error={retFormErr.ga}>
                 <Select
                   value={formGA}
-                  disabled={globalLocationContext.gaId !== 'all'}
+                  disabled={globalLocationContext?.gaId !== 'all'}
                   onChange={e => {
                     setFormGA(e.target.value);
                     setFormCity('');
@@ -779,7 +779,7 @@ export default function Inventory() {
                 <Field label="City" required error={retFormErr.city}>
                   <Select
                     value={formCity}
-                    disabled={globalLocationContext.cityId !== 'all'}
+                    disabled={globalLocationContext?.cityId !== 'all'}
                     onChange={e => {
                       setFormCity(e.target.value);
                       setFormArea('');

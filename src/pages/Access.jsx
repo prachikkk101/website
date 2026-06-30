@@ -526,10 +526,24 @@ export default function Access() {
                 </div>
                 <div>
                   <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Select Site</label>
-                  <select value={rSite} onChange={e => setRSite(e.target.value)}
-                    style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#fff' }}>
-                    {allSiteNames.map(s => <option key={s}>{s}</option>)}
-                  </select>
+                  {allSiteNames.length > 0 ? (
+                    <select value={rSite} onChange={e => setRSite(e.target.value)}
+                      style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box',background:'#fff' }}>
+                      {allSiteNames.map(s => <option key={s}>{s}</option>)}
+                    </select>
+                  ) : (
+                    <>
+                      <input
+                        value={rSite}
+                        onChange={e => setRSite(e.target.value)}
+                        placeholder="Type the site / location name"
+                        style={{ width:'100%',height:34,border:'1px solid #d1d5db',borderRadius:5,padding:'0 10px',fontSize:13,boxSizing:'border-box' }}
+                      />
+                      <p style={{ margin:'4px 0 0', fontSize:11, color:'#94a3b8' }}>
+                        No GA locations have been added yet. You can type the site name to request access.
+                      </p>
+                    </>
+                  )}
                 </div>
                 <div>
                   <label style={{ fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4 }}>Reason (optional)</label>

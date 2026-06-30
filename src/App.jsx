@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { SiteProvider } from './context/SiteContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -20,36 +21,43 @@ function ScrollToTop() {
   return null;
 }
 
+// Wraps a page with its own error boundary so one page crash doesn't kill all others
+function SafePage({ children }) {
+  return <ErrorBoundary>{children}</ErrorBoundary>;
+}
+
 export default function App() {
   return (
-    <AuthProvider>
-      <SiteProvider>
-        <BrowserRouter>
-          <ScrollToTop />
-          <Routes>
-            {/* Public */}
-            <Route path="/login" element={<Login />} />
+    <ErrorBoundary>
+      <AuthProvider>
+        <SiteProvider>
+          <BrowserRouter>
+            <ScrollToTop />
+            <Routes>
+              {/* Public */}
+              <Route path="/login" element={<SafePage><Login /></SafePage>} />
 
-            {/* Protected */}
-            <Route element={<ProtectedRoute />}>
-              <Route element={<Layout />}>
-                <Route path="/"          element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/customers" element={<Customers />} />
-                <Route path="/inventory" element={<Inventory />} />
-                <Route path="/pe-laying" element={<PELaying />} />
-                <Route path="/reports"   element={<Reports />} />
-                <Route path="/access"    element={<Access />} />
-                {/* Legacy redirects */}
-                <Route path="/masters"   element={<Navigate to="/access" replace />} />
-                <Route path="/ic-work"   element={<Navigate to="/dashboard" replace />} />
+              {/* Protected */}
+              <Route element={<ProtectedRoute />}>
+                <Route element={<ErrorBoundary><Layout /></ErrorBoundary>}>
+                  <Route path="/"          element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<SafePage><Dashboard /></SafePage>} />
+                  <Route path="/customers" element={<SafePage><Customers /></SafePage>} />
+                  <Route path="/inventory" element={<SafePage><Inventory /></SafePage>} />
+                  <Route path="/pe-laying" element={<SafePage><PELaying /></SafePage>} />
+                  <Route path="/reports"   element={<SafePage><Reports /></SafePage>} />
+                  <Route path="/access"    element={<SafePage><Access /></SafePage>} />
+                  {/* Legacy redirects */}
+                  <Route path="/masters"   element={<Navigate to="/access" replace />} />
+                  <Route path="/ic-work"   element={<Navigate to="/dashboard" replace />} />
+                </Route>
               </Route>
-            </Route>
 
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
-        </BrowserRouter>
-      </SiteProvider>
-    </AuthProvider>
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </SiteProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

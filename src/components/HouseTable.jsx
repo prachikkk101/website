@@ -648,7 +648,7 @@ export default function HouseTable() {
                <Field label="GA Location" required error={errors.ga}>
                  <Select
                    value={formGA}
-                   disabled={globalLocationContext.gaId !== 'all'}
+                   disabled={globalLocationContext?.gaId !== 'all'}
                    onChange={e => {
                      setFormGA(e.target.value);
                      setFormCity('');
@@ -664,7 +664,7 @@ export default function HouseTable() {
                  <Field label="City" required error={errors.city}>
                    <Select
                      value={formCity}
-                     disabled={globalLocationContext.cityId !== 'all'}
+                     disabled={globalLocationContext?.cityId !== 'all'}
                      onChange={e => {
                        setFormCity(e.target.value);
                        setFormArea('');
