@@ -8,6 +8,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
+import { stockCategories } from '../data/stockCategories';
 
 
 /* ── Helpers ── */
@@ -48,11 +49,10 @@ function StatusBadge({ val }) {
 const PAGE_SIZE = 8;
 const AREAS_LIST = [];
 const ACCT_TYPES    = ['Domestic','Commercial','Industrial'];
-const GC_STATUSES   = ['—','Done','Pending','Done 3.0 MTR','Done 3.5 MTR'];
+const GC_STATUSES   = ['—','Done'];
 const GI_STATUSES   = ['—','Done','Pending'];
 const RFC_STATUSES  = ['—','Done','RFC','Pending'];
 const NG_STATUSES   = ['—','Done','NG Done','RFC','Pending'];
-const SARAL_STATUSES= ['—','DONE','NG PENDING','METER NOT UPDATE','Prepaid Meter'];
 const METER_MAKES   = ['Select','Itron','Elster','Honeywell','Landis+Gyr'];
 
 // All default/built-in columns — user can hide any of these
@@ -72,7 +72,7 @@ const DEFAULT_COLS = [
   { key: 'giStatus',  label: 'GI' },
   { key: 'rfc',       label: 'RFC' },
   { key: 'ngStatus',  label: 'NG' },
-  { key: 'saralStatus',label: 'SARAL' },
+  { key: 'gcDate',    label: 'GC Date' },
 ];
 
 const DEFAULT_MATERIALS = [
@@ -101,7 +101,7 @@ const FLOOR_LABELS_MAP = { GF: 'Ground Floor', FF: 'First Floor', SF: 'Second Fl
 const EMPTY_FORM_BASE = {
   bpNo:'', appNo:'', name:'', mobile:'', altMobile:'',
   acctType:'Domestic', houseNo:'', floor:'GF', address1:'', area:'', city:'',
-  gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', saralStatus:'—',
+  gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', gcDate:'',
   plumbingDate:'', gcLen:'', giLen:'', tf:'', iv:'',
   meterNo:'', meterDate:'', meterMake:'Select', meterReading:'', side:'LHS', meterPhotoFile:null,
 };
@@ -220,11 +220,14 @@ export default function HouseTable() {
   const siteAccess   = session.siteAccess;
   const isAdmin      = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
-    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
   const canWrite     = !isViewOnly;
+
+  const [catQtys, setCatQtys] = useState({});   // { 'catId__ItemName': qty }
+  const [catOpen, setCatOpen] = useState(null);  // open category id
 
   const [modalHouse, setModalHouse] = useState(null);
 
@@ -417,10 +420,9 @@ export default function HouseTable() {
     exportHouseData(data, exportFrom, exportTo, exportFilter, suffix);
   }
 
-  /* ── Validate ── */
+  /* ── Validate with auto-scroll to first error ── */
   function validateForm() {
     const e = {};
-    // BP Number is now optional — only Name, Mobile, House No. required
     if (!form.name.trim())    e.name    = 'Required';
     if (!form.mobile.trim())  e.mobile  = 'Required';
     if (!form.houseNo.trim()) e.houseNo = 'Required';
@@ -428,6 +430,27 @@ export default function HouseTable() {
     if (!formCity) e.city = 'Required';
     if (!formArea) e.area = 'Required';
     setErrors(e);
+
+    // Scroll & focus to the first invalid field
+    const fieldOrder = [
+      { key: 'name',    id: 'ht-field-name'    },
+      { key: 'mobile',  id: 'ht-field-mobile'  },
+      { key: 'houseNo', id: 'ht-field-houseNo' },
+      { key: 'ga',      id: 'ht-field-ga'      },
+      { key: 'city',    id: 'ht-field-city'    },
+      { key: 'area',    id: 'ht-field-area'    },
+    ];
+    const first = fieldOrder.find(f => e[f.key]);
+    if (first) {
+      setTimeout(() => {
+        const el = document.getElementById(first.id);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+      }, 50);
+    }
+
     return Object.keys(e).length === 0;
   }
 
@@ -443,6 +466,8 @@ export default function HouseTable() {
     setErrors({});
     setCustomMaterials([]);
     setHiddenMaterials([]);
+    setCatQtys({});
+    setCatOpen(null);
     setPhoto1(null); setPhoto1Preview(null);
     setPhoto2(null); setPhoto2Preview(null);
     setPanelOpen(true);
@@ -459,7 +484,7 @@ export default function HouseTable() {
       address1: h.address1 || '',
       area: h.area || 'UE-II', city: h.city || 'HISAR',
       gcStatus: h.gcStatus || '—', giStatus: h.giStatus || '—',
-      rfc: h.rfc || '—', ngStatus: h.ngStatus || '—', saralStatus: h.saralStatus || '—',
+      rfc: h.rfc || '—', ngStatus: h.ngStatus || '—', gcDate: h.gcDate || '',
       plumbingDate: h.plumbingDate || '', gcLen: h.gcLen || '',
       giLen: h.giLen || '', tf: h.tf || '', iv: h.iv || '',
       meterNo: h.meterNo || '', meterDate: h.meterDate || '',
@@ -503,11 +528,23 @@ export default function HouseTable() {
       alert('Photo 2 is too large. Please use a smaller image or take a photo at lower quality.'); return;
     }
 
-    // Build materialsUsed dynamically from matList
+    // Build materialsUsed from fixed matList + category dropdowns
     const materialsUsed = {};
     matList.forEach(mat => {
       const qty = form[mat.key] || 0;
       if (qty > 0) materialsUsed[mat.label] = { qty, unit: mat.unit };
+    });
+    // Merge category quantities
+    Object.entries(catQtys).forEach(([key, qty]) => {
+      if (qty > 0) {
+        const [, ...parts] = key.split('__');
+        const name = parts.join('__');
+        if (materialsUsed[name]) {
+          materialsUsed[name].qty += qty;
+        } else {
+          materialsUsed[name] = { qty, unit: 'pcs' };
+        }
+      }
     });
 
     const finalCityLabel = mergedGAs
@@ -525,7 +562,7 @@ export default function HouseTable() {
               acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
               address1: form.address1, area: formArea, city: finalCityLabel,
               gcStatus: form.gcStatus, giStatus: form.giStatus,
-              rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
+              rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
               plumbingDate: form.plumbingDate, meterNo: form.meterNo,
               meterDate: form.meterDate, meterMake: form.meterMake,
               meterReading: form.meterReading, side: form.side,
@@ -554,7 +591,7 @@ export default function HouseTable() {
         meterNo: form.meterNo, meterDate: form.meterDate,
         meterMake: form.meterMake, meterReading: form.meterReading,
         gcStatus: form.gcStatus, giStatus: form.giStatus,
-        rfc: form.rfc, ngStatus: form.ngStatus, saralStatus: form.saralStatus,
+        rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
         plumbingDate: form.plumbingDate, side: form.side,
         photo1Data: p1b64, photo1Name: photo1?.name || null,
         photo2Data: p2b64, photo2Name: photo2?.name || null,
@@ -569,35 +606,55 @@ export default function HouseTable() {
       setAllHouses(updated);
       localStorage.setItem('gppms_houses', JSON.stringify(updated));
 
-      // Deduct stock
+      // Deduct stock — matches materialsUsed names against stock using normalized comparison
       try {
+        console.log('Materials to deduct:', materialsUsed);
         const currentStockRaw = localStorage.getItem('gppms_stock');
         let currentStock = currentStockRaw ? JSON.parse(currentStockRaw) : defaultStockData;
-        const materialMapping = {
-          pe20: '25mm MDPE Pipe', gi12: 'GI Nipple 25mm',
-          tfFit: 'Compression Fitting 25mm', ibv: 'Ball Valve 25mm',
-          c32: 'Tee 32mm', c63: 'PE Saddle 63×25mm',
-          teflon: 'Reducer 32×25mm', gasTap: 'Pressure Regulator',
-          rubber: 'Gas Hose Pipe (1mtr)', hoseClamp: 'Compression Fitting 25mm',
-        };
+
+        const normalize = (s) => (s || '').toLowerCase().trim();
+
         const updatedStock = currentStock.map(item => {
-          let qtyToDeduct = 0;
-          Object.entries(materialMapping).forEach(([formKey, stockName]) => {
-            if (item.mat === stockName || item.material === stockName)
-              qtyToDeduct += Number(form[formKey]) || 0;
-          });
-          if (qtyToDeduct > 0) {
-            return { ...item, issued: (item.issued||0) + qtyToDeduct, onSite: Math.max(0,(item.onSite||0) - qtyToDeduct) };
+          const itemName = normalize(item.mat || item.material || '');
+          // Find any entry in materialsUsed that matches this stock item (case-insensitive)
+          const matchEntry = Object.entries(materialsUsed).find(
+            ([matName]) => normalize(matName) === itemName
+          );
+
+          console.log('Checking stock item:', item.mat, '| matched:', matchEntry ? matchEntry[0] : 'none');
+
+          if (matchEntry) {
+            const [, matData] = matchEntry;
+            const qtyToDeduct = Number(matData.qty) || 0;
+            if (qtyToDeduct > 0) {
+              const newIssued = (item.issued || 0) + qtyToDeduct;
+              const newReceived = item.received !== undefined ? item.received : (item.recv || 0);
+              const newReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
+              const newAvailable = newReceived - newIssued - newReturned;
+              const clampedAvailable = Math.max(0, newAvailable);
+              console.log(`Deducting ${qtyToDeduct} from "${item.mat}" → newIssued=${newIssued}, available=${clampedAvailable}`);
+              return {
+                ...item,
+                issued: newIssued,
+                used: newIssued,
+                inStore: clampedAvailable,
+                available: clampedAvailable,
+                onSite: Math.max(0, (item.onSite || 0) - qtyToDeduct)
+              };
+            }
           }
           return item;
         });
         localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+        console.log('Stock updated in localStorage.');
       } catch(err) { console.error('Stock deduction error:', err); }
 
       setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
       setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
       setCustomMaterials([]);
       setHiddenMaterials([]);
+      setCatQtys({});
+      setCatOpen(null);
       showToast('✓ Entry saved successfully');
     }
   }
@@ -627,9 +684,9 @@ export default function HouseTable() {
               <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
               <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
             </div>
-            <Field label="Customer Name" required error={errors.name}><Input value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
+            <Field label="Customer Name" required error={errors.name}><Input id="ht-field-name" value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Mobile" required error={errors.mobile}><Input type="tel" value={form.mobile} onChange={e => f('mobile', e.target.value)} error={errors.mobile} /></Field>
+              <Field label="Mobile" required error={errors.mobile}><Input id="ht-field-mobile" type="tel" value={form.mobile} onChange={e => f('mobile', e.target.value)} error={errors.mobile} /></Field>
               <Field label="Alt Mobile"><Input type="tel" value={form.altMobile} onChange={e => f('altMobile', e.target.value)} /></Field>
             </div>
             <Field label="Account Type" required><Select value={form.acctType} onChange={e => f('acctType', e.target.value)}>{ACCT_TYPES.map(t => <option key={t}>{t}</option>)}</Select></Field>
@@ -639,7 +696,7 @@ export default function HouseTable() {
           <SectionTitle>2. Address</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="House No." required error={errors.houseNo}><Input value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
+              <Field label="House No." required error={errors.houseNo}><Input id="ht-field-houseNo" value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
               <Field label="Floor">
                 <Select value={form.floor || 'GF'} onChange={e => f('floor', e.target.value)}>
                   {FLOORS.map(fl => <option key={fl} value={fl}>{fl} — {FLOOR_LABELS_MAP[fl]}</option>)}
@@ -650,6 +707,7 @@ export default function HouseTable() {
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
                  <Select
+                   id="ht-field-ga"
                    value={formGA}
                    disabled={globalLocationContext?.gaId !== 'all'}
                    onChange={e => {
@@ -666,6 +724,7 @@ export default function HouseTable() {
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                  <Field label="City" required error={errors.city}>
                    <Select
+                     id="ht-field-city"
                      value={formCity}
                      disabled={globalLocationContext?.cityId !== 'all'}
                      onChange={e => {
@@ -680,6 +739,7 @@ export default function HouseTable() {
                  </Field>
                  <Field label="Area / Society" required error={errors.area}>
                    <Select
+                     id="ht-field-area"
                      value={formArea}
                      onChange={e => setFormArea(e.target.value)}
                      error={errors.area}
@@ -699,7 +759,7 @@ export default function HouseTable() {
             <Field label="GI Status"><Select value={form.giStatus} onChange={e => f('giStatus', e.target.value)}>{GI_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
             <Field label="RFC Status"><Select value={form.rfc} onChange={e => f('rfc', e.target.value)}>{RFC_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
             <Field label="NG Status"><Select value={form.ngStatus} onChange={e => f('ngStatus', e.target.value)}>{NG_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="SARAL Status"><Select value={form.saralStatus} onChange={e => f('saralStatus', e.target.value)}>{SARAL_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GC Date"><Input id="ht-field-gcDate" type="date" value={form.gcDate} onChange={e => f('gcDate', e.target.value)} /></Field>
             <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={e => f('plumbingDate', e.target.value)} /></Field>
           </div>
         </div>
@@ -832,6 +892,69 @@ export default function HouseTable() {
                 >×</button>
               </div>
             ))}
+
+            {/* ── Stock Category Dropdowns ── */}
+            <div style={{ marginTop: 12, borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
+              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>
+                Additional Materials from Stock Categories:
+              </p>
+              {stockCategories.map(cat => {
+                const isOpen = catOpen === cat.id;
+                return (
+                  <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
+                    {/* Category header */}
+                    <div
+                      onClick={() => setCatOpen(prev => prev === cat.id ? null : cat.id)}
+                      style={{
+                        background: isOpen ? cat.color : '#f8fafc',
+                        color: isOpen ? 'white' : '#1e293b',
+                        padding: '9px 12px',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        transition: 'background 0.15s',
+                      }}
+                    >
+                      <span>{cat.label}</span>
+                      <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                    </div>
+
+                    {/* Items */}
+                    {isOpen && (
+                      <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                        {cat.items.map(item => {
+                          const key = `${cat.id}__${item}`;
+                          const val = catQtys[key] || 0;
+                          return (
+                            <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>{item}</label>
+                              <input
+                                type="number" min={0}
+                                value={val === 0 ? '' : val}
+                                onFocus={e => e.target.select()}
+                                onChange={e => {
+                                  const num = e.target.value === '' ? 0 : Number(e.target.value);
+                                  setCatQtys(prev => ({ ...prev, [key]: num }));
+                                }}
+                                onBlur={e => {
+                                  if (e.target.value === '') setCatQtys(prev => ({ ...prev, [key]: 0 }));
+                                }}
+                                placeholder="0"
+                                style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
+                              />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Add persistent material to global list */}
             <button
               type="button"
@@ -966,7 +1089,7 @@ export default function HouseTable() {
                   {!hiddenCols.includes('giStatus')   && <td><StatusBadge val={h.giStatus} /></td>}
                   {!hiddenCols.includes('rfc')        && <td><StatusBadge val={h.rfc} /></td>}
                   {!hiddenCols.includes('ngStatus')   && <td><StatusBadge val={h.ngStatus} /></td>}
-                  {!hiddenCols.includes('saralStatus')&& <td><StatusBadge val={h.saralStatus} /></td>}
+                  {!hiddenCols.includes('gcDate')     && <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{h.gcDate ? new Date(h.gcDate).toLocaleDateString('en-GB') : '—'}</td>}
                   {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{h[col.key] || '—'}</td>)}
                   <td style={{ textAlign: 'center', position: 'relative' }}>
                     {/* Photo badge — clickable popover */}
@@ -1010,7 +1133,7 @@ export default function HouseTable() {
                       );
                     })()}
                   </td>
-                  <td><button onClick={e => { e.stopPropagation(); setModalHouse(h); }} className="btn btn-primary btn-sm" style={{ borderRadius: 4 }}>Meter Details</button></td>
+
                   {canWrite && (
                     <td style={{ textAlign: 'center' }}>
                       <button
@@ -1038,7 +1161,7 @@ export default function HouseTable() {
         )}
       </div>
 
-      {modalHouse && <MeterModal house={modalHouse} onClose={() => setModalHouse(null)} onSave={() => setModalHouse(null)} />}
+      {/* MeterModal removed — meter info captured in Section 4 of the Add/Edit panel */}
 
       {/* Add / Edit Entry Panel */}
       <SlidePanel

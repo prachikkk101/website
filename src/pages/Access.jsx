@@ -24,7 +24,7 @@ function fmtDate(iso) {
   catch { return iso; }
 }
 
-const ADMIN_EMAILS = ['admin@gppms.com', 'oxygenhisar@gmail.com', 'oxygenprotech@gmail.com'];
+const ADMIN_EMAILS = ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com'];
 
 export default function Access() {
   const { user } = useContext(AuthContext);
@@ -34,7 +34,7 @@ export default function Access() {
   const session    = getSession();
   const isAdmin    = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
-    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
   const isSupervisor = user?.role === 'SUPERVISOR';
@@ -233,9 +233,8 @@ export default function Access() {
 
   // Registered users — hardcoded admins + approved access requests
   const baseUsers = [
-    { name: 'Admin',          email: 'admin@gppms.com',           role: 'ADMIN',      site: 'All Sites' },
-    { name: 'Oxygen Hisar',   email: 'oxygenhisar@gmail.com',     role: 'ADMIN',      site: 'All Sites' },
-    { name: 'Oxygen Protech', email: 'oxygenprotech@gmail.com',   role: 'ADMIN',      site: 'All Sites' },
+    { name: 'Oxygen Protech', email: 'oxygenprotech@gmail.com',   role: 'ADMIN', site: 'All Sites' },
+    { name: 'Radhe Sangwan',  email: 'radhe.sangwan1980@gmail.com', role: 'ADMIN', site: 'All Sites' },
   ];
   // Merge in approved workers from request history
   const approvedWorkers = requests
@@ -352,8 +351,8 @@ export default function Access() {
             <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
               {u.role}
             </span>
-            {/* Remove button — only for admin, not for admin@gppms.com itself */}
-            {isAdmin && u.email !== session.email && u.email !== 'admin@gppms.com' && (
+            {/* Remove button — only for admin, not for the real admin accounts */}
+            {isAdmin && u.email !== session.email && !ADMIN_EMAILS.includes(u.email) && (
               <button onClick={() => removeUser(u.email)}
                 style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'4px 10px', borderRadius:'4px', fontSize:'11px', cursor:'pointer', marginLeft:'8px' }}>
                 Remove

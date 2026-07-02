@@ -35,28 +35,112 @@ export const updateHouse = (id, updates) =>
 export const getStock = () =>
   localStore.get('stock', defaultStock);
 
-/**
- * challanData: { challanNo, date, site, items: [{ matIndex, qty }] }
- * matIndex is the 0-based index into the stock array.
- */
-export const receiveStock = (challanData) => {
+export const receiveStock = (materialNameOrChallan, receivedQty) => {
+  if (typeof materialNameOrChallan === 'object') {
+    const challanData = materialNameOrChallan;
+    localStore.update('stock', (stock) => {
+      const updated = [...stock];
+      (challanData.items || []).forEach(({ matIndex, qty }) => {
+        if (qty > 0 && updated[matIndex]) {
+          const item = updated[matIndex];
+          const oldReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
+          const oldReceived = item.received !== undefined ? item.received : (item.recv || 0);
+          const oldUsed = item.used !== undefined ? item.used : (item.issued || 0);
+
+          const newReceived = oldReceived + qty;
+          const newAvailable = newReceived - oldUsed - oldReturned;
+          const clampedAvailable = Math.max(0, newAvailable);
+
+          updated[matIndex] = {
+            ...item,
+            recv: newReceived,
+            received: newReceived,
+            inStore: clampedAvailable,
+            available: clampedAvailable,
+          };
+        }
+      });
+      return updated;
+    }, defaultStock);
+    localStore.update('challans', (c) => [{ ...challanData, id: Date.now() }, ...c], []);
+    return;
+  }
+
+  const materialName = materialNameOrChallan;
   localStore.update('stock', (stock) => {
-    const updated = [...stock];
-    (challanData.items || []).forEach(({ matIndex, qty }) => {
-      if (qty > 0 && updated[matIndex]) {
-        updated[matIndex] = {
-          ...updated[matIndex],
-          recv:    (updated[matIndex].recv    ?? 0) + qty,
-          inStore: (updated[matIndex].inStore ?? 0) + qty,
+    return stock.map(item => {
+      if (item.mat === materialName || item.material === materialName || item.name === materialName) {
+        const oldReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
+        const oldReceived = item.received !== undefined ? item.received : (item.recv || 0);
+        const oldUsed = item.used !== undefined ? item.used : (item.issued || 0);
+
+        const newReceived = oldReceived + receivedQty;
+        const newAvailable = newReceived - oldUsed - oldReturned;
+        const clampedAvailable = Math.max(0, newAvailable);
+
+        return {
+          ...item,
+          received: newReceived,
+          recv: newReceived,
+          available: clampedAvailable,
+          inStore: clampedAvailable
         };
       }
+      return item;
     });
-    return updated;
   }, defaultStock);
-
-  // Log the challan receipt
-  localStore.update('challans', (c) => [{ ...challanData, id: Date.now() }, ...c], []);
 };
+
+export const processReturn = (materialName, returnedQty) => {
+  localStore.update('stock', (stock) => {
+    return stock.map(item => {
+      if (item.mat === materialName || item.material === materialName || item.name === materialName) {
+        const oldReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
+        const oldReceived = item.received !== undefined ? item.received : (item.recv || 0);
+        const oldUsed = item.used !== undefined ? item.used : (item.issued || 0);
+
+        const newReturned = oldReturned + returnedQty;
+        const newAvailable = oldReceived - oldUsed - newReturned;
+        const clampedAvailable = Math.max(0, newAvailable);
+
+        return {
+          ...item,
+          returned: newReturned,
+          ret: newReturned,
+          available: clampedAvailable,
+          inStore: clampedAvailable
+        };
+      }
+      return item;
+    });
+  }, defaultStock);
+};
+
+export const processUsage = (materialName, usedQty) => {
+  localStore.update('stock', (stock) => {
+    return stock.map(item => {
+      if (item.mat === materialName || item.material === materialName || item.name === materialName) {
+        const oldReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
+        const oldReceived = item.received !== undefined ? item.received : (item.recv || 0);
+        const oldUsed = item.used !== undefined ? item.used : (item.issued || 0);
+
+        const newUsed = oldUsed + usedQty;
+        const newAvailable = oldReceived - newUsed - oldReturned;
+        const clampedAvailable = Math.max(0, newAvailable);
+
+        return {
+          ...item,
+          used: newUsed,
+          issued: newUsed,
+          available: clampedAvailable,
+          inStore: clampedAvailable
+        };
+      }
+      return item;
+    });
+  }, defaultStock);
+};
+
 
 /**
  * materialsUsed: { "Material Name": { qty: number, unit: string }, ... }
@@ -137,9 +221,8 @@ export const updateLMCWork = (id, updates) =>
    AUTH — local mock bypass
 ═══════════════════════════════════════════ */
 const ADMIN_EMAILS = [
-  'admin@gppms.com',
-  'oxygenhisar@gmail.com',
   'oxygenprotech@gmail.com',
+  'radhe.sangwan1980@gmail.com',
 ];
 
 /**

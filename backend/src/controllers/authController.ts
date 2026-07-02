@@ -5,6 +5,10 @@ import * as jwt from 'jsonwebtoken';
 import prisma from '../config/db';
 import { Role } from '@prisma/client';
 import { AuthenticatedRequest } from '../middlewares/auth';
+import {
+  sendPasswordResetOTP,
+  sendPasswordChangedNotification,
+} from '../utils/email';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'gp-pms-super-secret-access-token-key-2026';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'gp-pms-super-secret-refresh-token-key-2026';
@@ -218,6 +222,177 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
       success: true,
       user,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+/* ══════════════════════════════════════════════════
+   ADMIN FORGOT PASSWORD — OTP-BASED RESET FLOW
+══════════════════════════════════════════════════ */
+
+const RESET_JWT_SECRET = process.env.JWT_SECRET || 'gp-pms-super-secret-access-token-key-2026';
+const GENERIC_RESET_MSG = 'If this email is registered as an admin, an OTP has been sent.';
+
+export const adminForgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+  const schema = z.object({ email: z.string().email() });
+
+  try {
+    const { email } = schema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // Security: always return same generic message — don't reveal if email exists
+    if (!user || user.role !== Role.ADMIN) {
+      return res.status(200).json({ success: true, message: GENERIC_RESET_MSG });
+    }
+
+    // Invalidate any previous unused OTPs for this email
+    await prisma.passwordResetOTP.updateMany({
+      where: { email, used: false },
+      data: { used: true },
+    });
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    await prisma.passwordResetOTP.create({
+      data: { email, otp, expiresAt },
+    });
+
+    await sendPasswordResetOTP(email, otp);
+
+    return res.status(200).json({ success: true, message: GENERIC_RESET_MSG });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminVerifyResetOtp = async (req: Request, res: Response, next: NextFunction) => {
+  const schema = z.object({
+    email: z.string().email(),
+    otp: z.string().length(6),
+  });
+
+  try {
+    const { email, otp } = schema.parse(req.body);
+
+    const record = await prisma.passwordResetOTP.findFirst({
+      where: {
+        email,
+        otp,
+        used: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!record) {
+      return res.status(400).json({ success: false, error: 'Invalid or expired OTP' });
+    }
+
+    // Mark OTP as used
+    await prisma.passwordResetOTP.update({
+      where: { id: record.id },
+      data: { used: true },
+    });
+
+    // Issue short-lived reset token (10 min)
+    const resetToken = jwt.sign(
+      { email, purpose: 'password-reset' },
+      RESET_JWT_SECRET,
+      { expiresIn: '10m' }
+    );
+
+    return res.status(200).json({ success: true, resetToken });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const adminResetPassword = async (req: Request, res: Response, next: NextFunction) => {
+  const schema = z.object({
+    resetToken: z.string(),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  });
+
+  try {
+    const { resetToken, newPassword } = schema.parse(req.body);
+
+    // Verify reset token
+    let decoded: { email: string; purpose: string };
+    try {
+      decoded = jwt.verify(resetToken, RESET_JWT_SECRET) as { email: string; purpose: string };
+    } catch {
+      return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
+    }
+
+    if (decoded.purpose !== 'password-reset') {
+      return res.status(400).json({ success: false, error: 'Invalid reset token' });
+    }
+
+    const user = await prisma.user.findUnique({ where: { email: decoded.email } });
+    if (!user || user.role !== Role.ADMIN) {
+      return res.status(400).json({ success: false, error: 'Invalid reset token' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    await sendPasswordChangedNotification(user.email);
+
+    return res.status(200).json({ success: true, message: 'Password reset successfully. You can now login.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/* ══════════════════════════════════════════════════
+   CHANGE PASSWORD (WHILE LOGGED IN) — ANY ROLE
+══════════════════════════════════════════════════ */
+
+export const changePassword = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const schema = z.object({
+    currentPassword: z.string(),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters'),
+  });
+
+  try {
+    if (!req.user) {
+      return res.status(401).json({ success: false, error: 'Unauthorized' });
+    }
+
+    const { currentPassword, newPassword } = schema.parse(req.body);
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.id } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, error: 'Current password is incorrect' });
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    });
+
+    if (user.role === Role.ADMIN) {
+      await sendPasswordChangedNotification(user.email);
+    }
+
+    return res.status(200).json({ success: true, message: 'Password changed successfully' });
   } catch (error) {
     next(error);
   }

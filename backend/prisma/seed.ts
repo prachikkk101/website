@@ -39,10 +39,8 @@ async function main() {
 
   // 2. Seed Admin Whitelist
   const whitelistEmails = [
-    'admin@gppms.com',
-    'ankur@gppms.com',
-    'owner@oxygenprotech.com',
-    'atul@oxygenprotech.com'
+    'oxygenprotech@gmail.com',
+    'radhe.sangwan1980@gmail.com'
   ];
   for (const email of whitelistEmails) {
     await prisma.adminWhitelist.create({ data: { email } });
@@ -51,13 +49,23 @@ async function main() {
 
   // 3. Seed Users
   const salt = await bcrypt.genSalt(10);
-  const adminPasswordHash = await bcrypt.hash('admin123', salt);
+  const adminPasswordHash = await bcrypt.hash('OxygenAdmin@2026', salt);
   const workerPasswordHash = await bcrypt.hash('worker123', salt);
 
-  const admin = await prisma.user.create({
+  const admin1 = await prisma.user.create({
     data: {
-      email: 'admin@gppms.com',
-      name: 'Atul Kumar',
+      email: 'oxygenprotech@gmail.com',
+      name: 'Oxygen Protech Admin',
+      passwordHash: adminPasswordHash,
+      role: Role.ADMIN,
+      emailVerified: true,
+    },
+  });
+
+  const admin2 = await prisma.user.create({
+    data: {
+      email: 'radhe.sangwan1980@gmail.com',
+      name: 'Radhe Sangwan',
       passwordHash: adminPasswordHash,
       role: Role.ADMIN,
       emailVerified: true,
@@ -83,7 +91,7 @@ async function main() {
       emailVerified: true,
     },
   });
-  console.log('Seeded Users: admin@gppms.com, super@gppms.com, worker@gppms.com');
+  console.log('Seeded Users: oxygenprotech@gmail.com, radhe.sangwan1980@gmail.com, super@gppms.com, worker@gppms.com');
 
   // 4. Seed Sites
   const sites = [

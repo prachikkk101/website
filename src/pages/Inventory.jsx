@@ -111,28 +111,32 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: readOnly ? 0 : 10 }}>
                   {cat.items.map(item => {
                     if (readOnly) {
-                      // readOnly mode: quantities[item] is an object { recv, issued, inStore }
-                      const stats = quantities[item] || {};
-                      const recv    = stats.recv    ?? 0;
-                      const issued  = stats.issued  ?? 0;
-                      const inStore = stats.inStore ?? 0;
+                      // readOnly mode: quantities[item] is an object { recv, issued, ret, inStore }
+                      const stats    = quantities[item] || {};
+                      const recv     = stats.recv    ?? 0;
+                      const issued   = stats.issued  ?? 0;
+                      const ret      = stats.ret     ?? 0;
+                      const inStore  = Math.max(0, stats.inStore ?? 0);
                       return (
                         <div key={item} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '8px 12px', fontSize: '12px',
+                          padding: '10px 12px', fontSize: '12px',
                           borderBottom: '1px solid #f1f5f9',
                           background: '#fafafa', borderRadius: 4,
                         }}>
                           <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: '#374151' }}>{item}</span>
-                          <div style={{ display: 'flex', gap: 12, fontSize: '11px' }}>
+                          <div style={{ display: 'flex', gap: 14, fontSize: '11px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                             <span style={{ color: '#64748b' }}>
-                              Received: <b style={{ color: '#1f4e1a' }}>{recv}</b>
+                              Received: <b style={{ color: '#2d6a27' }}>{recv}</b>
                             </span>
                             <span style={{ color: '#64748b' }}>
-                              Used: <b style={{ color: '#c0440a' }}>{issued}</b>
+                              Used: <b style={{ color: '#1e293b' }}>{issued}</b>
                             </span>
                             <span style={{ color: '#64748b' }}>
-                              Available: <b style={{ color: inStore > 0 ? '#1f4e1a' : '#dc2626' }}>{inStore}</b>
+                              Returned: <b style={{ color: '#3b82f6' }}>{ret}</b>
+                            </span>
+                            <span style={{ color: '#64748b' }}>
+                              Available: <b style={{ color: inStore > 0 ? '#16a34a' : '#dc2626' }}>{inStore}</b>
                             </span>
                           </div>
                         </div>
@@ -209,7 +213,7 @@ export default function Inventory() {
   const siteAccess   = session.siteAccess;
   const isAdmin      = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
-    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
@@ -243,14 +247,18 @@ export default function Inventory() {
   const [returnStockOpen, setReturnStockOpen] = useState(false);
 
   const summaryQuantities = useMemo(() => {
-    // For readOnly accordion, pass objects with recv/issued/inStore per item name
+    // For readOnly accordion: { recv, issued, ret, inStore } per item name
     const q = {};
     (stockData || []).forEach(item => {
       const name = item.mat || item.material;
+      const recv = item.recv ?? 0;
+      const issued = item.issued ?? 0;
+      const ret = item.ret ?? 0;
       q[name] = {
-        recv:    item.recv    ?? 0,
-        issued:  item.issued  ?? 0,
-        inStore: item.inStore ?? 0,
+        recv,
+        issued,
+        ret,
+        inStore: Math.max(0, recv - issued - ret),
       };
     });
     return q;
@@ -332,13 +340,19 @@ export default function Inventory() {
       return;
     }
 
-    // Update inStore for returned items: inStore -= qty, and save updated stockData
+    // CORRECT logic: Available = Received - Used - Returned
     let updatedStock = (stockData || []).map(s => {
       const match = returnedItems.find(r => r.name === s.mat || r.name === s.material);
       if (match) {
+        const newReturned = (s.ret || 0) + match.qty;
+        const newAvailable = (s.recv || 0) - (s.issued || 0) - newReturned;
+        const clampedAvailable = Math.max(0, newAvailable);
         return {
           ...s,
-          inStore: (s.inStore || 0) - match.qty
+          ret: newReturned,
+          returned: newReturned,
+          inStore: clampedAvailable,
+          available: clampedAvailable
         };
       }
       return s;
@@ -390,7 +404,24 @@ export default function Inventory() {
     if (!formCity) e.city    = 'City is required';
     if (!formArea) e.area    = 'Area is required';
     setFormErr(e);
+
+    // Scroll & focus to first invalid field
+    const fieldOrder = [
+      { key: 'dateRcv', id: 'inv-field-date'   },
+      { key: 'ga',      id: 'inv-field-ga'      },
+      { key: 'city',    id: 'inv-field-city'    },
+      { key: 'area',    id: 'inv-field-area'    },
+    ];
+    const first = fieldOrder.find(f => e[f.key]);
+    if (first) {
+      setTimeout(() => {
+        const el = document.getElementById(first.id);
+        if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.focus(); }
+      }, 50);
+      return;
+    }
     if (Object.keys(e).length > 0) return;
+
 
     // Collect items with qty > 0
     const receivedItems = [];
@@ -413,7 +444,16 @@ export default function Inventory() {
     receivedItems.forEach(({ name, qty }) => {
       const idx = updatedStock.findIndex(s => s.mat === name || s.material === name);
       if (idx >= 0) {
-        updatedStock[idx] = { ...updatedStock[idx], recv: (updatedStock[idx].recv || 0) + qty };
+        const newReceived = (updatedStock[idx].recv || 0) + qty;
+        const newAvailable = newReceived - (updatedStock[idx].issued || 0) - (updatedStock[idx].ret || 0);
+        const clampedAvailable = Math.max(0, newAvailable);
+        updatedStock[idx] = {
+          ...updatedStock[idx],
+          recv: newReceived,
+          received: newReceived,
+          inStore: clampedAvailable,
+          available: clampedAvailable
+        };
         updatedCount++;
       } else {
         // New item
@@ -421,8 +461,10 @@ export default function Inventory() {
           sr: updatedStock.length + 1,
           mat: name, material: name,
           unit: 'pcs', open: 0,
-          recv: qty, issued: 0, ret: 0,
-          onSite: qty, inStore: 0, req: 0,
+          recv: qty, received: qty,
+          issued: 0, used: 0,
+          ret: 0, returned: 0,
+          onSite: qty, inStore: qty, available: qty, req: 0,
         });
         updatedCount++;
       }
@@ -565,104 +607,193 @@ export default function Inventory() {
       </div>
 
       <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, 
+        <h3 style={{ fontSize: 14, fontWeight: 600,
           color: '#1f4e1a', marginBottom: 10 }}>
-          Stock by Category Summary
+          Stock by Category
+          {stockData.length === 0 && (
+            <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>
+              — No stock received yet. Use "Receive Stock" to add items.
+            </span>
+          )}
         </h3>
-        <CategoryAccordion 
+        <CategoryAccordion
           openCategory={openCategoryAccordion}
           setOpenCategory={setOpenCategoryAccordion}
           quantities={summaryQuantities}
-          setQuantities={() => {}} 
+          setQuantities={() => {}}
           readOnly={true}
         />
       </div>
 
-      <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ overflowX: 'auto' }}>
-          <table className="gp-table">
-            <thead>
-              <tr>
-                <th style={{ width: 40, textAlign:'center' }}>Sr.</th>
-                <th style={{ minWidth: 180 }}>Material</th>
-                <th style={{ width: 60 }}>Unit</th>
-                {!hiddenCols.includes('open') && <th style={{ textAlign:'right' }}>Opening</th>}
-                {!hiddenCols.includes('recv') && <th style={{ textAlign:'right' }}>Received</th>}
-                {!hiddenCols.includes('issued') && <th style={{ textAlign:'right' }}>Issued</th>}
-                {!hiddenCols.includes('ret') && <th style={{ textAlign:'right' }}>Returned</th>}
-                {!hiddenCols.includes('netUsed') && <th style={{ textAlign:'right' }}>Net Used</th>}
-                {!hiddenCols.includes('onSite') && <th style={{ textAlign:'right' }}>On Site</th>}
-                {!hiddenCols.includes('inStore') && <th style={{ textAlign:'right' }}>In Store</th>}
-                {!hiddenCols.includes('req') && <th style={{ textAlign:'right' }}>Required</th>}
-                {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <th key={col.key}>{col.label}</th>)}
-                <th style={{ minWidth: 140 }}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={12 + customCols.length} style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8' }}>
-                  <div style={{ fontSize: 32 }}>📦</div>
-                  <div style={{ marginTop: 8 }}>No stock data found</div>
-                </td></tr>
-              ) : rows.map(r => (
-                <tr key={r.sr}>
-                  <td style={{ textAlign:'center', color:'#94a3b8', fontWeight:500 }}>{r.sr}</td>
-                  <td style={{ fontWeight:600, whiteSpace:'nowrap' }}>{r.mat}</td>
-                  <td style={{ color:'#64748b' }}>{r.unit}</td>
-                  {!hiddenCols.includes('open') && <td style={{ textAlign:'right' }}>{(r.open||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('recv') && <td style={{ textAlign:'right', color:'#2d6a27', fontWeight:600 }}>{(r.recv||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('issued') && <td style={{ textAlign:'right' }}>{(r.issued||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('ret') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{(r.ret||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('netUsed') && <td style={{ textAlign:'right', fontWeight:700 }}>{(r.netUsed||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('onSite') && <td style={{ textAlign:'right', color: onSiteColor(r) }}>{(r.onSite||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('inStore') && <td style={{ textAlign:'right' }}>{(r.inStore||0).toLocaleString()}</td>}
-                  {!hiddenCols.includes('req') && <td style={{ textAlign:'right', color: r.req > 0 ? '#c0440a' : '#94a3b8', fontWeight: r.req > 0 ? 600 : 400 }}>{r.req > 0 ? r.req.toLocaleString() : '—'}</td>}
-                  {customCols.filter(col => !hiddenCols.includes(col.key)).map(col => (
-                    <td
-                      key={col.key}
-                      onClick={() => handleEditCell(r.sr, col.key, col.label, r[col.key])}
-                      style={{
-                        cursor: canWrite ? 'pointer' : 'default',
-                        color: r[col.key] ? '#1e293b' : '#94a3b8',
-                        fontStyle: r[col.key] ? 'normal' : 'italic',
-                        background: canWrite ? 'rgba(45, 106, 39, 0.02)' : 'none',
-                        whiteSpace: 'nowrap'
-                      }}
-                      title={canWrite ? 'Click to edit' : undefined}
-                    >
-                      {r[col.key] || (canWrite ? 'click to set' : '—')}
-                    </td>
-                  ))}
-                  <td>
-                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                      <div style={{ width:80, height:8, background:'#e5e7eb', borderRadius:4, overflow:'hidden', flexShrink:0 }}>
-                        <div style={{ height:'100%', width:`${Math.min(r.status.pct,100)}%`, background:r.status.bar, borderRadius:4, transition:'width 0.6s' }} />
-                      </div>
-                      <span className={`badge ${r.status.cls}`}>{r.status.label}</span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              <tr style={{ background:'#f0f7ee', fontWeight:700 }}>
-                <td colSpan={3} style={{ textAlign:'right', color:'#1f4e1a' }}>TOTAL</td>
-                {!hiddenCols.includes('open') && <td style={{ textAlign:'right' }}>{totals.open.toLocaleString()}</td>}
-                {!hiddenCols.includes('recv') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.recv.toLocaleString()}</td>}
-                {!hiddenCols.includes('issued') && <td style={{ textAlign:'right' }}>{totals.issued.toLocaleString()}</td>}
-                {!hiddenCols.includes('ret') && <td style={{ textAlign:'right', color:'#2d6a27' }}>{totals.ret.toLocaleString()}</td>}
-                {!hiddenCols.includes('netUsed') && <td style={{ textAlign:'right' }}>{totals.netUsed.toLocaleString()}</td>}
-                {!hiddenCols.includes('onSite') && <td style={{ textAlign:'right' }}>{totals.onSite.toLocaleString()}</td>}
-                {!hiddenCols.includes('inStore') && <td style={{ textAlign:'right' }}>{totals.inStore.toLocaleString()}</td>}
-                {!hiddenCols.includes('req') && <td style={{ textAlign:'right' }}>{totals.req.toLocaleString()}</td>}
-                {customCols.filter(col => !hiddenCols.includes(col.key)).map(col => <td key={col.key} />)}
-                <td />
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* ── Stock Statement Table ── */}
+      {rows.length > 0 && (() => {
+        // Status helper
+        const getStockStatus = (available, received) => {
+          if (received === 0) return { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' };
+          const pct = (available / received) * 100;
+          if (pct >= 50) return { label: 'Good',     color: '#16a34a', bg: '#dcfce7' };
+          if (pct >= 20) return { label: 'Low',      color: '#d97706', bg: '#fef3c7' };
+          return              { label: 'Critical',   color: '#dc2626', bg: '#fee2e2' };
+        };
 
-      <p style={{ marginTop:10, fontSize:12, color:'#94a3b8', fontStyle:'italic' }}>
-        \u2139\ufe0f Materials used per house entry are automatically deducted from Issued Qty.
+        return (
+          <div style={{ marginBottom: 24 }}>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1f4e1a', marginBottom: 10, letterSpacing: '-0.01em' }}>
+              Stock Statement
+            </h3>
+
+            {/* Table card */}
+            <div style={{
+              background: '#fff',
+              borderRadius: 10,
+              boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+              overflow: 'hidden',
+            }}>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                  <thead>
+                    <tr style={{
+                      background: 'linear-gradient(135deg, #2d6a27 0%, #1f4e1a 100%)',
+                      color: '#fff',
+                    }}>
+                      {[
+                        { label: 'Sr.',       align: 'center', style: { width: 48 } },
+                        { label: 'Material',  align: 'left',   style: { minWidth: 190 } },
+                        { label: 'Unit',      align: 'center', style: { width: 64 } },
+                        { label: 'Received',  align: 'right'  },
+                        { label: 'Used',      align: 'right'  },
+                        { label: 'Returned',  align: 'right'  },
+                        { label: 'Available', align: 'right'  },
+                        { label: 'Status',    align: 'center' },
+                      ].map(col => (
+                        <th key={col.label} style={{
+                          padding: '14px 16px',
+                          textAlign: col.align,
+                          fontWeight: 700,
+                          fontSize: 11,
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          whiteSpace: 'nowrap',
+                          ...col.style,
+                        }}>{col.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {rows.map((r, i) => {
+                      const recv        = r.recv    || 0;
+                      const used        = r.issued  || 0;
+                      const returned    = r.ret     || 0;
+                      const available   = Math.max(0, recv - used - returned);
+                      const status      = getStockStatus(available, recv);
+                      const base        = i % 2 === 0 ? '#fff' : '#f8fbf8';
+
+                      return (
+                        <tr
+                          key={r.sr}
+                          style={{ background: base, borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#f0f7ee'}
+                          onMouseLeave={e => e.currentTarget.style.background = base}
+                        >
+                          {/* Sr. */}
+                          <td style={{ padding: '14px 16px', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>
+                            {r.sr}
+                          </td>
+
+                          {/* Material */}
+                          <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                            {r.mat}
+                          </td>
+
+                          {/* Unit */}
+                          <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                            {r.unit}
+                          </td>
+
+                          {/* Received */}
+                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#2d6a27', fontWeight: 600 }}>
+                            {recv.toLocaleString()}
+                          </td>
+
+                          {/* Used */}
+                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>
+                            {used.toLocaleString()}
+                          </td>
+
+                          {/* Returned */}
+                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#3b82f6', fontWeight: 600 }}>
+                            {returned.toLocaleString()}
+                          </td>
+
+                          {/* Available */}
+                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                            <span style={{
+                              fontWeight: 700,
+                              fontSize: 14,
+                              color: available > 0 ? '#16a34a' : '#dc2626',
+                            }}>
+                              {available.toLocaleString()}
+                            </span>
+                          </td>
+
+                          {/* Status badge */}
+                          <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                            <span style={{
+                              background: status.bg,
+                              color: status.color,
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '4px 10px',
+                              borderRadius: 12,
+                              display: 'inline-block',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {status.label}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+
+                  <tfoot>
+                    <tr style={{ background: '#f0f7ee', borderTop: '2px solid #2d6a27' }}>
+                      <td colSpan={3} style={{ padding: '16px', textAlign: 'right', color: '#1f4e1a', fontWeight: 700, fontSize: 12, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                        Total
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right', color: '#2d6a27', fontWeight: 700 }}>
+                        {rows.reduce((s, r) => s + (r.recv || 0), 0).toLocaleString()}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right', color: '#1e293b', fontWeight: 700 }}>
+                        {rows.reduce((s, r) => s + (r.issued || 0), 0).toLocaleString()}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right', color: '#3b82f6', fontWeight: 700 }}>
+                        {rows.reduce((s, r) => s + (r.ret || 0), 0).toLocaleString()}
+                      </td>
+                      <td style={{ padding: '16px', textAlign: 'right', color: '#16a34a', fontWeight: 700, fontSize: 14 }}>
+                        {rows.reduce((s, r) => s + Math.max(0, (r.recv || 0) - (r.issued || 0) - (r.ret || 0)), 0).toLocaleString()}
+                      </td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            {/* Status legend */}
+            <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: '#64748b', flexWrap: 'wrap' }}>
+              <span>🟢 Good — 50%+ available</span>
+              <span>🟡 Low — 20–49% available</span>
+              <span>🔴 Critical — under 20% available</span>
+            </div>
+          </div>
+        );
+      })()}
+
+
+      <p style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
+        ℹ️ Materials used per house entry are automatically deducted from Used Qty.
       </p>
 
       {/* Receive Stock Panel */}
@@ -675,12 +806,13 @@ export default function Inventory() {
             </Field>
             <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
-                <Input type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
+                <Input id="inv-field-date" type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
               </Field>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={formErr.ga}>
                 <Select
+                  id="inv-field-ga"
                   value={formGA}
                   disabled={globalLocationContext?.gaId !== 'all'}
                   onChange={e => {
@@ -697,6 +829,7 @@ export default function Inventory() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={formErr.city}>
                   <Select
+                    id="inv-field-city"
                     value={formCity}
                     disabled={globalLocationContext?.cityId !== 'all'}
                     onChange={e => {
@@ -711,6 +844,7 @@ export default function Inventory() {
                 </Field>
                 <Field label="Area / Site" required error={formErr.area}>
                   <Select
+                    id="inv-field-area"
                     value={formArea}
                     onChange={e => setFormArea(e.target.value)}
                     error={formErr.area}

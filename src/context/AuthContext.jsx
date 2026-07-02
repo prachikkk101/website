@@ -5,23 +5,19 @@ export const AuthContext = createContext();
 
 /* ── Hardcoded admin credentials (local / offline mode) ── */
 const ADMIN_EMAILS = [
-  'admin@gppms.com',
-  'oxygenhisar@gmail.com',
   'oxygenprotech@gmail.com',
+  'radhe.sangwan1980@gmail.com',
 ];
 
-// admin@gppms.com + admin123 always works as admin.
-// The two Google emails also get ADMIN in local fallback (any password).
+// Any email in ADMIN_EMAILS with password ≥4 chars gets ADMIN in local fallback.
 function buildMockUser(email, password) {
   const em = email.toLowerCase();
-  const isHardcodedAdmin =
-    (em === 'admin@gppms.com' && password === 'admin123') ||
-    ADMIN_EMAILS.includes(em);
+  const isHardcodedAdmin = ADMIN_EMAILS.includes(em);
 
   if (isHardcodedAdmin) {
     return {
       id: 1,
-      name: em === 'admin@gppms.com' ? 'Admin' : email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+      name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
       email,
       role: 'ADMIN',
       siteAccess: 'all',

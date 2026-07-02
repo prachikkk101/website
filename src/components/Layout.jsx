@@ -1,11 +1,13 @@
 // src/components/Layout.jsx
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { useState, useContext, useEffect, useRef } from 'react';
+import { useState, useContext, useEffect } from 'react';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { ToastContainer } from './Toast';
+import { useToast } from './Toast';
 import { checkBackend } from '../utils/healthCheck';
-import SiteFlyoutMenu from './SiteFlyoutMenu';
+import SiteSelectorModal from './SiteSelectorModal';
+import { changePasswordApi } from '../utils/api';
 
 
 const breadcrumbs = {
@@ -38,22 +40,43 @@ export default function Layout() {
   const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, setGlobalLocationContext } = useSite();
 
   const { user, logout } = useContext(AuthContext);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [backendStatus,  setBackendStatus]  = useState('checking'); // 'checking'|'connected'|'offline'
-  const [pendingCount,   setPendingCount]   = useState(0);
-  // Cascading flyout state
-  const [flyoutOpen,   setFlyoutOpen]   = useState(false);
-  const [hoveredGA,    setHoveredGA]    = useState(null);
-  const [hoveredCity,  setHoveredCity]  = useState(null);
-  // Timer ref — prevents flyout closing when cursor moves from button → panel
-  const closeTimer = useRef(null);
-  const openFlyout  = () => { if (closeTimer.current) clearTimeout(closeTimer.current); setFlyoutOpen(true); };
-  const closeFlyout = () => { closeTimer.current = setTimeout(() => { setFlyoutOpen(false); setHoveredGA(null); setHoveredCity(null); }, 120); };
+  const { showToast } = useToast();
+  const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false);
+  const [backendStatus,    setBackendStatus]    = useState('checking'); // 'checking'|'connected'|'offline'
+  const [pendingCount,     setPendingCount]     = useState(0);
+  // Site selector modal state (replaces hover flyout)
+  const [siteModalOpen,    setSiteModalOpen]    = useState(false);
+
+  // Change-password modal state
+  const [chPwOpen,    setChPwOpen]    = useState(false);
+  const [chPwCurr,    setChPwCurr]    = useState('');
+  const [chPwNew,     setChPwNew]     = useState('');
+  const [chPwConfirm, setChPwConfirm] = useState('');
+  const [chPwLoading, setChPwLoading] = useState(false);
+  const [chPwError,   setChPwError]   = useState('');
+
+  const openChPw = () => { setChPwCurr(''); setChPwNew(''); setChPwConfirm(''); setChPwError(''); setChPwOpen(true); };
+  const closeChPw = () => setChPwOpen(false);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setChPwError('');
+    if (!chPwCurr) { setChPwError('Current password is required.'); return; }
+    if (chPwNew.length < 8) { setChPwError('New password must be at least 8 characters.'); return; }
+    if (chPwNew !== chPwConfirm) { setChPwError('Passwords do not match.'); return; }
+    setChPwLoading(true);
+    const res = await changePasswordApi(chPwCurr, chPwNew);
+    setChPwLoading(false);
+    if (!res.success) { setChPwError(res.error || 'Failed to change password.'); return; }
+    showToast('\u2713 Password updated successfully', 'success');
+    closeChPw();
+  };
+
 
   // Close mobile menu on route change
   useEffect(() => { setMobileMenuOpen(false); }, [location.pathname]);
-  // Close flyout on route change
-  useEffect(() => { setFlyoutOpen(false); setHoveredGA(null); setHoveredCity(null); }, [location.pathname]);
+  // Close site modal on route change
+  useEffect(() => { setSiteModalOpen(false); }, [location.pathname]);
 
   // Re-read pending count whenever location changes (Access page approvals update it)
   useEffect(() => { setPendingCount(getPendingCount()); }, [location.pathname]);
@@ -86,7 +109,7 @@ export default function Layout() {
   const isAdmin = (
     user?.role === 'ADMIN' ||
     user?.role === 'admin' ||
-    ['oxygenhisar@gmail.com', 'oxygenprotech@gmail.com', 'admin@gppms.com']
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
   // Supervisor with no site assigned => view-only
@@ -209,10 +232,27 @@ export default function Layout() {
 
           {showSiteSelector && (
             <div style={{ display: 'flex', alignItems: 'center', padding: '0 8px', borderRight: '1px solid rgba(255,255,255,0.08)' }}>
-              <SiteFlyoutMenu 
-                gaLocations={getGALocations()} 
-                onSelect={handleFlyoutSelect} 
-                selectedLabel={flyoutLabel} 
+              <button
+                onClick={() => setSiteModalOpen(true)}
+                style={{
+                  height: '32px', padding: '0 12px',
+                  background: 'white', border: '1px solid #d1d5db',
+                  borderRadius: '4px', fontSize: '12px', cursor: 'pointer',
+                  color: '#374151', display: 'flex', alignItems: 'center', gap: '4px',
+                  maxWidth: '220px', whiteSpace: 'nowrap', overflow: 'hidden',
+                }}
+              >
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {flyoutLabel}
+                </span>
+                {' '}▾
+              </button>
+              <SiteSelectorModal
+                isOpen={siteModalOpen}
+                onClose={() => setSiteModalOpen(false)}
+                gaLocations={getGALocations()}
+                onSelect={handleFlyoutSelect}
+                selectedLabel={flyoutLabel}
               />
             </div>
           )}
@@ -254,6 +294,11 @@ export default function Layout() {
                   </span>
                 )}
               </div>
+              <button onClick={openChPw} title="Change your password"
+                style={{ marginLeft: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: 600, padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.2px', transition: 'background 0.15s', whiteSpace: 'nowrap' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'rgba(74,124,47,0.35)'}
+                onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+              >🔑 Pwd</button>
               <button onClick={handleLogout} title="Sign out"
                 style={{ marginLeft: 2, background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 5, color: 'rgba(255,255,255,0.75)', fontSize: 10, fontWeight: 600, padding: '3px 8px', cursor: 'pointer', letterSpacing: '0.2px', transition: 'background 0.15s', whiteSpace: 'nowrap' }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,53,69,0.25)'}
@@ -386,6 +431,84 @@ export default function Layout() {
       <footer style={{ background: '#1f4e1a', padding: '8px 16px', textAlign: 'center', color: 'rgba(255,255,255,0.45)', fontSize: 11 }}>
         GP-PMS © 2026 — Gas Pipeline Project Management System
       </footer>
+
+      {/* ── Change Password Modal ── */}
+      {chPwOpen && (
+        <div style={{ position:'fixed',inset:0,zIndex:3000,background:'rgba(0,0,0,0.65)',display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.45)',overflow:'hidden' }}>
+            {/* Header */}
+            <div style={{ background:'#1f4e1a',padding:'15px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>🔑 Change Password</span>
+              <button onClick={closeChPw} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.7)',fontSize:20,cursor:'pointer',lineHeight:1 }}>✕</button>
+            </div>
+
+            <form onSubmit={handleChangePassword} style={{ padding:'22px 24px 24px',display:'flex',flexDirection:'column',gap:14 }}>
+              {chPwError && (
+                <div style={{ background:'#fef2f2',border:'1px solid #fecaca',borderRadius:8,padding:'10px 14px' }}>
+                  <span style={{ color:'#dc2626',fontSize:13 }}>⚠ {chPwError}</span>
+                </div>
+              )}
+
+              {/* Current Password */}
+              <div>
+                <label style={{ display:'block',fontSize:12,fontWeight:600,color:'#374151',marginBottom:5 }}>Current Password</label>
+                <input
+                  type="password" required value={chPwCurr}
+                  onChange={e => setChPwCurr(e.target.value)}
+                  placeholder="Your current password"
+                  style={{ width:'100%',padding:'10px 13px',border:'1.5px solid #d1d5db',borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box' }}
+                  onFocus={e => e.target.style.borderColor='#2d6a27'}
+                  onBlur={e => e.target.style.borderColor='#d1d5db'}
+                />
+              </div>
+
+              {/* New Password */}
+              <div>
+                <label style={{ display:'block',fontSize:12,fontWeight:600,color:'#374151',marginBottom:5 }}>New Password</label>
+                <input
+                  type="password" required value={chPwNew}
+                  onChange={e => setChPwNew(e.target.value)}
+                  placeholder="At least 8 characters"
+                  style={{ width:'100%',padding:'10px 13px',border:`1.5px solid ${chPwNew.length>0&&chPwNew.length<8?'#dc2626':'#d1d5db'}`,borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:4 }}
+                  onFocus={e => e.target.style.borderColor='#2d6a27'}
+                  onBlur={e => e.target.style.borderColor=chPwNew.length>0&&chPwNew.length<8?'#dc2626':'#d1d5db'}
+                />
+                {chPwNew.length > 0 && chPwNew.length < 8 && (
+                  <p style={{ margin:0,fontSize:11,color:'#dc2626' }}>Password must be at least 8 characters</p>
+                )}
+              </div>
+
+              {/* Confirm New Password */}
+              <div>
+                <label style={{ display:'block',fontSize:12,fontWeight:600,color:'#374151',marginBottom:5 }}>Confirm New Password</label>
+                <input
+                  type="password" required value={chPwConfirm}
+                  onChange={e => setChPwConfirm(e.target.value)}
+                  placeholder="Repeat new password"
+                  style={{ width:'100%',padding:'10px 13px',border:`1.5px solid ${chPwConfirm.length>0&&chPwConfirm!==chPwNew?'#dc2626':'#d1d5db'}`,borderRadius:8,fontSize:14,outline:'none',boxSizing:'border-box',marginBottom:4 }}
+                  onFocus={e => e.target.style.borderColor='#2d6a27'}
+                  onBlur={e => e.target.style.borderColor=chPwConfirm.length>0&&chPwConfirm!==chPwNew?'#dc2626':'#d1d5db'}
+                />
+                {chPwConfirm.length > 0 && chPwConfirm !== chPwNew && (
+                  <p style={{ margin:0,fontSize:11,color:'#dc2626' }}>Passwords do not match</p>
+                )}
+              </div>
+
+              {/* Buttons */}
+              <div style={{ display:'flex',gap:10,marginTop:4 }}>
+                <button type="button" onClick={closeChPw}
+                  style={{ flex:1,padding:'11px 0',background:'#fff',border:'1.5px solid #d1d5db',borderRadius:8,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
+                  Cancel
+                </button>
+                <button type="submit" disabled={chPwLoading}
+                  style={{ flex:2,padding:'11px 0',background: chPwLoading ? '#93c489' : '#2d6a27',border:'none',borderRadius:8,fontSize:13,fontWeight:700,cursor: chPwLoading ? 'not-allowed' : 'pointer',color:'#fff',transition:'background 0.2s' }}>
+                  {chPwLoading ? 'Updating…' : 'Update Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

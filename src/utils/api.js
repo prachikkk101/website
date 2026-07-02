@@ -34,3 +34,39 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+/* ── Password Reset & Change-Password helpers ── */
+
+const BACKEND_REQUIRED_MSG =
+  'This feature requires a live backend connection. Please contact your administrator.';
+
+async function apiPost(path, body) {
+  try {
+    const token = localStorage.getItem('gppms_token') || localStorage.getItem('token') || '';
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+    const res = await fetch(`${base}${path}`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) return { success: false, error: data.error || 'Request failed' };
+    return { success: true, ...data };
+  } catch {
+    return { success: false, error: BACKEND_REQUIRED_MSG };
+  }
+}
+
+export const adminForgotPassword = (email) =>
+  apiPost('/api/auth/admin/forgot-password', { email });
+
+export const adminVerifyResetOTP = (email, otp) =>
+  apiPost('/api/auth/admin/verify-reset-otp', { email, otp });
+
+export const adminResetPassword = (resetToken, newPassword) =>
+  apiPost('/api/auth/admin/reset-password', { resetToken, newPassword });
+
+export const changePasswordApi = (currentPassword, newPassword) =>
+  apiPost('/api/auth/change-password', { currentPassword, newPassword });
