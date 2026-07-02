@@ -39,7 +39,7 @@ export default function Layout() {
   const navigate  = useNavigate();
   const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, setGlobalLocationContext } = useSite();
 
-  const { user, logout } = useContext(AuthContext);
+  const { user, logout, refreshSession } = useContext(AuthContext);
   const { showToast } = useToast();
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false);
   const [backendStatus,    setBackendStatus]    = useState('checking'); // 'checking'|'connected'|'offline'
@@ -80,6 +80,13 @@ export default function Layout() {
 
   // Re-read pending count whenever location changes (Access page approvals update it)
   useEffect(() => { setPendingCount(getPendingCount()); }, [location.pathname]);
+
+  // Refresh user permissions/roles on every page navigation
+  useEffect(() => {
+    if (refreshSession) {
+      refreshSession();
+    }
+  }, [location.pathname]);
 
   // Backend health check on mount
   useEffect(() => {

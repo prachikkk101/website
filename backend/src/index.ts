@@ -44,6 +44,9 @@ app.use(express.urlencoded({ extended: true }));
 app.get('/health', (_req: import('express').Request, res: import('express').Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+app.get('/api/health', (_req: import('express').Request, res: import('express').Response) => {
+  res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
+});
 
 // ── Routes ────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);

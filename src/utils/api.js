@@ -11,7 +11,7 @@ const api = axios.create({
 // Request interceptor to attach JWT token
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('gppms_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -25,8 +25,9 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
+      localStorage.removeItem('gppms_token');
+      localStorage.removeItem('gppms_refresh');
+      localStorage.removeItem('gppms_session');
       window.location.href = '/login';
     }
     return Promise.reject(error);
@@ -41,11 +42,14 @@ const BACKEND_REQUIRED_MSG =
   'This feature requires a live backend connection. Please contact your administrator.';
 
 async function apiPost(path, body) {
+  const base = import.meta.env.VITE_API_URL;
+  if (!base) {
+    return { success: false, error: 'Configuration error: API URL not set. Contact developer.' };
+  }
   try {
-    const token = localStorage.getItem('gppms_token') || localStorage.getItem('token') || '';
+    const token = localStorage.getItem('gppms_token') || '';
     const headers = { 'Content-Type': 'application/json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
-    const base = import.meta.env.VITE_API_URL || 'http://localhost:5001';
     const res = await fetch(`${base}${path}`, {
       method: 'POST',
       headers,
@@ -54,7 +58,8 @@ async function apiPost(path, body) {
     const data = await res.json();
     if (!res.ok) return { success: false, error: data.error || 'Request failed' };
     return { success: true, ...data };
-  } catch {
+  } catch (err) {
+    console.error('API request failed:', err);
     return { success: false, error: BACKEND_REQUIRED_MSG };
   }
 }

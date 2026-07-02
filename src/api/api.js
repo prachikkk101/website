@@ -12,7 +12,7 @@ const api = axios.create({
 // ── Request interceptor: inject Bearer token ──
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('gp_access_token');
+    const token = localStorage.getItem('gppms_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -55,11 +55,11 @@ api.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('gp_refresh_token');
+      const refreshToken = localStorage.getItem('gppms_refresh');
       if (!refreshToken) {
-        localStorage.removeItem('gp_access_token');
-        localStorage.removeItem('gp_refresh_token');
-        localStorage.removeItem('gp_user');
+        localStorage.removeItem('gppms_token');
+        localStorage.removeItem('gppms_refresh');
+        localStorage.removeItem('gppms_session');
         window.location.href = '/login';
         return Promise.reject(error);
       }
@@ -67,16 +67,16 @@ api.interceptors.response.use(
       try {
         const { data } = await axios.post(`${BASE}/auth/refresh`, { refreshToken });
         const newToken = data.accessToken;
-        localStorage.setItem('gp_access_token', newToken);
+        localStorage.setItem('gppms_token', newToken);
         api.defaults.headers.Authorization = `Bearer ${newToken}`;
         processQueue(null, newToken);
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem('gp_access_token');
-        localStorage.removeItem('gp_refresh_token');
-        localStorage.removeItem('gp_user');
+        localStorage.removeItem('gppms_token');
+        localStorage.removeItem('gppms_refresh');
+        localStorage.removeItem('gppms_session');
         window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {

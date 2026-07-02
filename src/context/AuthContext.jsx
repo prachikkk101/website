@@ -42,12 +42,44 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const refreshSession = async (customToken) => {
+    const token = customToken || localStorage.getItem('gppms_token');
+    if (!token) return;
+    if (token.startsWith('local-')) return;
+
+    try {
+      const response = await api.get('/auth/me');
+      if (response.data?.success && response.data?.user) {
+        const u = response.data.user;
+        const role = u.role;
+        const siteAccess = role === 'ADMIN'
+          ? 'all'
+          : (u.assignedSites && u.assignedSites.length > 0 ? u.assignedSites[0].site.name : 'none');
+
+        const sessionObj = {
+          id: u.id,
+          email: u.email,
+          name: u.name,
+          role: role,
+          siteAccess,
+          token: token,
+        };
+
+        localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
+        setUser(sessionObj);
+      }
+    } catch (err) {
+      console.warn('Failed to refresh session from backend:', err);
+    }
+  };
+
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem('gppms_session');
       const token      = localStorage.getItem('gppms_token');
       if (storedUser && token) {
         setUser(JSON.parse(storedUser));
+        refreshSession(token);
       }
     } catch { /* ignore */ }
     setLoading(false);
@@ -160,7 +192,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, registerUser, verifyEmail }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, registerUser, verifyEmail, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );
