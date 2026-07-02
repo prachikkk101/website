@@ -24,16 +24,16 @@ const DEFAULT_COLS = [
   { key: 'layDate',    label: 'Laying Date' },
   { key: 'area',       label: 'Area' },
   { key: 'coil',       label: 'Coil/Batch No.' },
-  { key: 'd32oc',      label: 'Ø32 Laying' },
+  { key: 'd32oc',      label: 'Ø32 OC (Open Cut)' },
   { key: 'd32b',       label: 'Ø32 Boring' },
   { key: 'd32hdd',     label: 'Ø32 HDD' },
-  { key: 'd63oc',      label: 'Ø63 Laying' },
+  { key: 'd63oc',      label: 'Ø63 OC (Open Cut)' },
   { key: 'd63b',       label: 'Ø63 Boring' },
   { key: 'd63hdd',     label: 'Ø63 HDD' },
-  { key: 'd90oc',      label: 'Ø90 Laying' },
+  { key: 'd90oc',      label: 'Ø90 OC (Open Cut)' },
   { key: 'd90b',       label: 'Ø90 Boring' },
   { key: 'd90hdd',     label: 'Ø90 HDD' },
-  { key: 'd125oc',     label: 'Ø125 Laying' },
+  { key: 'd125oc',     label: 'Ø125 OC (Open Cut)' },
   { key: 'd125b',      label: 'Ø125 Boring' },
   { key: 'd125hdd',    label: 'Ø125 HDD' },
   { key: 'workStatus', label: 'Work Status' },
@@ -405,18 +405,18 @@ export default function PELaying() {
                 {!hiddenCols.includes('layDate') && <th>Laying Date</th>}
                 {!hiddenCols.includes('area') && <th>Area</th>}
                 {!hiddenCols.includes('coil') && <th>Coil/Batch No.</th>}
-                {!hiddenCols.includes('d32oc') && <th style={{ textAlign: 'right' }}>Ø32 Laying</th>}
-                {!hiddenCols.includes('d32b') && <th style={{ textAlign: 'right' }}>Ø32 Boring</th>}
-                {!hiddenCols.includes('d32hdd') && <th style={{ textAlign: 'right' }}>Ø32 HDD</th>}
-                {!hiddenCols.includes('d63oc') && <th style={{ textAlign: 'right' }}>Ø63 Laying</th>}
-                {!hiddenCols.includes('d63b') && <th style={{ textAlign: 'right' }}>Ø63 Boring</th>}
-                {!hiddenCols.includes('d63hdd') && <th style={{ textAlign: 'right' }}>Ø63 HDD</th>}
-                {!hiddenCols.includes('d90oc') && <th style={{ textAlign: 'right' }}>Ø90 Laying</th>}
-                {!hiddenCols.includes('d90b') && <th style={{ textAlign: 'right' }}>Ø90 Boring</th>}
-                {!hiddenCols.includes('d90hdd') && <th style={{ textAlign: 'right' }}>Ø90 HDD</th>}
-                {!hiddenCols.includes('d125oc') && <th style={{ textAlign: 'right' }}>Ø125 Laying</th>}
-                {!hiddenCols.includes('d125b') && <th style={{ textAlign: 'right' }}>Ø125 Boring</th>}
-                {!hiddenCols.includes('d125hdd') && <th style={{ textAlign: 'right' }}>Ø125 HDD</th>}
+                {!hiddenCols.includes('d32oc')   && <th style={{ textAlign: 'right' }}>Ø32 OC (Open Cut)</th>}
+                {!hiddenCols.includes('d32b')     && <th style={{ textAlign: 'right' }}>Ø32 Boring</th>}
+                {!hiddenCols.includes('d32hdd')   && <th style={{ textAlign: 'right' }}>Ø32 HDD</th>}
+                {!hiddenCols.includes('d63oc')    && <th style={{ textAlign: 'right' }}>Ø63 OC (Open Cut)</th>}
+                {!hiddenCols.includes('d63b')     && <th style={{ textAlign: 'right' }}>Ø63 Boring</th>}
+                {!hiddenCols.includes('d63hdd')   && <th style={{ textAlign: 'right' }}>Ø63 HDD</th>}
+                {!hiddenCols.includes('d90oc')   && <th style={{ textAlign: 'right' }}>Ø90 OC (Open Cut)</th>}
+                {!hiddenCols.includes('d90b')     && <th style={{ textAlign: 'right' }}>Ø90 Boring</th>}
+                {!hiddenCols.includes('d90hdd')   && <th style={{ textAlign: 'right' }}>Ø90 HDD</th>}
+                {!hiddenCols.includes('d125oc')   && <th style={{ textAlign: 'right' }}>Ø125 OC (Open Cut)</th>}
+                {!hiddenCols.includes('d125b')    && <th style={{ textAlign: 'right' }}>Ø125 Boring</th>}
+                {!hiddenCols.includes('d125hdd')  && <th style={{ textAlign: 'right' }}>Ø125 HDD</th>}
                 {!hiddenCols.includes('workStatus') && <th>Work Status</th>}
                 {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <th key={col.key}>{col.label}</th>)}
                 <th style={{ width: 40 }}>✏</th>
@@ -568,12 +568,12 @@ export default function PELaying() {
         </div>
 
         <div>
-          <SectionTitle>Pipe Quantities (metres)</SectionTitle>
+          <SectionTitle>PE Laying (metres)</SectionTitle>
           
           <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr 1fr', gap: '8px 10px', alignItems: 'center', marginTop: 10 }}>
             {/* Row 1: Headers */}
             <div />
-            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Laying</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>OC (Open Cut)</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Boring</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>HDD</div>
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Total</div>
