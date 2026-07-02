@@ -49,11 +49,8 @@ function StatusBadge({ val }) {
 const PAGE_SIZE = 8;
 const AREAS_LIST = [];
 const ACCT_TYPES    = ['Domestic','Commercial','Industrial'];
-const GC_STATUSES   = ['—','Done'];
-const GI_STATUSES   = ['—','Done','Pending'];
-const RFC_STATUSES  = ['—','Done','RFC','Pending'];
-const NG_STATUSES   = ['—','Done','NG Done','RFC','Pending'];
-const METER_MAKES   = ['Select','Itron','Elster','Honeywell','Landis+Gyr'];
+const STATUS_OPTIONS = ['—', 'Done', 'Pending'];
+const METER_MAKES   = [];  // replaced by free-text input
 
 // All default/built-in columns — user can hide any of these
 const DEFAULT_COLS = [
@@ -103,7 +100,7 @@ const EMPTY_FORM_BASE = {
   acctType:'Domestic', houseNo:'', floor:'GF', address1:'', area:'', city:'',
   gcStatus:'—', giStatus:'—', rfc:'—', ngStatus:'—', gcDate:'',
   plumbingDate:'', gcLen:'', giLen:'', tf:'', iv:'',
-  meterNo:'', meterDate:'', meterMake:'Select', meterReading:'', side:'LHS', meterPhotoFile:null,
+  meterNo:'', meterDate:'', meterMake:'', meterReading:'', side:'LHS', meterPhotoFile:null,
 };
 
 function makeEmptyForm(matList) {
@@ -423,9 +420,10 @@ export default function HouseTable() {
   /* ── Validate with auto-scroll to first error ── */
   function validateForm() {
     const e = {};
-    if (!form.name.trim())    e.name    = 'Required';
-    if (!form.mobile.trim())  e.mobile  = 'Required';
-    if (!form.houseNo.trim()) e.houseNo = 'Required';
+    if (!form.name.trim())     e.name     = 'Required';
+    if (!form.mobile.trim())   e.mobile   = 'Required';
+    if (!form.houseNo.trim())  e.houseNo  = 'Required';
+    if (!form.address1.trim()) e.address1 = 'Required';
     if (!formGA)   e.ga   = 'Required';
     if (!formCity) e.city = 'Required';
     if (!formArea) e.area = 'Required';
@@ -433,12 +431,13 @@ export default function HouseTable() {
 
     // Scroll & focus to the first invalid field
     const fieldOrder = [
-      { key: 'name',    id: 'ht-field-name'    },
-      { key: 'mobile',  id: 'ht-field-mobile'  },
-      { key: 'houseNo', id: 'ht-field-houseNo' },
-      { key: 'ga',      id: 'ht-field-ga'      },
-      { key: 'city',    id: 'ht-field-city'    },
-      { key: 'area',    id: 'ht-field-area'    },
+      { key: 'name',     id: 'ht-field-name'     },
+      { key: 'mobile',   id: 'ht-field-mobile'   },
+      { key: 'houseNo',  id: 'ht-field-houseNo'  },
+      { key: 'address1', id: 'ht-field-address1' },
+      { key: 'ga',       id: 'ht-field-ga'       },
+      { key: 'city',     id: 'ht-field-city'     },
+      { key: 'area',     id: 'ht-field-area'     },
     ];
     const first = fieldOrder.find(f => e[f.key]);
     if (first) {
@@ -488,7 +487,7 @@ export default function HouseTable() {
       plumbingDate: h.plumbingDate || '', gcLen: h.gcLen || '',
       giLen: h.giLen || '', tf: h.tf || '', iv: h.iv || '',
       meterNo: h.meterNo || '', meterDate: h.meterDate || '',
-      meterMake: h.meterMake || 'Select', meterReading: h.meterReading != null && h.meterReading !== 0 ? h.meterReading : '',
+      meterMake: h.meterMake && h.meterMake !== 'Select' ? h.meterMake : '', meterReading: h.meterReading != null && h.meterReading !== 0 ? h.meterReading : '',
       side: h.side || 'LHS',
     };
     // Restore material quantities from saved entry
@@ -703,7 +702,7 @@ export default function HouseTable() {
                 </Select>
               </Field>
             </div>
-             <Field label="Address Line 1"><Input value={form.address1} onChange={e => f('address1', e.target.value)} /></Field>
+             <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={e => f('address1', e.target.value)} error={errors.address1} /></Field>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
                  <Select
@@ -755,10 +754,10 @@ export default function HouseTable() {
         <div>
           <SectionTitle>3. Work Status</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="GC Status"><Select value={form.gcStatus} onChange={e => f('gcStatus', e.target.value)}>{GC_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="GI Status"><Select value={form.giStatus} onChange={e => f('giStatus', e.target.value)}>{GI_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="RFC Status"><Select value={form.rfc} onChange={e => f('rfc', e.target.value)}>{RFC_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="NG Status"><Select value={form.ngStatus} onChange={e => f('ngStatus', e.target.value)}>{NG_STATUSES.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GC Status"><Select value={form.gcStatus} onChange={e => f('gcStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GI Status"><Select value={form.giStatus} onChange={e => f('giStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="RFC Status"><Select value={form.rfc} onChange={e => f('rfc', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="NG Status"><Select value={form.ngStatus} onChange={e => f('ngStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
             <Field label="GC Date"><Input id="ht-field-gcDate" type="date" value={form.gcDate} onChange={e => f('gcDate', e.target.value)} /></Field>
             <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={e => f('plumbingDate', e.target.value)} /></Field>
           </div>
@@ -768,7 +767,7 @@ export default function HouseTable() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="Meter No."><Input value={form.meterNo} onChange={e => f('meterNo', e.target.value)} /></Field>
             <Field label="Meter Date"><Input type="date" value={form.meterDate} onChange={e => f('meterDate', e.target.value)} /></Field>
-            <Field label="Meter Make"><Select value={form.meterMake} onChange={e => f('meterMake', e.target.value)}>{METER_MAKES.map(m => <option key={m}>{m}</option>)}</Select></Field>
+            <Field label="Meter Make"><Input value={form.meterMake} placeholder="e.g. Itron, Elster, etc." onChange={e => f('meterMake', e.target.value)} /></Field>
             <Field label="Meter Reading"><Input type="number" min={0} value={form.meterReading} onChange={e => f('meterReading', e.target.value)} /></Field>
           </div>
           <Field label="Side" style={{ marginTop: 10 }}>
@@ -1044,12 +1043,17 @@ export default function HouseTable() {
         Showing page {page} of {totalPages} — {filtered.length} entries
       </p>
 
-      {/* Site data label — only when a specific site is selected, NOT GA Dashboard */}
-      {selectedSite && selectedSite !== 'all' && selectedSite !== 'ga_dashboard' && (
-        <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#fff0f3', border:'1px solid #f9a8d4', borderRadius:6, padding:'4px 10px', fontSize:11, color:'#be185d', fontWeight:600, marginBottom:8 }}>
-          📍 Site data — {SITE_OPTIONS_LABELS[selectedSite] || selectedSite}
-        </div>
-      )}
+      {/* Site data label — only when real GA+City+Area has been selected */}
+      {selGA && selGA !== 'all' && selCity && selCity !== 'all' && selArea && selArea !== 'all' && (() => {
+        const gaObj   = mergedGAs.find(g => g.id === selGA);
+        const cityObj = gaObj?.cities?.find(c => c.id === selCity);
+        const label   = [gaObj?.name, cityObj?.name, selArea].filter(Boolean).join(' — ');
+        return label ? (
+          <div style={{ display:'inline-flex', alignItems:'center', gap:6, background:'#fff0f3', border:'1px solid #f9a8d4', borderRadius:6, padding:'4px 10px', fontSize:11, color:'#be185d', fontWeight:600, marginBottom:8 }}>
+            📍 {label}
+          </div>
+        ) : null;
+      })()}
 
       <div className="card section-block" style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
@@ -1281,10 +1285,7 @@ export default function HouseTable() {
   );
 }
 
-// Map site values to labels for display
-const SITE_OPTIONS_LABELS = {
-  khanna: 'Khanna (CA-09)',
-  uenii:  'UE-II — Hisar',
-  pla:    'PLA — Hisar',
-  kohara: 'Kohara — CA-07',
-};
+// Legacy label map — kept for backward compat but no longer used for the site pill
+const SITE_OPTIONS_LABELS = {};
+// eslint-disable-next-line no-unused-vars
+void SITE_OPTIONS_LABELS;
