@@ -1,8 +1,10 @@
 // src/context/SiteContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { gaLocations } from '../data/gaLocations';
+import { AuthContext } from './AuthContext';
+import api from '../utils/api';
 
-/* ── Read custom sites from localStorage ── */
+/* ── Read custom sites from localStorage (kept as fallback for offline) ── */
 function loadSites() {
   try {
     const raw = localStorage.getItem('gppms_sites');
@@ -33,9 +35,15 @@ const SiteContext = createContext({
   mergedGAs:       [],
   getCitiesForGA:  () => [],
   getAreasForCity: () => [],
+
+  // Backend site selections
+  selectedSiteId:   null,
+  setSelectedSiteId: () => {},
 });
 
 export function SiteProvider({ children }) {
+  const { user } = useContext(AuthContext);
+
   // 3-level cascading state
   const [selGA,   setSelGARaw]   = useState('all');
   const [selCity, setSelCityRaw] = useState('all');
@@ -47,10 +55,59 @@ export function SiteProvider({ children }) {
   // Legacy single-dropdown (still used by older components)
   const [selectedSite, setSelectedSite] = useState('all');
 
-  // Custom sites from localStorage (Access page)
+  // Load backend sites into siteList. Fallback to localStorage.
   const [siteList, setSiteList] = useState(() => loadSites());
 
-  const syncSites = useCallback(() => setSiteList(loadSites()), []);
+  // Store the active selected site ID (UUID)
+  const [selectedSiteId, setSelectedSiteId] = useState(() => {
+    try {
+      const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+      return sess.siteId || null;
+    } catch { return null; }
+  });
+
+  // Sync selectedSiteId immediately if user session changes
+  useEffect(() => {
+    if (user?.siteId) {
+      setSelectedSiteId(user.siteId);
+    }
+  }, [user]);
+
+  // Fetch sites from backend and populate siteList
+  useEffect(() => {
+    const token = localStorage.getItem('gppms_token');
+    if (!token) return;
+
+    api.get('/sites')
+      .then(res => {
+        if (res.data?.success && res.data?.sites) {
+          const backendSites = res.data.sites;
+          setSiteList(backendSites);
+
+          // If selectedSiteId is not set, or is not in the list of fetched sites, set to first site
+          if (backendSites.length > 0) {
+            setSelectedSiteId(currentId => {
+              if (currentId && backendSites.some(s => s.id === currentId)) {
+                return currentId;
+              }
+              return backendSites[0].id;
+            });
+          }
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch sites from backend in SiteContext:', err);
+      });
+  }, [user]);
+
+  const syncSites = useCallback(() => {
+    // Keep local sync as a fallback or for local changes
+    const local = loadSites();
+    if (local.length > 0 && siteList.length === 0) {
+      setSiteList(local);
+    }
+  }, [siteList]);
+
   useEffect(() => {
     window.addEventListener('storage', syncSites);
     syncSites();
@@ -90,6 +147,9 @@ export function SiteProvider({ children }) {
     setSelCityRaw('all');
     setSelAreaRaw('all');
     setSelectedSite(val); // keep legacy in sync
+    if (val && val !== 'all') {
+      setSelectedSiteId(val);
+    }
   }
 
   function setSelCity(val) {
@@ -114,7 +174,8 @@ export function SiteProvider({ children }) {
       globalLocationContext, setGlobalLocationContext,
       selectedSite, setSelectedSite,
       siteOptions, siteList, mergedGAs,
-      getCitiesForGA, getAreasForCity
+      getCitiesForGA, getAreasForCity,
+      selectedSiteId, setSelectedSiteId
     }}>
       {children}
     </SiteContext.Provider>

@@ -197,16 +197,12 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
 export default function Inventory() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
+  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, selectedSiteId } = useSite();
 
   const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
 
-  // Derive the active site UUID from SiteContext — always use the first available site
-  // so the page is never stuck in localStorage-only mode.
-  const currentSiteId = useMemo(() => {
-    if (!siteList || siteList.length === 0) return null;
-    return siteList[0]?.id ?? null;
-  }, [siteList]);
+  // Use the active selected site ID from context, which is populated from backend sites or session
+  const currentSiteId = selectedSiteId;
 
   const [stockData, setStockData] = useState([]);
   const [loading, setLoading]     = useState(true);
