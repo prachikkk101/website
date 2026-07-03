@@ -129,10 +129,10 @@ export default function Layout() {
   // Build nested GA → Cities → Areas structure for the 3-column flyout
   const getGALocations = () => (mergedGAs || []).map(ga => ({
     id:     ga.id,
-    name:   ga.label,
+    name:   ga.label || ga.name || '',
     cities: (ga.cities || []).map(city => ({
       id:    city.id,
-      name:  city.label,
+      name:  city.label || city.name || '',
       areas: city.areas || []
     }))
   }));
@@ -145,9 +145,9 @@ export default function Layout() {
       setSelGA('all'); setSelCity('all'); setSelArea('all');
       return;
     }
-    const gaObj    = mergedGAs.find(g => g.label === gaName);
+    const gaObj    = mergedGAs.find(g => g.label === gaName || g.name === gaName);
     const gaId     = gaObj?.id || 'all';
-    const cityObj  = (gaObj?.cities || []).find(c => c.label === cityName);
+    const cityObj  = (gaObj?.cities || []).find(c => c.label === cityName || c.name === cityName);
     const cityId   = cityObj?.id || 'all';
     const areaVal  = area || 'all';
     setGlobalLocationContext({ gaId, cityId, area: areaVal });
@@ -158,8 +158,8 @@ export default function Layout() {
 
   // Build label for the trigger button
   const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-  const gaLabel   = (ctx.gaId && ctx.gaId !== 'all') ? ((mergedGAs || []).find(g => g.id === ctx.gaId)?.label || ctx.gaId) : null;
-  const cityLabel = (ctx.cityId && ctx.cityId !== 'all' && getCitiesForGA) ? ((getCitiesForGA(ctx.gaId) || []).find(c => c.id === ctx.cityId)?.label || ctx.cityId) : null;
+  const gaLabel   = (ctx.gaId && ctx.gaId !== 'all') ? ((mergedGAs || []).find(g => g.id === ctx.gaId)?.label || (mergedGAs || []).find(g => g.id === ctx.gaId)?.name || ctx.gaId) : null;
+  const cityLabel = (ctx.cityId && ctx.cityId !== 'all' && getCitiesForGA) ? ((getCitiesForGA(ctx.gaId) || []).find(c => c.id === ctx.cityId)?.label || (getCitiesForGA(ctx.gaId) || []).find(c => c.id === ctx.cityId)?.name || ctx.cityId) : null;
   const areaLabel = (ctx.area && ctx.area !== 'all') ? ctx.area : null;
   const flyoutLabel = gaLabel
     ? [gaLabel, cityLabel, areaLabel].filter(Boolean).join(' → ')

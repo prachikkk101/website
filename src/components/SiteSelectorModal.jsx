@@ -34,18 +34,18 @@ function SiteSelectorModal({ isOpen, onClose, gaLocations, onSelect, selectedLab
   let title = 'Select GA Location';
   if (step === 'ga') {
     listItems = (gaLocations || []).filter(g =>
-      g.name.toLowerCase().includes(search.toLowerCase())
+      (g?.name || '').toLowerCase().includes((search || '').toLowerCase())
     );
     title = 'Select GA Location';
   } else if (step === 'city') {
-    title = `${selectedGA?.name} — Select City`;
+    title = `${selectedGA?.name || ''} — Select City`;
     listItems = (selectedGA?.cities || []).filter(c =>
-      c.name.toLowerCase().includes(search.toLowerCase())
+      (c?.name || '').toLowerCase().includes((search || '').toLowerCase())
     );
   } else if (step === 'area') {
-    title = `${selectedCity?.name} — Select Area`;
+    title = `${selectedCity?.name || ''} — Select Area`;
     listItems = (selectedCity?.areas || []).filter(a =>
-      a.toLowerCase().includes(search.toLowerCase())
+      (a || '').toLowerCase().includes((search || '').toLowerCase())
     );
   }
 
