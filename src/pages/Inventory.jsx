@@ -7,7 +7,8 @@ import { AuthContext } from '../context/AuthContext';
 import { stockCategories } from '../data/stockCategories';
 import { useSite } from '../context/SiteContext';
 import { stockAPI } from '../utils/api';
-
+import { useContext } from 'react';
+import { SiteContext } from '../context/SiteContext';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const DEFAULT_COLS = [
@@ -194,28 +195,37 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
   );
 }
 
-const session = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-const siteId = session?.siteId;
+const { selectedSiteId } = useContext(SiteContext);
+const [stock, setStock] = useState([]);
+const [loading, setLoading] = useState(true);
 
 useEffect(() => {
-  if (!siteId) return; // Don't load if no siteId
+  if (!selectedSiteId) return;
   loadStock();
-}, [siteId]);
+}, [selectedSiteId]);
 
 const loadStock = async () => {
   try {
     setLoading(true);
-    const response = await fetch(
-      `${API_URL}/api/sites/${siteId}/inventory`
-    );
+    const API_URL = import.meta.env.VITE_API_URL;
+    const response = await fetch(`${API_URL}/api/sites/${selectedSiteId}/inventory`);
     const data = await response.json();
     setStock(Array.isArray(data) ? data : []);
   } catch (err) {
-    console.error('Stock API error:', err);
+    console.error('Stock error:', err);
     setStock([]);
   } finally {
     setLoading(false);
   }
+};
+const data = await response.json();
+setStock(Array.isArray(data) ? data : []);
+  } catch (err) {
+  console.error('Stock API error:', err);
+  setStock([]);
+} finally {
+  setLoading(false);
+}
 };
 
 export default function Inventory() {

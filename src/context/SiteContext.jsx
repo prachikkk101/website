@@ -3,6 +3,34 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { gaLocations } from '../data/gaLocations';
 import { AuthContext } from './AuthContext';
 import api from '../utils/api';
+import { createContext, useState, useEffect } from 'react';
+
+export const SiteContext = createContext();
+
+export function SiteProvider({ children }) {
+  const [mergedGAs, setMergedGAs] = useState([]);
+  const [selectedSiteId, setSelectedSiteId] = useState(null);
+
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const session = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+        if (session?.siteId) {
+          setSelectedSiteId(session.siteId);
+        }
+      } catch (err) {
+        console.error('Failed to load site:', err);
+      }
+    };
+    fetchSites();
+  }, []);
+
+  return (
+    <SiteContext.Provider value={{ mergedGAs, selectedSiteId }}>
+      {children}
+    </SiteContext.Provider>
+  );
+}
 
 /* ── Read custom sites from localStorage (kept as fallback for offline) ── */
 function loadSites() {
