@@ -12,12 +12,20 @@ export const checkSiteAccess = async (
     return res.status(401).json({ success: false, error: 'Unauthorized' });
   }
 
-  // Admins bypass site checks
+  // Admins bypass all site checks
   if (req.user.role === Role.ADMIN) {
     return next();
   }
 
-  // Extract siteId from params, body or query
+  // ── READ-ONLY requests: any authenticated user can read shared site data ──
+  // Data is already scoped to the siteId in the URL; no membership check needed.
+  // This allows supervisors/workers who haven't been explicitly added to SiteUser
+  // to still view the shared project data.
+  if (req.method === 'GET') {
+    return next();
+  }
+
+  // ── MUTATION requests (POST, PUT, PATCH, DELETE): require site membership ──
   const siteId = req.params.siteId || req.params.id || req.body.siteId || req.query.siteId;
 
   if (!siteId || typeof siteId !== 'string') {
@@ -37,7 +45,7 @@ export const checkSiteAccess = async (
     if (!siteAssignment) {
       return res.status(403).json({
         success: false,
-        error: 'Forbidden: You do not have permission to access records for this site',
+        error: 'Forbidden: You do not have permission to modify records for this site',
       });
     }
 
