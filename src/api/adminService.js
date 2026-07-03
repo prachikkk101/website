@@ -16,6 +16,9 @@ export const adminService = {
   updateUser: (userId, data) =>
     api.patch(`/admin/users/${userId}`, data).then((r) => r.data),
 
+  deleteUser: (userId) =>
+    api.delete(`/admin/users/${userId}`).then((r) => r.data),
+
   // Site access control
   restrictUser: (userId) =>
     api.patch(`/users/${userId}/restrict`).then((r) => r.data),

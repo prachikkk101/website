@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   getAdminDashboard,
-  getUsers, createUser, updateUser,
+  getUsers, createUser, updateUser, deleteUser,
   getWhitelist, addToWhitelist, removeFromWhitelist,
 } from '../controllers/adminController';
 import { authenticate, requireRole } from '../middlewares/auth';
@@ -12,12 +12,13 @@ const router = Router();
 const adminOnly = [authenticate, requireRole([Role.ADMIN])];
 
 // Dashboard
-router.get('/dashboard', ...adminOnly, getAdminDashboard);
+router.get('/dashboard', authenticate, getAdminDashboard);
 
 // User management
 router.get('/users', ...adminOnly, getUsers);
 router.post('/users', ...adminOnly, createUser);
 router.patch('/users/:userId', ...adminOnly, updateUser);
+router.delete('/users/:userId', ...adminOnly, deleteUser);
 
 // Admin whitelist
 router.get('/whitelist', ...adminOnly, getWhitelist);

@@ -1,6 +1,5 @@
 // src/pages/PELaying.jsx
 import { useState, useMemo, useEffect, useContext } from 'react';
-import defaultPeLaying from '../data/peLaying';
 import { exportPELaying } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/SlidePanel';
 import { useToast } from '../components/Toast';
@@ -53,8 +52,8 @@ const EMPTY_ENTRY = {
 export default function PELaying() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const siteId        = user?.siteId || null;
-  const { siteList, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext }  = useSite();
+  const { selectedSiteId, siteList, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
+  const siteId        = selectedSiteId || null;
   const [allData,  setAllData]  = useState([]);
   const [loading,  setLoading]  = useState(false);
 
@@ -131,12 +130,12 @@ export default function PELaying() {
           setAllData(mapped);
         })
         .catch(err => {
-          console.warn('PE API fetch failed, using localStorage fallback:', err);
-          setAllData(initStore('pelaying', defaultPeLaying));
+          console.error('PE API fetch failed:', err);
+          setAllData([]);
         })
         .finally(() => setLoading(false));
     } else {
-      setAllData(initStore('pelaying', defaultPeLaying));
+      setAllData([]);
     }
   }, [siteId]);
 
@@ -285,50 +284,38 @@ export default function PELaying() {
       ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
     };
 
-    if (siteId) {
-      // Backend-mode: POST / PATCH
-      try {
-        const payload = {
-          area:       entryBase.area,
-          coilNo:     entryBase.coil,
-          layingDate: entryBase.layDate,
-          status:     entryBase.workStatus?.toUpperCase() || 'LAYING',
-          d32oc: entryBase.d32oc, d32b: entryBase.d32b,
-          d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
-          d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
-          d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
-        };
-        if (editingId) {
-          const updated = await peLayingAPI.update(siteId, editingId, payload);
-          setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
-            ? { ...r, ...entryBase, id: updated?.id || r.id } : r));
-          showToast('✓ PE Laying entry updated');
-        } else {
-          const created = await peLayingAPI.create(siteId, payload);
-          const newEntry = { ...entryBase, id: created?.id || Date.now(), sr: allData.length + 1 };
-          setAllData(prev => [newEntry, ...prev]);
-          showToast('✓ PE Laying entry added');
-        }
-      } catch (err) {
-        console.error('PE API save error:', err);
-        showToast('❌ Save failed. Please try again.');
-        return;
-      }
-    } else {
-      // Local-mode fallback
-      let updated;
-      if (editingId !== null) {
-        updated = allData.map(r =>
-          (r.id === editingId || r.sr === editingId) ? { ...r, ...entryBase } : r
-        );
+    if (!siteId) {
+      showToast('❌ No site selected. Cannot save.', 'error');
+      return;
+    }
+
+    // Backend-mode: POST / PATCH
+    try {
+      const payload = {
+        area:       entryBase.area,
+        coilNo:     entryBase.coil,
+        layingDate: entryBase.layDate,
+        status:     entryBase.workStatus?.toUpperCase() || 'LAYING',
+        d32oc: entryBase.d32oc, d32b: entryBase.d32b,
+        d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
+        d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
+        d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
+      };
+      if (editingId) {
+        const updated = await peLayingAPI.update(siteId, editingId, payload);
+        setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
+          ? { ...r, ...entryBase, id: updated?.id || r.id } : r));
         showToast('✓ PE Laying entry updated');
       } else {
-        const newEntry = { ...entryBase, id: Date.now(), sr: (allData.length + 1) };
-        updated = [newEntry, ...allData];
+        const created = await peLayingAPI.create(siteId, payload);
+        const newEntry = { ...entryBase, id: created?.id || Date.now(), sr: allData.length + 1 };
+        setAllData(prev => [newEntry, ...prev]);
         showToast('✓ PE Laying entry added');
       }
-      setAllData(updated);
-      localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
+    } catch (err) {
+      console.error('PE API save error:', err);
+      showToast('❌ Save failed. Please try again.');
+      return;
     }
 
     setPanelOpen(false);
@@ -340,7 +327,6 @@ export default function PELaying() {
   function handleDelete() {
     const updated = allData.filter(r => (r.id !== editingId && r.sr !== editingId));
     setAllData(updated);
-    if (!siteId) localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
     setPanelOpen(false);
     setShowDelete(false);
     setEditingId(null);

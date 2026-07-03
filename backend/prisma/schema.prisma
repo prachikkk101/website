@@ -382,3 +382,14 @@ model InventoryItem {
 
   @@unique([siteId, material])
 }
+
+model DailyReport {
+  id        String   @id @default(uuid())
+  siteName  String
+  date      String
+  workDone  String
+  issues    String?
+  postedBy  String
+  postedAt  DateTime @default(now())
+}
+

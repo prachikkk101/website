@@ -2,16 +2,8 @@
 import { useState, useMemo, useEffect } from 'react';
 import * as XLSX from 'xlsx';
 import { useToast } from '../components/Toast';
-
 import { useSite } from '../context/SiteContext';
-
-function initStore(key, defaults) {
-  try {
-    const raw = localStorage.getItem('gppms_' + key);
-    if (!raw) { localStorage.setItem('gppms_' + key, JSON.stringify(defaults)); return defaults; }
-    return JSON.parse(raw);
-  } catch { return defaults; }
-}
+import api from '../utils/api';
 
 function fmtDateTime(iso) {
   try {
@@ -31,7 +23,7 @@ export default function Reports() {
   const { siteList }  = useSite();
 
   const sites = useMemo(() => {
-    return ['All Sites', ...siteList.map(s => s.name)];
+    return ['All Sites', ...siteList.map(s => s.name || s.label)];
   }, [siteList]);
 
   const [reports,    setReports]    = useState([]);
@@ -50,7 +42,25 @@ export default function Reports() {
 
   useEffect(() => {
     document.title = 'GP-PMS — Reports';
-    setReports(initStore('reports', []));
+    api.get('/daily-reports')
+      .then(res => {
+        if (res.data?.success && res.data?.reports) {
+          const mapped = res.data.reports.map(r => ({
+            id: r.id,
+            site: r.siteName,
+            date: r.date,
+            workDone: r.workDone,
+            issues: r.issues || '',
+            postedBy: r.postedBy,
+            postedAt: r.postedAt
+          }));
+          setReports(mapped);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load reports from backend:', err);
+        setReports([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -72,30 +82,52 @@ export default function Reports() {
     return true;
   }), [reports, filterSite, filterDate, filterQ]);
 
-  function handlePost() {
+  async function handlePost() {
     if (!pWork.trim()) { setPErr('Work done description is required.'); return; }
     setPErr('');
     setPPosting(true);
-    const newReport = {
-      id: Date.now(),
-      site: pSite, date: pDate,
-      workDone: pWork.trim(),
-      issues: pIssues.trim(),
-      postedBy: postedByName.toUpperCase(),
-      postedAt: new Date().toISOString(),
-    };
-    const updated = [newReport, ...(reports || [])];
-    setReports(updated);
-    localStorage.setItem('gppms_reports', JSON.stringify(updated));
-    setPWork(''); setPIssues(''); setPPosting(false);
-    showToast('✓ Report posted successfully');
+    try {
+      const response = await api.post('/daily-reports', {
+        siteName: pSite,
+        date: pDate,
+        workDone: pWork.trim(),
+        issues: pIssues.trim() || null,
+      });
+
+      if (response.data?.success && response.data?.report) {
+        const r = response.data.report;
+        const newReport = {
+          id: r.id,
+          site: r.siteName,
+          date: r.date,
+          workDone: r.workDone,
+          issues: r.issues || '',
+          postedBy: r.postedBy,
+          postedAt: r.postedAt
+        };
+        setReports(prev => [newReport, ...prev]);
+        setPWork(''); setPIssues('');
+        showToast('✓ Report posted successfully');
+      }
+    } catch (err) {
+      console.error('Failed to post report:', err);
+      showToast('❌ Failed to post report. Please try again.');
+    } finally {
+      setPPosting(false);
+    }
   }
 
-  function handleDelete(id) {
-    const updated = (reports || []).filter(r => r.id !== id);
-    setReports(updated);
-    localStorage.setItem('gppms_reports', JSON.stringify(updated));
-    setShowDeleteId(null);
+  async function handleDelete(id) {
+    try {
+      await api.delete(`/daily-reports/${id}`);
+      setReports(prev => prev.filter(r => r.id !== id));
+      showToast('✓ Report deleted successfully');
+    } catch (err) {
+      console.error('Failed to delete report:', err);
+      showToast('❌ Failed to delete report.');
+    } finally {
+      setShowDeleteId(null);
+    }
   }
 
   function handleExport() {

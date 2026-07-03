@@ -1,6 +1,5 @@
 // src/components/StockTable.jsx
 import { useState, useMemo } from 'react';
-import { stockData } from '../data/stock';
 import { exportStockData } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
@@ -28,7 +27,7 @@ function MiniProgress({ pct, status }) {
 
 const SITES = ['Khanna','UE-II','PLA','Kohara'];
 
-export default function StockTable() {
+export default function StockTable({ data = [], readOnly = false }) {
   const { showToast } = useToast();
   const [extraReceived, setExtraReceived] = useState({});
   const [panelOpen,     setPanelOpen]     = useState(false);
@@ -45,15 +44,27 @@ export default function StockTable() {
   const [formErr,  setFormErr]  = useState({});
 
   const rows = useMemo(() => {
-    return stockData.map(s => {
-      const totalReceived = s.received + (extraReceived[s.id] || 0);
-      const netUsed  = s.issued - s.returned;
-      const totalAvail = s.opening + totalReceived;
-      const pct    = totalAvail > 0 ? Math.round(((s.physical_site + s.physical_store) / totalAvail) * 100) : 0;
+    return data.map(s => {
+      const sId = s.id || s.material;
+      const totalReceived = (s.received || 0) + (extraReceived[sId] || 0);
+      const netUsed  = (s.issued || 0) - (s.returned || 0);
+      const totalAvail = (s.opening || 0) + totalReceived;
+      const physical_site = s.physicalSite ?? s.physical_site ?? 0;
+      const physical_store = s.physicalStore ?? s.physical_store ?? 0;
+      const pct    = totalAvail > 0 ? Math.round(((physical_site + physical_store) / totalAvail) * 100) : 0;
       const status = getStatus(pct);
-      return { ...s, received: totalReceived, netUsed, pct, status };
+      return { 
+        ...s, 
+        id: sId,
+        received: totalReceived, 
+        netUsed, 
+        physical_site, 
+        physical_store, 
+        pct, 
+        status 
+      };
     });
-  }, [extraReceived]);
+  }, [data, extraReceived]);
 
   function handleExport() {
     exportStockData(rows, exportDate);
@@ -61,7 +72,10 @@ export default function StockTable() {
 
   function openPanel() {
     const init = {};
-    stockData.forEach(s => { init[s.id] = 0; });
+    data.forEach(s => { 
+      const sId = s.id || s.material;
+      init[sId] = 0; 
+    });
     setQtyMap(init);
     setChallan(''); setDateRcv(todayStr()); setSite(SITES[0]); setNotes(''); setFormErr({});
     setPanelOpen(true);
@@ -76,9 +90,10 @@ export default function StockTable() {
 
     // Apply received quantities
     const updates = {};
-    stockData.forEach(s => {
-      const q = Number(qtyMap[s.id] || 0);
-      if (q > 0) updates[s.id] = (extraReceived[s.id] || 0) + q;
+    data.forEach(s => {
+      const sId = s.id || s.material;
+      const q = Number(qtyMap[sId] || 0);
+      if (q > 0) updates[sId] = (extraReceived[sId] || 0) + q;
     });
     if (Object.keys(updates).length > 0) {
       setExtraReceived(prev => ({ ...prev, ...updates }));
@@ -113,19 +128,21 @@ export default function StockTable() {
           >
             ↓ Export Excel
           </button>
-          <button
-            onClick={openPanel}
-            style={{
-              height: 32, background: '#1f4e1a', color: '#fff', border: 'none',
-              borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600,
-              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-            Receive Stock
-          </button>
+          {!readOnly && (
+            <button
+              onClick={openPanel}
+              style={{
+                height: 32, background: '#1f4e1a', color: '#fff', border: 'none',
+                borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600,
+                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+              }}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Receive Stock
+            </button>
+          )}
         </div>
       </div>
 
@@ -146,19 +163,26 @@ export default function StockTable() {
                   <td style={{ padding: '9px 12px', color: '#94a3b8', fontWeight: 500 }}>{i+1}</td>
                   <td style={{ padding: '9px 12px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>{s.material}</td>
                   <td style={{ padding: '9px 12px', color: '#64748b' }}>{s.unit}</td>
-                  <td style={{ padding: '9px 12px' }}>{s.opening}</td>
-                  <td style={{ padding: '9px 12px', color: '#2563eb', fontWeight: 500 }}>{s.received}</td>
-                  <td style={{ padding: '9px 12px' }}>{s.issued}</td>
-                  <td style={{ padding: '9px 12px', color: '#16a34a' }}>{s.returned}</td>
-                  <td style={{ padding: '9px 12px', fontWeight: 700 }}>{s.netUsed}</td>
-                  <td style={{ padding: '9px 12px' }}>{s.physical_site}</td>
-                  <td style={{ padding: '9px 12px' }}>{s.physical_store}</td>
-                  <td style={{ padding: '9px 12px' }}>{s.required}</td>
+                  <td style={{ padding: '9px 12px' }}>{s.opening || 0}</td>
+                  <td style={{ padding: '9px 12px', color: '#2563eb', fontWeight: 500 }}>{s.received || 0}</td>
+                  <td style={{ padding: '9px 12px' }}>{s.issued || 0}</td>
+                  <td style={{ padding: '9px 12px', color: '#16a34a' }}>{s.returned || 0}</td>
+                  <td style={{ padding: '9px 12px', fontWeight: 700 }}>{s.netUsed || 0}</td>
+                  <td style={{ padding: '9px 12px' }}>{s.physical_site || 0}</td>
+                  <td style={{ padding: '9px 12px' }}>{s.physical_store || 0}</td>
+                  <td style={{ padding: '9px 12px' }}>{s.required || 0}</td>
                   <td style={{ padding: '9px 12px', minWidth: 140 }}>
                     <MiniProgress pct={s.pct} status={s.status} />
                   </td>
                 </tr>
               ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={12} style={{ textAlign: 'center', padding: '32px', color: '#94a3b8' }}>
+                    No stock tracked yet for this site.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -200,18 +224,21 @@ export default function StockTable() {
             Enter received quantities (leave 0 to skip that material).
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {stockData.map(s => (
-              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{s.material}</label>
-                <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{s.unit}</span>
-                <input
-                  type="number" min={0}
-                  value={qtyMap[s.id] ?? 0}
-                  onChange={e => setQtyMap(prev => ({ ...prev, [s.id]: Number(e.target.value) }))}
-                  style={{ width: 80, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }}
-                />
-              </div>
-            ))}
+            {data.map(s => {
+              const sId = s.id || s.material;
+              return (
+                <div key={sId} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{s.material}</label>
+                  <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{s.unit}</span>
+                  <input
+                    type="number" min={0}
+                    value={qtyMap[sId] ?? 0}
+                    onChange={e => setQtyMap(prev => ({ ...prev, [sId]: Number(e.target.value) }))}
+                    style={{ width: 80, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }}
+                  />
+                </div>
+              );
+            })}
           </div>
         </div>
 

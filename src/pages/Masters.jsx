@@ -4,7 +4,6 @@ import { authService } from '../api/authService';
 import { adminService } from '../api/adminService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
-import { resetAllLocalData } from '../utils/dataService';
 
 const LOCAL_SITES_FALLBACK = [
   { id: 'local-site-1', name: 'Khanna — CA-09',  users: [] },
@@ -491,7 +490,7 @@ export default function Masters({ defaultTab }) {
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setResetConfirm(false)} style={{ height: 30, padding: '0 14px', border: '1px solid #d1d5db', background: '#fff', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', color: '#64748b' }}>Cancel</button>
               <button
-                onClick={() => { resetAllLocalData(); window.location.reload(); }}
+                onClick={() => { localStorage.clear(); window.location.reload(); }}
                 style={{ height: 30, padding: '0 14px', background: '#b91c1c', color: '#fff', border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer' }}
               >Yes, Reset Everything</button>
             </div>

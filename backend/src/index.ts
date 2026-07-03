@@ -51,11 +51,23 @@ app.get('/api/health', (_req: import('express').Request, res: import('express').
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+import { authenticate } from './middlewares/auth';
+import { getGALocations, getCities, getAreas } from './controllers/siteController';
+import { getDailyReports, createDailyReport, deleteDailyReport } from './controllers/reportDiaryController';
+
 // ── Routes ────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/admin/reports', reportRoutes);
 app.use('/api/sites', siteRoutes);
+
+app.get('/api/ga-locations', authenticate, getGALocations);
+app.get('/api/cities', authenticate, getCities);
+app.get('/api/areas', authenticate, getAreas);
+
+app.get('/api/daily-reports', authenticate, getDailyReports);
+app.post('/api/daily-reports', authenticate, createDailyReport);
+app.delete('/api/daily-reports/:id', authenticate, deleteDailyReport);
 
 // Site-scoped sub-routes (use :siteId as param prefix)
 app.use('/api/sites/:siteId/png-connections', pngRoutes);

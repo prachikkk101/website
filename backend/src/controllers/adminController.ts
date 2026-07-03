@@ -220,3 +220,18 @@ export const removeFromWhitelist = async (req: AuthenticatedRequest, res: Respon
     next(error);
   }
 };
+
+export const deleteUser = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.userId as string;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    await prisma.user.delete({ where: { id: userId } });
+    res.status(200).json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+

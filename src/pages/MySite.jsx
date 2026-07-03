@@ -10,11 +10,6 @@ import { siteService } from '../api/siteService';
 import HouseTable from '../components/HouseTable';
 import StockTable from '../components/StockTable';
 
-// Static fallbacks
-import { houses as staticHouses } from '../data/houses';
-import staticStock from '../data/stockData';
-import staticPE from '../data/peLaying';
-
 /* ── Small stat card ── */
 function StatCard({ label, value, icon, color = '#2d6a27' }) {
   return (
@@ -69,10 +64,10 @@ export default function MySite() {
         : null;
       const list = data
         ? (Array.isArray(data) ? data : (data.connections || data.houses || []))
-        : staticHouses;
+        : [];
       setHouses(list);
     } catch {
-      setHouses(staticHouses);
+      setHouses([]);
     } finally {
       setLoadingHouses(false);
     }
@@ -88,10 +83,10 @@ export default function MySite() {
         : null;
       const list = data
         ? (Array.isArray(data) ? data : (data.stock || data.items || []))
-        : staticStock;
+        : [];
       setStock(list);
     } catch {
-      setStock(staticStock);
+      setStock([]);
     } finally {
       setLoadingStock(false);
     }
@@ -107,10 +102,10 @@ export default function MySite() {
         : null;
       const list = data
         ? (Array.isArray(data) ? data : (data.entries || data.peLaying || []))
-        : staticPE;
+        : [];
       setPeLaying(list);
     } catch {
-      setPeLaying(staticPE);
+      setPeLaying([]);
     } finally {
       setLoadingPE(false);
     }

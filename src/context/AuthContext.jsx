@@ -76,15 +76,18 @@ export function AuthProvider({ children }) {
   };
 
   useEffect(() => {
-    try {
-      const storedUser = localStorage.getItem('gppms_session');
-      const token      = localStorage.getItem('gppms_token');
-      if (storedUser && token) {
-        setUser(JSON.parse(storedUser));
-        refreshSession(token);
-      }
-    } catch { /* ignore */ }
-    setLoading(false);
+    async function initAuth() {
+      try {
+        const storedUser = localStorage.getItem('gppms_session');
+        const token      = localStorage.getItem('gppms_token');
+        if (storedUser && token) {
+          setUser(JSON.parse(storedUser));
+          await refreshSession(token);
+        }
+      } catch { /* ignore */ }
+      setLoading(false);
+    }
+    initAuth();
   }, []);
 
   const login = async (email, password) => {

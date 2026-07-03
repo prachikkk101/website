@@ -3,22 +3,9 @@ import { useState, useEffect, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
+import { adminService } from '../api/adminService';
+import api from '../utils/api';
 
-function getSites() {
-  try {
-    const raw = localStorage.getItem('gppms_sites');
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch { return []; }
-}
-
-function getSession() {
-  try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
-}
-function getRequests() {
-  try { return JSON.parse(localStorage.getItem('gppms_access_requests') || '[]'); } catch { return []; }
-}
-function saveRequests(reqs) { localStorage.setItem('gppms_access_requests', JSON.stringify(reqs)); }
 function fmtDate(iso) {
   try { return new Date(iso).toLocaleString('en-IN', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }); }
   catch { return iso; }
@@ -31,20 +18,15 @@ export default function Access() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const session    = getSession();
   const isAdmin    = (
-    user?.role === 'ADMIN' || user?.role === 'admin' ||
-    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
-      .includes((session.email || '').toLowerCase())
+    user?.role === 'ADMIN' || user?.role === 'admin'
   );
   const isSupervisor = user?.role === 'SUPERVISOR';
-  const siteAccess   = session.siteAccess;
-  const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
-
-  const [requests,  setRequests]  = useState([]);
+  
+  const [usersList, setUsersList] = useState([]);
   const [sites,     setSites]     = useState([]);
+  const [selectedSiteForUser, setSelectedSiteForUser] = useState({});
   const [showModal, setShowModal] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [submittedMessage, setSubmittedMessage] = useState('');
 
   // GA Location form state — 3-level
@@ -65,188 +47,235 @@ export default function Access() {
   }
 
   // Request form state
-  const [rName,   setRName]   = useState(session.name  || '');
-  const [rEmail,  setREmail]  = useState(session.email || '');
+  const [rName,   setRName]   = useState(user?.name  || '');
+  const [rEmail,  setREmail]  = useState(user?.email || '');
   const [rSite,   setRSite]   = useState('');
   const [rReason, setRReason] = useState('');
 
   useEffect(() => {
     document.title = 'GP-PMS \u2014 Access Management';
-    setRequests(getRequests());
-    setSites(getSites());
-  }, []);
+    
+    // Load sites list from backend
+    api.get('/sites')
+      .then(res => {
+        if (res.data?.success && res.data?.sites) {
+          setSites(res.data.sites);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load sites:', err);
+      });
 
-  const pendingRequests = requests.filter(r => r.status === 'pending');
-  const allSiteNames    = sites.map(s => s.name);
+    // Load users list if user is ADMIN
+    if (isAdmin) {
+      adminService.getUsers()
+        .then(res => {
+          if (res?.success && res?.users) {
+            setUsersList(res.users);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to load users:', err);
+        });
+    }
+  }, [isAdmin]);
 
-  // ── Request Access ──
+  const allSiteNames = sites.map(s => s.name);
+
+  // ── Request Access (Verbal/Notification placeholder) ──
   function handleSubmitRequest() {
     if (!rName.trim() || !rSite) return;
-    const newReq = { id: Date.now(), name: rName, email: rEmail, site: rSite, reason: rReason, status: 'pending', requestedAt: new Date().toISOString() };
-    const updated = [...requests, newReq];
-    setRequests(updated); saveRequests(updated);
-    // CRITICAL: close the modal immediately
     setShowModal(false);
-    setSubmitted(false);
-    // Show inline non-blocking banner on the page
-    setSubmittedMessage('Request sent — waiting for admin approval. You can continue browsing in view-only mode.');
-    // Auto-clear after 6 seconds
+    setSubmittedMessage(`Access request for site "${rSite}" sent to administrators verbally.`);
     setTimeout(() => setSubmittedMessage(''), 6000);
   }
 
-  // ── Approve / Reject ──
-  function approveRequest(id) {
-    const req = requests.find(r => r.id === id);
-    const updated = requests.map(r => r.id === id ? { ...r, status: 'approved' } : r);
-    setRequests(updated); saveRequests(updated);
+  // ── Assign User to Site ──
+  async function assignUserToSite(userId) {
+    const siteId = selectedSiteForUser[userId];
+    if (!siteId || siteId === 'all') {
+      showToast('⚠️ Please select a site first.');
+      return;
+    }
     try {
-      const users = JSON.parse(localStorage.getItem('gppms_users') || '[]');
-      const upd = users.find(u => u.email === req?.email)
-        ? users.map(u => u.email === req?.email ? { ...u, siteAccess: req.site } : u)
-        : [...users, { email: req?.email, siteAccess: req?.site }];
-      localStorage.setItem('gppms_users', JSON.stringify(upd));
-    } catch {}
-    showToast('\u2713 Access granted to ' + (req?.name || 'user'));
+      await adminService.assignUserToSite(siteId, { userId });
+      showToast('✓ User assigned to site successfully');
+      
+      // Refresh user list
+      const res = await adminService.getUsers();
+      if (res?.success && res?.users) {
+        setUsersList(res.users);
+      }
+    } catch (err) {
+      console.error('Failed to assign user to site:', err);
+      showToast('❌ Failed to assign user to site.');
+    }
   }
 
-  function rejectRequest(id) {
-    const updated = requests.map(r => r.id === id ? { ...r, status: 'rejected' } : r);
-    setRequests(updated); saveRequests(updated);
-    showToast('Request rejected');
-  }
-
-  // ── Remove User ──
-  function removeUser(email) {
+  // ── Remove User (Delete from backend DB) ──
+  async function removeUser(userId, email) {
     const first = window.confirm(`Remove ${email} from the system?\n\nThis will revoke their access completely.`);
     if (!first) return;
     const second = window.confirm(`FINAL CONFIRMATION\n\nAre you absolutely sure you want to permanently remove ${email}?\n\nThis cannot be undone.`);
     if (!second) return;
     try {
-      const users = JSON.parse(localStorage.getItem('gppms_users') || '[]');
-      localStorage.setItem('gppms_users', JSON.stringify(users.filter(u => u.email !== email)));
-      const reqs = JSON.parse(localStorage.getItem('gppms_access_requests') || '[]');
-      const updatedReqs = reqs.filter(r => r.email !== email);
-      setRequests(updatedReqs); saveRequests(updatedReqs);
-    } catch {}
-    showToast(`${email} has been removed`);
+      await adminService.deleteUser(userId);
+      setUsersList(prev => prev.filter(u => u.id !== userId));
+      showToast(`✓ User ${email} has been removed`);
+    } catch (err) {
+      console.error('Failed to delete user:', err);
+      showToast('❌ Failed to remove user.');
+    }
   }
 
-  // ── Add GA Location (3-level) ──
-  function handleAddLocation() {
-    if (!locName.trim()) { showToast('\u26a0 Location name is required'); return; }
-    const citiesBuilt = locCities
-      .filter(c => c.cityName.trim())
-      .map((c, i) => ({
-        id: 'city_' + Date.now() + '_' + i,
-        label: c.cityName.trim(),
-        areas: c.areasText.split(',').map(a => a.trim()).filter(Boolean),
-      }));
-    if (citiesBuilt.length === 0) { showToast('\u26a0 Add at least one city'); return; }
-    const newSite = {
-      id: 'site_' + Date.now(),
-      name: locName.trim(),
-      label: locName.trim(),
-      cities: citiesBuilt,
-      // Flattened areas for backward compat
-      areas: citiesBuilt.flatMap(c => c.areas),
-      status: locStatus,
-      createdAt: new Date().toISOString(),
-      createdBy: session.name || 'Admin',
-    };
-    const updated = [...sites, newSite];
-    setSites(updated);
-    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
-    setShowLocModal(false);
-    setLocName('');
-    setLocStatus('Active');
-    setLocCities([{ cityName: '', areasText: '' }]);
-    showToast('\u2713 GA Location added \u2014 ' + newSite.name);
+  // ── Add GA Location (Bridge to backend flat Site creation) ──
+  async function handleAddLocation() {
+    if (!locName.trim()) { showToast('⚠️ Location name is required'); return; }
+    
+    const sitesToCreate = [];
+    locCities.forEach((c) => {
+      const cityName = c.cityName.trim();
+      if (!cityName) return;
+      
+      const areas = c.areasText.split(',').map(a => a.trim()).filter(Boolean);
+      if (areas.length === 0) {
+        sitesToCreate.push({
+          name: `${cityName} — General`,
+          location: cityName,
+          gaName: locName.trim(),
+          chargeArea: 'General',
+          zone: 'Zone 1',
+          district: cityName
+        });
+      } else {
+        areas.forEach((area) => {
+          sitesToCreate.push({
+            name: `${cityName} — ${area}`,
+            location: cityName,
+            gaName: locName.trim(),
+            chargeArea: area,
+            zone: 'Zone 1',
+            district: cityName
+          });
+        });
+      }
+    });
+
+    if (sitesToCreate.length === 0) {
+      showToast('⚠️ Add at least one city and area.');
+      return;
+    }
+
+    try {
+      showToast('⏳ Creating sites on backend...');
+      for (const sitePayload of sitesToCreate) {
+        await api.post('/sites', sitePayload);
+      }
+      
+      showToast('✓ GA Location and Sites created on backend');
+      
+      // Refresh sites list and location context lists
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+      
+      // Reset state and close modal
+      setShowLocModal(false);
+      setLocName('');
+      setLocStatus('Active');
+      setLocCities([{ cityName: '', areasText: '' }]);
+    } catch (err) {
+      console.error('Failed to create sites:', err);
+      showToast('❌ Failed to create sites.');
+    }
   }
 
-  // ── Add City to existing site ──
-  function handleAddCity(siteId) {
+  // ── Add City (Backend Site) ──
+  async function handleAddCity(siteId) {
+    const parentSite = sites.find(s => s.id === siteId);
+    if (!parentSite) return;
+
     const cityName = prompt('Enter new city name to add to this GA location:');
     if (!cityName || !cityName.trim()) return;
     const areasInput = prompt('Enter areas for this city (comma-separated, optional):') || '';
-    const newCity = {
-      id: 'city_' + Date.now(),
-      label: cityName.trim(),
-      areas: areasInput.split(',').map(a => a.trim()).filter(Boolean)
-    };
+    const areas = areasInput.split(',').map(a => a.trim()).filter(Boolean);
 
-    const updated = sites.map(s => {
-      if (s.id === siteId) {
-        const updatedCities = [...(s.cities || []), newCity];
-        return {
-          ...s,
-          cities: updatedCities,
-          areas: [...(s.areas || []), ...newCity.areas]
-        };
+    try {
+      const sitesToCreate = [];
+      if (areas.length === 0) {
+        sitesToCreate.push({
+          name: `${cityName.trim()} — General`,
+          location: cityName.trim(),
+          gaName: parentSite.gaName || parentSite.name,
+          chargeArea: 'General',
+          zone: 'Zone 1',
+          district: cityName.trim()
+        });
+      } else {
+        areas.forEach(area => {
+          sitesToCreate.push({
+            name: `${cityName.trim()} — ${area}`,
+            location: cityName.trim(),
+            gaName: parentSite.gaName || parentSite.name,
+            chargeArea: area,
+            zone: 'Zone 1',
+            district: cityName.trim()
+          });
+        });
       }
-      return s;
-    });
 
-    setSites(updated);
-    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
-    showToast(`✓ City "${cityName.trim()}" added to location`);
+      showToast('⏳ Adding city and sites...');
+      for (const sitePayload of sitesToCreate) {
+        await api.post('/sites', sitePayload);
+      }
+
+      showToast('✓ City and sites added successfully');
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+    } catch (err) {
+      console.error('Failed to add city sites:', err);
+      showToast('❌ Failed to add city.');
+    }
   }
 
-  // ── Add Area to existing site ──
-  function handleAddArea(siteId) {
-    const areaName = prompt('Enter new area name to add to this location:');
+  // ── Add Area (Backend Site) ──
+  async function handleAddArea(siteId) {
+    const parentSite = sites.find(s => s.id === siteId);
+    if (!parentSite) return;
+
+    const areaName = prompt('Enter new area name to add:');
     if (!areaName || !areaName.trim()) return;
-    const updated = sites.map(s =>
-      s.id === siteId
-        ? { ...s, areas: [...(s.areas || []), areaName.trim()] }
-        : s
-    );
-    setSites(updated);
-    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
-    showToast('\u2713 Area "' + areaName.trim() + '" added');
-  }
 
-  // ── Remove one Area from GA Location ──
-  function handleRemoveArea(siteId, areaName) {
-    const updated = sites.map(s =>
-      s.id === siteId
-        ? { ...s, areas: (s.areas || []).filter(a => a !== areaName) }
-        : s
-    );
-    setSites(updated);
-    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
-    showToast('\u2713 Area "' + areaName + '" removed');
-  }
+    try {
+      await api.post('/sites', {
+        name: `${parentSite.location} — ${areaName.trim()}`,
+        location: parentSite.location,
+        gaName: parentSite.gaName,
+        chargeArea: areaName.trim(),
+        zone: 'Zone 1',
+        district: parentSite.location
+      });
 
-  // ── Remove GA Location ──
-  function handleRemoveSite(siteId, siteName) {
-    if (!window.confirm(`Remove "${siteName}" from GA Locations?\n\nThis will remove the location and all its areas.`)) return;
-    const updated = sites.filter(s => s.id !== siteId);
-    setSites(updated);
-    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-    window.dispatchEvent(new Event('storage'));
-    showToast('\u2713 Location removed');
-  }
-
-  // Registered users — hardcoded admins + approved access requests
-  const baseUsers = [
-    { name: 'Oxygen Protech', email: 'oxygenprotech@gmail.com',   role: 'ADMIN', site: 'All Sites' },
-    { name: 'Radhe Sangwan',  email: 'radhe.sangwan1980@gmail.com', role: 'ADMIN', site: 'All Sites' },
-  ];
-  // Merge in approved workers from request history
-  const approvedWorkers = requests
-    .filter(r => r.status === 'approved')
-    .reduce((acc, r) => {
-      // Avoid duplicates by email
-      if (!acc.find(u => u.email === r.email) && !baseUsers.find(u => u.email === r.email)) {
-        acc.push({ name: r.name, email: r.email, role: 'WORKER', site: r.site, approvedAt: r.requestedAt });
+      showToast('✓ Area added successfully');
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
       }
-      return acc;
-    }, []);
-  const allRegisteredUsers = [...baseUsers, ...approvedWorkers];
+    } catch (err) {
+      console.error('Failed to add area site:', err);
+      showToast('❌ Failed to add area.');
+    }
+  }
+
+  const handleSiteSelectChange = (userId, siteId) => {
+    setSelectedSiteForUser(prev => ({
+      ...prev,
+      [userId]: siteId
+    }));
+  };
 
   return (
     <div>
@@ -279,7 +308,7 @@ export default function Access() {
             <div style={{ flex:1 }}>
               <p style={{ margin:'0 0 4px', fontSize:15, fontWeight:700, color:'#92400e' }}>Request Site Access</p>
               <p style={{ margin:'0 0 12px', fontSize:13, color:'#78350f' }}>You currently have view-only access. Request access to edit a specific site.</p>
-              <button onClick={() => { setSubmitted(false); setRSite(allSiteNames[0] || ''); setShowModal(true); }}
+              <button onClick={() => { setRSite(allSiteNames[0] || ''); setShowModal(true); }}
                 style={{ background:'#2d6a27', color:'#fff', border:'none', borderRadius:7, padding:'9px 20px', fontSize:13, fontWeight:600, cursor:'pointer' }}>
                 Request Access to a Site
               </button>
@@ -288,81 +317,67 @@ export default function Access() {
         </div>
       )}
 
-      {/* Admin — Pending Requests */}
+      {/* Registered Users — ADMIN ONLY */}
       {isAdmin && (
-        <div className="card section-block" style={{ padding:20, marginBottom:20 }}>
-          <h3 style={{ fontSize:15, fontWeight:700, color:'#c0440a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
-            Pending Access Requests
-            {pendingRequests.length > 0 && (
-              <span style={{ background:'#c0440a', color:'#fff', borderRadius:'50%', width:20, height:20, fontSize:11, display:'inline-flex', alignItems:'center', justifyContent:'center' }}>
-                {pendingRequests.length}
-              </span>
-            )}
+        <div className="card" style={{ padding:20, marginBottom:20 }}>
+          <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
+            <span>👥</span> Registered Users
+            <span style={{ fontSize:11, color:'#64748b', fontWeight:400, marginLeft:4 }}>({usersList.length} total)</span>
           </h3>
-
-          {pendingRequests.length === 0 ? (
-            <div style={{ textAlign:'center', padding:'24px', color:'#94a3b8', fontSize:13 }}>
-              ✓ No pending access requests
-            </div>
-          ) : pendingRequests.map(req => (
-            <div key={req.id} style={{ border:'1px solid #fde68a', borderRadius:8, padding:'14px 16px', marginBottom:10, background:'#fffbeb' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', flexWrap:'wrap', gap:10 }}>
-                <div>
-                  <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#1e293b' }}>{req.name}</p>
-                  <p style={{ margin:'2px 0', fontSize:12, color:'#64748b' }}>{req.email}</p>
-                  <p style={{ margin:'4px 0 2px', fontSize:12, color:'#374151' }}>Requesting: <strong>{req.site}</strong></p>
-                  {req.reason && <p style={{ margin:'2px 0', fontSize:12, color:'#64748b', fontStyle:'italic' }}>"{req.reason}"</p>}
-                  <p style={{ margin:'4px 0 0', fontSize:11, color:'#94a3b8' }}>Requested: {fmtDate(req.requestedAt)}</p>
-                </div>
-                <div style={{ display:'flex', gap:8 }}>
-                  <button onClick={() => approveRequest(req.id)}
-                    style={{ background:'#2d6a27', color:'white', border:'none', padding:'6px 14px', borderRadius:'4px', fontSize:'12px', fontWeight:600, cursor:'pointer' }}>
-                    ✓ Approve
-                  </button>
-                  <button onClick={() => rejectRequest(req.id)}
-                    style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'6px 14px', borderRadius:'4px', fontSize:'12px', fontWeight:600, cursor:'pointer' }}>
-                    ✗ Reject
-                  </button>
-                </div>
+          {usersList.map(u => (
+            <div key={u.id || u.email} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'1px solid #f1f5f9', flexWrap: 'wrap' }}>
+              <div style={{ width:36, height:36, borderRadius:'50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#2d6a27', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:700, flexShrink:0 }}>
+                {u.name ? u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2) : 'U'}
               </div>
+              <div style={{ flex:1, minWidth: 200 }}>
+                <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1e293b' }}>{u.name}</p>
+                <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>
+                  {u.email} · Assigned Sites: <strong>
+                    {u.assignedSites && u.assignedSites.length > 0
+                      ? u.assignedSites.map(as => as.site.name).join(', ')
+                      : 'None'}
+                  </strong>
+                </p>
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
+                {u.role}
+              </span>
+              
+              {/* Site Assignment controls */}
+              {isAdmin && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <select
+                    value={selectedSiteForUser[u.id] || ''}
+                    onChange={(e) => handleSiteSelectChange(u.id, e.target.value)}
+                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid #cbd5e1', background: 'white' }}
+                  >
+                    <option value="">Assign Site...</option>
+                    {sites.map(s => (
+                      <option key={s.id} value={s.id}>{s.name || s.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => assignUserToSite(u.id)}
+                    style={{ background: '#2d6a27', color: 'white', border: 'none', padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    Assign
+                  </button>
+                </div>
+              )}
+
+              {/* Remove button */}
+              {isAdmin && u.email !== user?.email && !ADMIN_EMAILS.includes(u.email) && (
+                <button onClick={() => removeUser(u.id, u.email)}
+                  style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'4px 10px', borderRadius:'4px', fontSize:'11px', cursor:'pointer', marginLeft:'8px' }}>
+                  Remove
+                </button>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Registered Users */}
-      <div className="card" style={{ padding:20, marginBottom:20 }}>
-        <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:'0 0 14px', display:'flex', alignItems:'center', gap:8 }}>
-          <span>👥</span> Registered Users
-          <span style={{ fontSize:11, color:'#64748b', fontWeight:400, marginLeft:4 }}>({allRegisteredUsers.length} total)</span>
-        </h3>
-        {allRegisteredUsers.map(u => (
-          <div key={u.email} style={{ display:'flex', alignItems:'center', gap:12, padding:'10px 0', borderBottom:'1px solid #f1f5f9' }}>
-            <div style={{ width:36, height:36, borderRadius:'50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#2d6a27', display:'flex', alignItems:'center', justifyContent:'center', color:'#fff', fontSize:13, fontWeight:700, flexShrink:0 }}>
-              {u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2)}
-            </div>
-            <div style={{ flex:1 }}>
-              <p style={{ margin:0, fontSize:13, fontWeight:600, color:'#1e293b' }}>{u.name}</p>
-              <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>{u.email} · {u.site}</p>
-              {u.role === 'WORKER' && u.approvedAt && (
-                <p style={{ margin:'2px 0 0', fontSize:10, color:'#16a34a' }}>✓ Approved · {fmtDate(u.approvedAt)}</p>
-              )}
-            </div>
-            <span style={{ fontSize:10, fontWeight:700, padding:'2px 7px', borderRadius:4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
-              {u.role}
-            </span>
-            {/* Remove button — only for admin, not for the real admin accounts */}
-            {isAdmin && u.email !== session.email && !ADMIN_EMAILS.includes(u.email) && (
-              <button onClick={() => removeUser(u.email)}
-                style={{ background:'white', color:'#dc2626', border:'1px solid #dc2626', padding:'4px 10px', borderRadius:'4px', fontSize:'11px', cursor:'pointer', marginLeft:'8px' }}>
-                Remove
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {/* GA Locations — ADMIN ONLY */}
+      {/* GA Locations & Sites — ADMIN ONLY */}
       {isAdmin && (
         <div className="card" style={{ padding:20, marginBottom:20 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
@@ -376,7 +391,7 @@ export default function Access() {
           </div>
           {sites.length === 0 ? (
             <div style={{ textAlign:'center', padding:'32px 0', color:'#94a3b8', fontSize:13 }}>
-              No GA Locations added yet. Click "+ Add New GA Location" to get started.
+              No GA Locations or Sites found. Click "+ Add New GA Location" to get started.
             </div>
           ) : (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
@@ -388,92 +403,11 @@ export default function Access() {
                       {s.status}
                     </span>
                   </div>
-                  <p style={{ margin:0, fontSize:11, color:'#64748b' }}>{s.zone || s.district || ''}</p>
-                  {/* Cities and Areas hierarchy */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4, marginBottom: 4 }}>
-                    {(s.cities || []).length === 0 ? (
-                      <div>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4 }}>Areas (Flat List):</div>
-                        <div style={{ display:'flex', flexWrap:'wrap', gap:5, minHeight: 22 }}>
-                          {(s.areas || []).map(area => (
-                            <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:12, padding:'2px 8px 2px 9px', fontSize:11, fontWeight:500 }}>
-                              {area}
-                              <button
-                                onClick={() => handleRemoveArea(s.id, area)}
-                                title={`Remove area "${area}"`}
-                                style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:13, lineHeight:1, padding:'0 0 0 2px', display:'flex', alignItems:'center', fontWeight:700 }}
-                              >×</button>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      (s.cities || []).map(city => (
-                        <div key={city.id} style={{ borderBottom: '1px dashed #e2e8f0', paddingBottom: 6 }}>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: '#374151', display: 'block', marginBottom: 4 }}>
-                            🌆 {city.label}
-                          </span>
-                          <div style={{ display:'flex', flexWrap:'wrap', gap:4, alignItems: 'center' }}>
-                            {(city.areas || []).map(area => (
-                              <span key={area} style={{ display:'inline-flex', alignItems:'center', gap:3, background:'#e8f5e9', color:'#1f4e1a', borderRadius:10, padding:'1px 6px 1px 7px', fontSize:10, fontWeight:500 }}>
-                                {area}
-                                <button
-                                  onClick={() => {
-                                    const updated = sites.map(site => {
-                                      if (site.id === s.id) {
-                                        const updatedCities = (site.cities || []).map(c => 
-                                          c.id === city.id ? { ...c, areas: (c.areas || []).filter(a => a !== area) } : c
-                                        );
-                                        return {
-                                          ...site,
-                                          cities: updatedCities,
-                                          areas: (site.areas || []).filter(a => a !== area)
-                                        };
-                                      }
-                                      return site;
-                                    });
-                                    setSites(updated);
-                                    localStorage.setItem('gppms_sites', JSON.stringify(updated));
-                                    window.dispatchEvent(new Event('storage'));
-                                    showToast(`Area "${area}" removed`);
-                                  }}
-                                  title={`Remove area "${area}"`}
-                                  style={{ background:'none', border:'none', cursor:'pointer', color:'#b91c1c', fontSize:11, padding:'0 0 0 2px', fontWeight:700 }}
-                                >×</button>
-                              </span>
-                            ))}
-                            <button
-                              onClick={() => {
-                                const areaName = prompt(`Enter new area name for city "${city.label}":`);
-                                if (!areaName || !areaName.trim()) return;
-                                const updated = sites.map(site => {
-                                  if (site.id === s.id) {
-                                    const updatedCities = (site.cities || []).map(c => 
-                                      c.id === city.id ? { ...c, areas: [...(c.areas || []), areaName.trim()] } : c
-                                    );
-                                    return {
-                                      ...site,
-                                      cities: updatedCities,
-                                      areas: [...(site.areas || []), areaName.trim()]
-                                    };
-                                  }
-                                  return site;
-                                });
-                                setSites(updated);
-                                localStorage.setItem('gppms_sites', JSON.stringify(updated));
-                                window.dispatchEvent(new Event('storage'));
-                                showToast(`✓ Area "${areaName.trim()}" added to "${city.label}"`);
-                              }}
-                              style={{ background:'none', border: '1px dashed #2d6a27', borderRadius:10, padding:'1px 6px', fontSize:10, color:'#2d6a27', cursor:'pointer', fontWeight:600 }}
-                            >
-                              + Area
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>GA: <strong>{s.gaName || '—'}</strong></p>
+                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>City: <strong>{s.location || '—'}</strong></p>
+                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Area: <strong>{s.chargeArea || '—'}</strong></p>
                   </div>
-
                   <div style={{ display:'flex', gap:6, marginTop:8 }}>
                     <button
                       onClick={() => handleAddCity(s.id)}
@@ -482,10 +416,10 @@ export default function Access() {
                       + Add City
                     </button>
                     <button
-                      onClick={() => handleRemoveSite(s.id, s.name)}
-                      style={{ height:28, padding:'0 10px', background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                      onClick={() => handleAddArea(s.id)}
+                      style={{ flex:1, height:28, background:'#2d6a27', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
                     >
-                      Remove
+                      + Add Area
                     </button>
                   </div>
                 </div>
@@ -496,12 +430,12 @@ export default function Access() {
       )}
 
       {/* Info bar */}
-      <div style={{ background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 16px', fontSize:12, color:'#1e40af', display:'flex', alignItems:'center', gap:8 }}>
+      <div style={{ background:'#dbeafe', border:'1px solid #bfdbfe', borderRadius:8, padding:'10px 16px', fontSize:12, color:'#1e40af', display:'flex', alignItems:'center', gap:8, marginBottom:20 }}>
         <span>ℹ️</span>
-        Full RBAC will be enforced once backend is connected. Currently using local mode authentication.
+        Role-based access control (RBAC) and site assignment is enforced dynamically via the backend.
       </div>
 
-      {/* ── Request Access Modal — conditionally rendered, not just hidden ── */}
+      {/* ── Request Access Modal — conditionally rendered ── */}
       {showModal && (
         <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}
           onClick={(e) => { if (e.target === e.currentTarget) setShowModal(false); }}>

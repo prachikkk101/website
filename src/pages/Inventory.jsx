@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useContext } from 'react';
-import defaultStockData from '../data/stockData';
 import { exportStockData } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/SlidePanel';
 import { useToast } from '../components/Toast';

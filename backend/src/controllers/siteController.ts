@@ -255,3 +255,77 @@ export const receiveStock = async (req: AuthenticatedRequest, res: Response, nex
     next(error);
   }
 };
+
+export const getGALocations = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const sites = await prisma.site.findMany({
+      where: { status: 'Active' },
+      select: { gaName: true }
+    });
+    const uniqueGAs = Array.from(new Set(sites.map(s => s.gaName).filter(Boolean)));
+    const gaLocations = uniqueGAs.map(name => ({
+      id: name,
+      name: name,
+      label: name
+    }));
+    res.status(200).json({ success: true, gaLocations });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCities = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const sites = await prisma.site.findMany({
+      where: { status: 'Active' },
+      select: { location: true, gaName: true }
+    });
+    const seen = new Set();
+    const cities: any[] = [];
+    sites.forEach(s => {
+      if (!s.location) return;
+      const key = `${s.gaName || ''}_${s.location}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        cities.push({
+          id: s.location,
+          name: s.location,
+          label: s.location,
+          gaId: s.gaName || 'all'
+        });
+      }
+    });
+    res.status(200).json({ success: true, cities });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAreas = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const sites = await prisma.site.findMany({
+      where: { status: 'Active' },
+      select: { chargeArea: true, location: true, gaName: true }
+    });
+    const seen = new Set();
+    const areas: any[] = [];
+    sites.forEach(s => {
+      if (!s.chargeArea) return;
+      const key = `${s.gaName || ''}_${s.location || ''}_${s.chargeArea}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        areas.push({
+          id: s.chargeArea,
+          name: s.chargeArea,
+          label: s.chargeArea,
+          cityId: s.location || 'all',
+          gaId: s.gaName || 'all'
+        });
+      }
+    });
+    res.status(200).json({ success: true, areas });
+  } catch (error) {
+    next(error);
+  }
+};
+

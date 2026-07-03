@@ -125,3 +125,17 @@ export const peLayingAPI = {
   update: (siteId, recordId, data) =>
     api.patch(`/sites/${siteId}/pe-laying/${recordId}`, data).then(r => r.data.record),
 };
+
+/* ─────────────────────────────────────────────────────────────
+   I&C WORK  — /api/sites/:siteId/ic
+───────────────────────────────────────────────────────────── */
+export const icWorkAPI = {
+  getAll: (siteId) =>
+    api.get(`/sites/${siteId}/ic`).then(r => r.data.records || []),
+
+  create: (siteId, data) =>
+    api.post(`/sites/${siteId}/ic`, data).then(r => r.data.record),
+
+  update: (siteId, recordId, data) =>
+    api.patch(`/sites/${siteId}/ic/${recordId}`, data).then(r => r.data.record),
+};

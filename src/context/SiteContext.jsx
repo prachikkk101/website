@@ -1,17 +1,6 @@
-// src/context/SiteContext.jsx
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { gaLocations } from '../data/gaLocations';
 import { AuthContext } from './AuthContext';
 import api from '../utils/api';
-
-/* ── Read custom sites from localStorage (kept as fallback for offline) ── */
-function loadSites() {
-  try {
-    const raw = localStorage.getItem('gppms_sites');
-    if (!raw) return [];
-    return JSON.parse(raw);
-  } catch { return []; }
-}
 
 /* ── Context default ── */
 export const SiteContext = createContext({
@@ -48,8 +37,10 @@ export function SiteProvider({ children }) {
   // Legacy single-dropdown (still used by older components)
   const [selectedSite, setSelectedSite] = useState('all');
 
-  // Load backend sites into siteList. Fallback to localStorage.
-  const [siteList, setSiteList] = useState(() => loadSites());
+  const [siteList, setSiteList] = useState([]);
+  const [backendGALocations, setBackendGALocations] = useState([]);
+  const [backendCities, setBackendCities] = useState([]);
+  const [backendAreas, setBackendAreas] = useState([]);
 
   // Store the active selected site ID (UUID)
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
@@ -66,7 +57,7 @@ export function SiteProvider({ children }) {
     }
   }, [user]);
 
-  // Fetch sites from backend and populate siteList
+  // Fetch sites from backend and populate siteList + location lists
   useEffect(() => {
     const token = localStorage.getItem('gppms_token');
     if (!token) return;
@@ -91,32 +82,44 @@ export function SiteProvider({ children }) {
       .catch(err => {
         console.error('Failed to fetch sites from backend in SiteContext:', err);
       });
+
+    Promise.all([
+      api.get('/ga-locations'),
+      api.get('/cities'),
+      api.get('/areas')
+    ])
+      .then(([gaRes, cityRes, areaRes]) => {
+        if (gaRes.data?.success && gaRes.data?.gaLocations) {
+          setBackendGALocations(gaRes.data.gaLocations);
+        }
+        if (cityRes.data?.success && cityRes.data?.cities) {
+          setBackendCities(cityRes.data.cities);
+        }
+        if (areaRes.data?.success && areaRes.data?.areas) {
+          setBackendAreas(areaRes.data.areas);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to fetch location hierarchy in SiteContext:', err);
+      });
   }, [user]);
 
-  const syncSites = useCallback(() => {
-    // Keep local sync as a fallback or for local changes
-    const local = loadSites();
-    if (local.length > 0 && siteList.length === 0) {
-      setSiteList(local);
-    }
-  }, [siteList]);
-
-  useEffect(() => {
-    window.addEventListener('storage', syncSites);
-    syncSites();
-    return () => window.removeEventListener('storage', syncSites);
-  }, [syncSites]);
-
-  // Dynamic merged list
+  // Dynamic merged list reconstructed from backend lists
   const mergedGAs = useMemo(() => {
-    const list = [...gaLocations];
-    siteList.forEach(s => {
-      if (!list.some(x => x.id === s.id)) {
-        list.push(s);
-      }
+    return backendGALocations.map(ga => {
+      const gaCities = backendCities.filter(c => c.gaId === ga.id);
+      return {
+        ...ga,
+        cities: gaCities.map(city => {
+          const cityAreas = backendAreas.filter(a => a.cityId === city.id && a.gaId === ga.id).map(a => a.name || a.label);
+          return {
+            ...city,
+            areas: cityAreas
+          };
+        })
+      };
     });
-    return list;
-  }, [siteList]);
+  }, [backendGALocations, backendCities, backendAreas]);
 
   // Dynamic helper functions
   const getCitiesForGA = useCallback((gaId) => {
