@@ -70,7 +70,7 @@ const SiteContext = createContext({
   setSelectedSiteId: () => { },
 });
 
-export function SiteProvider({ children }) {
+{
   const { user } = useContext(AuthContext);
 
   // 3-level cascading state

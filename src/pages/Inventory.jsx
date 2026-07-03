@@ -7,7 +7,7 @@ import { AuthContext } from '../context/AuthContext';
 import { stockCategories } from '../data/stockCategories';
 import { useSite } from '../context/SiteContext';
 import { stockAPI } from '../utils/api';
-import { useContext } from 'react';
+
 import { SiteContext } from '../context/SiteContext';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
