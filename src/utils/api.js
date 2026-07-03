@@ -75,3 +75,52 @@ export const adminResetPassword = (resetToken, newPassword) =>
 
 export const changePasswordApi = (currentPassword, newPassword) =>
   apiPost('/api/auth/change-password', { currentPassword, newPassword });
+
+/* ─────────────────────────────────────────────────────────────
+   STOCK / INVENTORY  — /api/sites/:siteId/inventory
+───────────────────────────────────────────────────────────── */
+export const stockAPI = {
+  getAll: (siteId) =>
+    api.get(`/sites/${siteId}/inventory`).then(r => r.data.items || []),
+
+  receiveStock: (siteId, items) =>
+    api.post(`/sites/${siteId}/inventory/receive`, { items }).then(r => r.data.items || []),
+
+  returnStock: (siteId, items) =>
+    api.post(`/sites/${siteId}/inventory/return`, { items }).then(r => r.data.items || []),
+
+  updateItem: (siteId, material, data) =>
+    api.put(`/sites/${siteId}/inventory/${encodeURIComponent(material)}`, data).then(r => r.data.item),
+
+  deleteItem: (siteId, material) =>
+    api.delete(`/sites/${siteId}/inventory/${encodeURIComponent(material)}`).then(r => r.data),
+};
+
+/* ─────────────────────────────────────────────────────────────
+   PNG CONNECTIONS  — /api/sites/:siteId/png-connections
+───────────────────────────────────────────────────────────── */
+export const pngAPI = {
+  getAll: (siteId, params = {}) =>
+    api.get(`/sites/${siteId}/png-connections`, { params: { limit: 500, ...params } })
+      .then(r => r.data.connections || []),
+
+  create: (siteId, data) =>
+    api.post(`/sites/${siteId}/png-connections`, data).then(r => r.data.connection),
+
+  update: (siteId, connectionId, data) =>
+    api.patch(`/sites/${siteId}/png-connections/${connectionId}`, data).then(r => r.data.connection),
+};
+
+/* ─────────────────────────────────────────────────────────────
+   PE LAYING  — /api/sites/:siteId/pe-laying
+───────────────────────────────────────────────────────────── */
+export const peLayingAPI = {
+  getAll: (siteId) =>
+    api.get(`/sites/${siteId}/pe-laying`).then(r => r.data.records || []),
+
+  create: (siteId, data) =>
+    api.post(`/sites/${siteId}/pe-laying`, data).then(r => r.data.record),
+
+  update: (siteId, recordId, data) =>
+    api.patch(`/sites/${siteId}/pe-laying/${recordId}`, data).then(r => r.data.record),
+};

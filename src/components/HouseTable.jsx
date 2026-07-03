@@ -9,6 +9,7 @@ import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
 import { stockCategories } from '../data/stockCategories';
+import { pngAPI } from '../utils/api';
 
 
 /* ── Helpers ── */
@@ -133,9 +134,11 @@ function ConfirmDelete({ onConfirm, onCancel }) {
 export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
+  const siteId        = user?.siteId || null;
   const { selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
   const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
+  const [loadingHouses, setLoadingHouses] = useState(false);
 
   // 3-level form states for GA Location, City, Area
   const [formGA,   setFormGA]   = useState('');
@@ -163,8 +166,50 @@ export default function HouseTable() {
 
   useEffect(() => {
     document.title = 'GP-PMS — PNG Connections';
-    setAllHouses(initStore('houses', defaultHouses));
-  }, []);
+    if (siteId) {
+      setLoadingHouses(true);
+      pngAPI.getAll(siteId)
+        .then(connections => {
+          // map backend PNGConnection shape to the frontend house shape
+          const mapped = connections.map(c => ({
+            id:           c.id,
+            bpNo:         c.bpNo         || '',
+            appNo:        c.appNo        || '',
+            name:         c.customerName || '',
+            mobile:       c.mobile       || '',
+            altMobile:    c.altMobile    || '',
+            acctType:     c.accountType  || 'DOMESTIC',
+            houseNo:      c.houseNo      || '',
+            floor:        'GF',
+            address1:     c.address1     || '',
+            area:         c.society      || '',
+            city:         c.city         || '',
+            gcStatus:     c.status       || '—',
+            giStatus:     '—',
+            rfc:          c.status === 'RFC' ? 'RFC' : '—',
+            ngStatus:     '—',
+            gcDate:       c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
+            plumbingDate: c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
+            meterNo:      c.meterInstallation?.serialNo || '',
+            meterDate:    c.meterInstallation?.installationDate
+                            ? c.meterInstallation.installationDate.split('T')[0] : '',
+            meterMake:    c.meterInstallation?.meterMake || '',
+            meterReading: c.meterInstallation?.meterReading || '',
+            side:         c.meterInstallation?.lhsRhs || 'LHS',
+            materialsUsed: {},
+            createdAt: c.createdAt,
+          }));
+          setAllHouses(mapped);
+        })
+        .catch(err => {
+          console.warn('PNG API fetch failed, using localStorage fallback:', err);
+          setAllHouses(initStore('houses', defaultHouses));
+        })
+        .finally(() => setLoadingHouses(false));
+    } else {
+      setAllHouses(initStore('houses', defaultHouses));
+    }
+  }, [siteId]);
 
   // Sync with global navbar GA selection
   useEffect(() => {
@@ -550,120 +595,175 @@ export default function HouseTable() {
       .flatMap(g => g.cities || [])
       .find(c => c.id === formCity)?.label || formCity;
 
-    if (editEntry) {
-      // Update existing
-      const updated = (allHouses || []).map(h =>
-        h.id === editEntry.id
-          ? {
-              ...h,
-              bpNo: form.bpNo, appNo: form.appNo, name: form.name,
-              mobile: form.mobile, altMobile: form.altMobile,
+      if (siteId) {
+        try {
+          const payload = {
+            appNo: form.appNo, bpNo: form.bpNo || null,
+            accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
+            customerName: form.name, mobile: form.mobile, altMobile: form.altMobile || null,
+            houseNo: form.houseNo || '', address1: form.address1 || '',
+            city: finalCityLabel, society: formArea || null,
+            status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
+            plumbingDate: form.gcDate || null,
+          };
+          if (editEntry) {
+            await pngAPI.update(siteId, editEntry.id, payload);
+            setAllHouses(prev => prev.map(h => h.id === editEntry.id
+              ? { ...h, ...{ bpNo: form.bpNo, appNo: form.appNo, name: form.name,
+                  mobile: form.mobile, altMobile: form.altMobile,
+                  acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
+                  address1: form.address1, area: formArea, city: finalCityLabel,
+                  gcStatus: form.gcStatus, giStatus: form.giStatus,
+                  rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
+                  plumbingDate: form.plumbingDate, meterNo: form.meterNo,
+                  meterDate: form.meterDate, meterMake: form.meterMake,
+                  meterReading: form.meterReading, side: form.side,
+                  photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+                  photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+                  photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+                  materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
+                  hiddenMaterials,
+                  ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+                  updatedAt: new Date().toISOString() } } : h));
+            showToast('✓ Entry updated successfully');
+          } else {
+            const created = await pngAPI.create(siteId, payload);
+            const newEntry = {
+              id: created?.id || Date.now(),
+              bpNo: form.bpNo, name: form.name, mobile: form.mobile,
+              appNo: form.appNo, altMobile: form.altMobile,
               acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
               address1: form.address1, area: formArea, city: finalCityLabel,
+              meterNo: form.meterNo, meterDate: form.meterDate,
+              meterMake: form.meterMake, meterReading: form.meterReading,
               gcStatus: form.gcStatus, giStatus: form.giStatus,
               rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
-              plumbingDate: form.plumbingDate, meterNo: form.meterNo,
-              meterDate: form.meterDate, meterMake: form.meterMake,
-              meterReading: form.meterReading, side: form.side,
-              photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
-              photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
-              photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+              plumbingDate: form.plumbingDate, side: form.side,
+              photo1Data: p1b64, photo1Name: photo1?.name || null,
+              photo2Data: p2b64, photo2Name: photo2?.name || null,
+              photoCount: [p1b64, p2b64].filter(Boolean).length,
               materialsUsed,
               customMaterials: customMaterials.filter(m => m.label.trim()),
               hiddenMaterials,
               ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
-              updatedAt: new Date().toISOString(),
-            }
-          : h
-      );
-      setAllHouses(updated);
-      localStorage.setItem('gppms_houses', JSON.stringify(updated));
-      setPanelOpen(false); setEditEntry(null);
-      showToast('✓ Entry updated successfully');
-    } else {
-      // Add new
-      const newEntry = {
-        id: Date.now(), bpNo: form.bpNo, name: form.name, mobile: form.mobile,
-        appNo: form.appNo, altMobile: form.altMobile,
-        acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
-        address1: form.address1, area: formArea, city: finalCityLabel,
-        meterNo: form.meterNo, meterDate: form.meterDate,
-        meterMake: form.meterMake, meterReading: form.meterReading,
-        gcStatus: form.gcStatus, giStatus: form.giStatus,
-        rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
-        plumbingDate: form.plumbingDate, side: form.side,
-        photo1Data: p1b64, photo1Name: photo1?.name || null,
-        photo2Data: p2b64, photo2Name: photo2?.name || null,
-        photoCount: [p1b64, p2b64].filter(Boolean).length,
-        materialsUsed,
-        customMaterials: customMaterials.filter(m => m.label.trim()),
-        hiddenMaterials,
-        ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
-        createdAt: new Date().toISOString(),
-      };
-      const updated = [newEntry, ...(allHouses || [])];
-      setAllHouses(updated);
-      localStorage.setItem('gppms_houses', JSON.stringify(updated));
-
-      // Deduct stock — matches materialsUsed names against stock using normalized comparison
-      try {
-        console.log('Materials to deduct:', materialsUsed);
-        const currentStockRaw = localStorage.getItem('gppms_stock');
-        let currentStock = currentStockRaw ? JSON.parse(currentStockRaw) : defaultStockData;
-
-        const normalize = (s) => (s || '').toLowerCase().trim();
-
-        const updatedStock = currentStock.map(item => {
-          const itemName = normalize(item.mat || item.material || '');
-          // Find any entry in materialsUsed that matches this stock item (case-insensitive)
-          const matchEntry = Object.entries(materialsUsed).find(
-            ([matName]) => normalize(matName) === itemName
-          );
-
-          console.log('Checking stock item:', item.mat, '| matched:', matchEntry ? matchEntry[0] : 'none');
-
-          if (matchEntry) {
-            const [, matData] = matchEntry;
-            const qtyToDeduct = Number(matData.qty) || 0;
-            if (qtyToDeduct > 0) {
-              const newIssued = (item.issued || 0) + qtyToDeduct;
-              const newReceived = item.received !== undefined ? item.received : (item.recv || 0);
-              const newReturned = item.returned !== undefined ? item.returned : (item.ret || 0);
-              const newAvailable = newReceived - newIssued - newReturned;
-              const clampedAvailable = Math.max(0, newAvailable);
-              console.log(`Deducting ${qtyToDeduct} from "${item.mat}" → newIssued=${newIssued}, available=${clampedAvailable}`);
-              return {
-                ...item,
-                issued: newIssued,
-                used: newIssued,
-                inStore: clampedAvailable,
-                available: clampedAvailable,
-                onSite: Math.max(0, (item.onSite || 0) - qtyToDeduct)
-              };
-            }
+              createdAt: new Date().toISOString(),
+            };
+            setAllHouses(prev => [newEntry, ...prev]);
+            showToast('✓ Entry saved successfully');
           }
-          return item;
-        });
-        localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
-        console.log('Stock updated in localStorage.');
-      } catch(err) { console.error('Stock deduction error:', err); }
+        } catch (err) {
+          console.error('PNG API save error:', err);
+          showToast('❌ Save failed. Please try again.');
+          return;
+        }
+      } else {
+      // local-mode fallback save
+      if (editEntry) {
+        const updated = (allHouses || []).map(h =>
+          h.id === editEntry.id
+            ? {
+                ...h,
+                bpNo: form.bpNo, appNo: form.appNo, name: form.name,
+                mobile: form.mobile, altMobile: form.altMobile,
+                acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
+                address1: form.address1, area: formArea, city: finalCityLabel,
+                gcStatus: form.gcStatus, giStatus: form.giStatus,
+                rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
+                plumbingDate: form.plumbingDate, meterNo: form.meterNo,
+                meterDate: form.meterDate, meterMake: form.meterMake,
+                meterReading: form.meterReading, side: form.side,
+                photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+                photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+                photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+                materialsUsed,
+                customMaterials: customMaterials.filter(m => m.label.trim()),
+                hiddenMaterials,
+                ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+                updatedAt: new Date().toISOString(),
+              }
+            : h
+        );
+        setAllHouses(updated);
+        localStorage.setItem('gppms_houses', JSON.stringify(updated));
+        setPanelOpen(false); setEditEntry(null);
+        showToast('✓ Entry updated successfully');
+      } else {
+        const newEntry = {
+          id: Date.now(), bpNo: form.bpNo, name: form.name, mobile: form.mobile,
+          appNo: form.appNo, altMobile: form.altMobile,
+          acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
+          address1: form.address1, area: formArea, city: finalCityLabel,
+          meterNo: form.meterNo, meterDate: form.meterDate,
+          meterMake: form.meterMake, meterReading: form.meterReading,
+          gcStatus: form.gcStatus, giStatus: form.giStatus,
+          rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
+          plumbingDate: form.plumbingDate, side: form.side,
+          photo1Data: p1b64, photo1Name: photo1?.name || null,
+          photo2Data: p2b64, photo2Name: photo2?.name || null,
+          photoCount: [p1b64, p2b64].filter(Boolean).length,
+          materialsUsed,
+          customMaterials: customMaterials.filter(m => m.label.trim()),
+          hiddenMaterials,
+          ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+          createdAt: new Date().toISOString(),
+        };
+        const updated = [newEntry, ...(allHouses || [])];
+        setAllHouses(updated);
+        localStorage.setItem('gppms_houses', JSON.stringify(updated));
 
-      setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
-      setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
-      setCustomMaterials([]);
-      setHiddenMaterials([]);
-      setCatQtys({});
-      setCatOpen(null);
-      showToast('✓ Entry saved successfully');
+        // Deduct stock in localStorage (local mode only)
+        try {
+          const currentStockRaw = localStorage.getItem('gppms_stock');
+          let currentStock = currentStockRaw ? JSON.parse(currentStockRaw) : defaultStockData;
+          const normalize = (s) => (s || '').toLowerCase().trim();
+          const updatedStock = currentStock.map(item => {
+            const itemName = normalize(item.mat || item.material || '');
+            const matchEntry = Object.entries(materialsUsed).find(
+              ([matName]) => normalize(matName) === itemName
+            );
+            if (matchEntry) {
+              const [, matData] = matchEntry;
+              const qtyToDeduct = Number(matData.qty) || 0;
+              if (qtyToDeduct > 0) {
+                const newIssued    = (item.issued || 0) + qtyToDeduct;
+                const newReceived  = item.received !== undefined ? item.received : (item.recv || 0);
+                const newReturned  = item.returned !== undefined ? item.returned : (item.ret  || 0);
+                const clampedAvail = Math.max(0, newReceived - newIssued - newReturned);
+                return { ...item, issued: newIssued, used: newIssued,
+                         inStore: clampedAvail, available: clampedAvail,
+                         onSite: Math.max(0, (item.onSite || 0) - qtyToDeduct) };
+              }
+            }
+            return item;
+          });
+          localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+        } catch(err) { console.error('Stock deduction error:', err); }
+
+        setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
+        setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
+        setCustomMaterials([]);
+        setHiddenMaterials([]);
+        setCatQtys({});
+        setCatOpen(null);
+        showToast('✓ Entry saved successfully');
+      }
     }
   }
 
   /* ── Delete entry ── */
-  function handleDelete() {
+  async function handleDelete() {
     if (!editEntry) return;
+    if (siteId) {
+      try {
+        // The backend delete is not yet exposed via pngAPI — update status to 'Deleted' as soft delete,
+        // or just remove from local state; a hard delete endpoint can be added later.
+        // For now: optimistic remove from state only (re-fetch on next load will restore if not deleted).
+        // If you add DELETE /api/sites/:siteId/png-connections/:id to the backend, call it here.
+      } catch (err) { console.error('PNG delete error:', err); }
+    }
     const updated = (allHouses || []).filter(h => h.id !== editEntry.id);
     setAllHouses(updated);
-    localStorage.setItem('gppms_houses', JSON.stringify(updated));
+    if (!siteId) localStorage.setItem('gppms_houses', JSON.stringify(updated));
     setPanelOpen(false);
     setEditEntry(null);
     setShowDelete(false);

@@ -1,10 +1,12 @@
 // src/pages/PELaying.jsx
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useContext } from 'react';
 import defaultPeLaying from '../data/peLaying';
 import { exportPELaying } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/SlidePanel';
 import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
+import { AuthContext } from '../context/AuthContext';
+import { peLayingAPI } from '../utils/api';
 
 function initStore(key, defaults) {
   try {
@@ -50,8 +52,11 @@ const EMPTY_ENTRY = {
 
 export default function PELaying() {
   const { showToast } = useToast();
+  const { user }      = useContext(AuthContext);
+  const siteId        = user?.siteId || null;
   const { siteList, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext }  = useSite();
-  const [allData, setAllData] = useState([]);
+  const [allData,  setAllData]  = useState([]);
+  const [loading,  setLoading]  = useState(false);
 
   // 3-level form states for GA Location, City, Area
   const [formGA,   setFormGA]   = useState('');
@@ -106,8 +111,40 @@ export default function PELaying() {
 
   useEffect(() => {
     document.title = 'GP-PMS — PE Laying';
-    setAllData(initStore('pelaying', defaultPeLaying));
-  }, []);
+    if (siteId) {
+      setLoading(true);
+      peLayingAPI.getAll(siteId)
+        .then(records => {
+          // normalise backend shape to match frontend field names
+          const mapped = records.map(r => ({
+            id: r.id, sr: r.id,
+            layDate:    r.layingDate ? r.layingDate.split('T')[0] : '',
+            connType:   r.status     ? capitaliseStatus(r.status) : 'Domestic',
+            area:       r.area       || '',
+            coil:       r.coilNo     || '',
+            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
+            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
+            d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
+            d125oc: 0, d125b: 0, d125hdd: 0, d125tot: Number(r.d125tot) || 0,
+            workStatus: r.status || 'Laying',
+          }));
+          setAllData(mapped);
+        })
+        .catch(err => {
+          console.warn('PE API fetch failed, using localStorage fallback:', err);
+          setAllData(initStore('pelaying', defaultPeLaying));
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setAllData(initStore('pelaying', defaultPeLaying));
+    }
+  }, [siteId]);
+
+  function capitaliseStatus(s) {
+    if (!s) return 'Domestic';
+    const m = { LAYING: 'Laying', HDD: 'HDD', JOINT: 'Joint' };
+    return m[s] || s;
+  }
 
   // Filter / tab state
   const [activeTab, setActiveTab] = useState('Domestic');
@@ -228,7 +265,7 @@ export default function PELaying() {
     setPanelOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!validateForm()) return;
     const entryBase = {
       ...form,
@@ -247,19 +284,53 @@ export default function PELaying() {
       d125hdd: Number(form.d125hdd) || 0,
       ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
     };
-    let updated;
-    if (editingId !== null) {
-      updated = allData.map(r =>
-        (r.id === editingId || r.sr === editingId) ? { ...r, ...entryBase } : r
-      );
-      showToast('✓ PE Laying entry updated');
+
+    if (siteId) {
+      // Backend-mode: POST / PATCH
+      try {
+        const payload = {
+          area:       entryBase.area,
+          coilNo:     entryBase.coil,
+          layingDate: entryBase.layDate,
+          status:     entryBase.workStatus?.toUpperCase() || 'LAYING',
+          d32oc: entryBase.d32oc, d32b: entryBase.d32b,
+          d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
+          d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
+          d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
+        };
+        if (editingId) {
+          const updated = await peLayingAPI.update(siteId, editingId, payload);
+          setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
+            ? { ...r, ...entryBase, id: updated?.id || r.id } : r));
+          showToast('✓ PE Laying entry updated');
+        } else {
+          const created = await peLayingAPI.create(siteId, payload);
+          const newEntry = { ...entryBase, id: created?.id || Date.now(), sr: allData.length + 1 };
+          setAllData(prev => [newEntry, ...prev]);
+          showToast('✓ PE Laying entry added');
+        }
+      } catch (err) {
+        console.error('PE API save error:', err);
+        showToast('❌ Save failed. Please try again.');
+        return;
+      }
     } else {
-      const newEntry = { ...entryBase, id: Date.now(), sr: (allData.length + 1) };
-      updated = [newEntry, ...allData];
-      showToast('✓ PE Laying entry added');
+      // Local-mode fallback
+      let updated;
+      if (editingId !== null) {
+        updated = allData.map(r =>
+          (r.id === editingId || r.sr === editingId) ? { ...r, ...entryBase } : r
+        );
+        showToast('✓ PE Laying entry updated');
+      } else {
+        const newEntry = { ...entryBase, id: Date.now(), sr: (allData.length + 1) };
+        updated = [newEntry, ...allData];
+        showToast('✓ PE Laying entry added');
+      }
+      setAllData(updated);
+      localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
     }
-    setAllData(updated);
-    localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
+
     setPanelOpen(false);
     setForm(EMPTY_ENTRY);
     setErrors({});
@@ -269,7 +340,7 @@ export default function PELaying() {
   function handleDelete() {
     const updated = allData.filter(r => (r.id !== editingId && r.sr !== editingId));
     setAllData(updated);
-    localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
+    if (!siteId) localStorage.setItem('gppms_pelaying', JSON.stringify(updated));
     setPanelOpen(false);
     setShowDelete(false);
     setEditingId(null);
