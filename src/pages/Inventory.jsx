@@ -11,12 +11,12 @@ import { stockAPI } from '../utils/api';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const DEFAULT_COLS = [
-  { key: 'unit',      label: 'Unit' },
-  { key: 'received',  label: 'Received' },
-  { key: 'used',      label: 'Used' },
-  { key: 'returned',  label: 'Returned' },
+  { key: 'unit', label: 'Unit' },
+  { key: 'received', label: 'Received' },
+  { key: 'used', label: 'Used' },
+  { key: 'returned', label: 'Returned' },
   { key: 'available', label: 'Available' },
-  { key: 'status',    label: 'Status' },
+  { key: 'status', label: 'Status' },
 ];
 
 
@@ -35,9 +35,9 @@ function getSession() {
 function getStatus(onSite, inStore, open, recv) {
   const total = open + recv;
   const pct = total > 0 ? Math.round(((onSite + inStore) / total) * 100) : 0;
-  if (pct > 60) return { label: 'OK',       cls: 'badge-ok',       bar: '#16a34a', pct };
-  if (pct >= 20) return { label: 'Low',      cls: 'badge-low',      bar: '#d97706', pct };
-  return              { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
+  if (pct > 60) return { label: 'OK', cls: 'badge-ok', bar: '#16a34a', pct };
+  if (pct >= 20) return { label: 'Low', cls: 'badge-low', bar: '#d97706', pct };
+  return { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
 }
 
 
@@ -111,11 +111,11 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
                   {cat.items.map(item => {
                     if (readOnly) {
                       // readOnly mode: quantities[item] is an object { recv, issued, ret, inStore }
-                      const stats    = quantities[item] || {};
-                      const recv     = stats.recv    ?? 0;
-                      const issued   = stats.issued  ?? 0;
-                      const ret      = stats.ret     ?? 0;
-                      const inStore  = Math.max(0, stats.inStore ?? 0);
+                      const stats = quantities[item] || {};
+                      const recv = stats.recv ?? 0;
+                      const issued = stats.issued ?? 0;
+                      const ret = stats.ret ?? 0;
+                      const inStore = Math.max(0, stats.inStore ?? 0);
                       return (
                         <div key={item} style={{
                           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -194,9 +194,23 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
   );
 }
 
+const siteId = session?.siteId;
+
+useEffect(() => {
+  if (!siteId) return; // Don't load if no siteId
+  loadStock();
+}, [siteId]);
+
+const loadStock = async () => {
+  const response = await fetch(
+    `${API_URL}/api/sites/${siteId}/inventory`
+  );
+  ...
+};
+
 export default function Inventory() {
   const { showToast } = useToast();
-  const { user }      = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, selectedSiteId } = useSite();
 
   const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
@@ -205,8 +219,8 @@ export default function Inventory() {
   const currentSiteId = selectedSiteId;
 
   const [stockData, setStockData] = useState([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
 
@@ -220,16 +234,16 @@ export default function Inventory() {
   // Delivery form state
   const [challan, setChallan] = useState('');
   const [dateRcv, setDateRcv] = useState(todayStr());
-  const [site,    setSite]    = useState('');
-  const [notes,   setNotes]   = useState('');
+  const [site, setSite] = useState('');
+  const [notes, setNotes] = useState('');
   const [formErr, setFormErr] = useState({});
 
   // Category accordion state
-  const [openCategory,  setOpenCategory]  = useState(null);
-  const [quantities,    setQuantities]    = useState({});
+  const [openCategory, setOpenCategory] = useState(null);
+  const [quantities, setQuantities] = useState({});
 
   // 3-level form states for GA Location, City, Area
-  const [formGA,   setFormGA]   = useState('');
+  const [formGA, setFormGA] = useState('');
   const [formCity, setFormCity] = useState('');
   const [formArea, setFormArea] = useState('');
 
@@ -324,7 +338,7 @@ export default function Inventory() {
 
   const rows = useMemo(() => (stockData || []).map(s => {
     const netUsed = s.issued - s.ret;
-    const status  = getStatus(s.onSite, s.inStore, s.open, s.recv);
+    const status = getStatus(s.onSite, s.inStore, s.open, s.recv);
     const onSitePct = (s.open + s.recv) > 0 ? (s.onSite / (s.open + s.recv)) * 100 : 0;
     return { ...s, netUsed, status, onSitePct };
   }), [stockData]);
@@ -334,7 +348,7 @@ export default function Inventory() {
     issued: acc.issued + r.issued, ret: acc.ret + r.ret,
     netUsed: acc.netUsed + r.netUsed, onSite: acc.onSite + r.onSite,
     inStore: acc.inStore + r.inStore, req: acc.req + r.req,
-  }), { open:0, recv:0, issued:0, ret:0, netUsed:0, onSite:0, inStore:0, req:0 }), [rows]);
+  }), { open: 0, recv: 0, issued: 0, ret: 0, netUsed: 0, onSite: 0, inStore: 0, req: 0 }), [rows]);
 
   // Return Stock Panel form
   const [retDate, setRetDate] = useState(todayStr);
@@ -350,7 +364,7 @@ export default function Inventory() {
 
   async function handleSaveReturn() {
     const e = {};
-    if (!formGA)   e.ga   = 'GA Location is required';
+    if (!formGA) e.ga = 'GA Location is required';
     if (!formCity) e.city = 'City is required';
     if (!formArea) e.area = 'Area is required';
     if (!retRemark.trim()) e.retRemark = 'Remark/Reason is required';
@@ -408,18 +422,18 @@ export default function Inventory() {
 
   async function handleSave() {
     const e = {};
-    if (!dateRcv)  e.dateRcv = 'Date is required';
-    if (!formGA)   e.ga      = 'GA Location is required';
-    if (!formCity) e.city    = 'City is required';
-    if (!formArea) e.area    = 'Area is required';
+    if (!dateRcv) e.dateRcv = 'Date is required';
+    if (!formGA) e.ga = 'GA Location is required';
+    if (!formCity) e.city = 'City is required';
+    if (!formArea) e.area = 'Area is required';
     setFormErr(e);
 
     // Scroll & focus to first invalid field
     const fieldOrder = [
-      { key: 'dateRcv', id: 'inv-field-date'   },
-      { key: 'ga',      id: 'inv-field-ga'      },
-      { key: 'city',    id: 'inv-field-city'    },
-      { key: 'area',    id: 'inv-field-area'    },
+      { key: 'dateRcv', id: 'inv-field-date' },
+      { key: 'ga', id: 'inv-field-ga' },
+      { key: 'city', id: 'inv-field-city' },
+      { key: 'area', id: 'inv-field-area' },
     ];
     const first = fieldOrder.find(f => e[f.key]);
     if (first) {
@@ -569,7 +583,7 @@ export default function Inventory() {
           <input type="date" value={exportDate} onChange={e => setExportDate(e.target.value)}
             style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
           <button onClick={() => exportStockData(rows, exportDate)} className="btn btn-outline" style={{ height: 32 }}>
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export
           </button>
           {canWrite && (
@@ -611,7 +625,7 @@ export default function Inventory() {
                 ↩ Return Stock
               </button>
               <button onClick={openPanel} className="btn btn-primary" style={{ height: 32 }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Receive Stock
               </button>
             </>
@@ -633,8 +647,10 @@ export default function Inventory() {
       {!loading && !error && (
         <>
           <div style={{ marginBottom: 16 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 600,
-              color: '#1f4e1a', marginBottom: 10 }}>
+            <h3 style={{
+              fontSize: 14, fontWeight: 600,
+              color: '#1f4e1a', marginBottom: 10
+            }}>
               Stock by Category
               {stockData.length === 0 && (
                 <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>
@@ -646,7 +662,7 @@ export default function Inventory() {
               openCategory={openCategoryAccordion}
               setOpenCategory={setOpenCategoryAccordion}
               quantities={summaryQuantities}
-              setQuantities={() => {}}
+              setQuantities={() => { }}
               readOnly={true}
             />
           </div>
@@ -657,9 +673,9 @@ export default function Inventory() {
             const getStockStatus = (available, received) => {
               if (received === 0) return { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' };
               const pct = (available / received) * 100;
-              if (pct >= 50) return { label: 'Good',     color: '#16a34a', bg: '#dcfce7' };
-              if (pct >= 20) return { label: 'Low',      color: '#d97706', bg: '#fef3c7' };
-              return              { label: 'Critical',   color: '#dc2626', bg: '#fee2e2' };
+              if (pct >= 50) return { label: 'Good', color: '#16a34a', bg: '#dcfce7' };
+              if (pct >= 20) return { label: 'Low', color: '#d97706', bg: '#fef3c7' };
+              return { label: 'Critical', color: '#dc2626', bg: '#fee2e2' };
             };
 
             return (
@@ -683,14 +699,14 @@ export default function Inventory() {
                           color: '#fff',
                         }}>
                           {[
-                            { label: 'Sr.',       align: 'center', style: { width: 48 } },
-                            { label: 'Material',  align: 'left',   style: { minWidth: 190 } },
-                            { label: 'Unit',      align: 'center', style: { width: 64 } },
-                            { label: 'Received',  align: 'right'  },
-                            { label: 'Used',      align: 'right'  },
-                            { label: 'Returned',  align: 'right'  },
-                            { label: 'Available', align: 'right'  },
-                            { label: 'Status',    align: 'center' },
+                            { label: 'Sr.', align: 'center', style: { width: 48 } },
+                            { label: 'Material', align: 'left', style: { minWidth: 190 } },
+                            { label: 'Unit', align: 'center', style: { width: 64 } },
+                            { label: 'Received', align: 'right' },
+                            { label: 'Used', align: 'right' },
+                            { label: 'Returned', align: 'right' },
+                            { label: 'Available', align: 'right' },
+                            { label: 'Status', align: 'center' },
                             ...(canWrite ? [{ label: 'Action', align: 'center', style: { width: 80 } }] : []),
                           ].map(col => (
                             <th key={col.label} style={{
@@ -709,12 +725,12 @@ export default function Inventory() {
 
                       <tbody>
                         {rows.map((r, i) => {
-                          const recv        = r.recv    || 0;
-                          const used        = r.issued  || 0;
-                          const returned    = r.ret     || 0;
-                          const available   = Math.max(0, recv - used - returned);
-                          const status      = getStockStatus(available, recv);
-                          const base        = i % 2 === 0 ? '#fff' : '#f8fbf8';
+                          const recv = r.recv || 0;
+                          const used = r.issued || 0;
+                          const returned = r.ret || 0;
+                          const available = Math.max(0, recv - used - returned);
+                          const status = getStockStatus(available, recv);
+                          const base = i % 2 === 0 ? '#fff' : '#f8fbf8';
 
                           return (
                             <tr
@@ -853,11 +869,11 @@ export default function Inventory() {
       <SlidePanel isOpen={panelOpen} onClose={() => setPanelOpen(false)} title="Receive New Stock" onSave={handleSave}>
         <div>
           <SectionTitle>Delivery Details</SectionTitle>
-          <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Field label="Challan / DC Number (optional)">
               <Input value={challan} onChange={e => setChallan(e.target.value)} placeholder="e.g. DC-2026-001" />
             </Field>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
                 <Input id="inv-field-date" type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
               </Field>
@@ -912,7 +928,7 @@ export default function Inventory() {
         </div>
         <div>
           <SectionTitle>Materials Received</SectionTitle>
-          <p style={{ fontSize:11, color:'#64748b', marginBottom:10 }}>
+          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 10 }}>
             Click a category to expand. Enter quantities received (leave 0 to skip).
           </p>
           <CategoryAccordion
@@ -926,7 +942,7 @@ export default function Inventory() {
           <SectionTitle>Notes / Remarks</SectionTitle>
           <textarea value={notes} onChange={e => setNotes(e.target.value)}
             placeholder="Optional notes about this delivery..." rows={3}
-            style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:5, padding:'8px 10px', fontSize:13, resize:'vertical', boxSizing:'border-box' }} />
+            style={{ width: '100%', border: '1px solid #d1d5db', borderRadius: 5, padding: '8px 10px', fontSize: 13, resize: 'vertical', boxSizing: 'border-box' }} />
         </div>
       </SlidePanel>
 
@@ -1035,40 +1051,40 @@ export default function Inventory() {
 
       {/* ── Column Manager Modal ── */}
       {showColManager && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000, display:'flex', alignItems:'center', justifyContext:'center', padding:20 }}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 9000, display: 'flex', alignItems: 'center', justifyContext: 'center', padding: 20 }}
           onClick={() => setShowColManager(false)}>
-          <div style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:420, width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', maxHeight:'85vh', overflowY:'auto', margin:'auto' }}
+          <div style={{ background: '#fff', borderRadius: 12, padding: 28, maxWidth: 420, width: '100%', boxShadow: '0 20px 60px rgba(0,0,0,0.25)', maxHeight: '85vh', overflowY: 'auto', margin: 'auto' }}
             onClick={e => e.stopPropagation()}>
-            <div style={{ display:'flex', alignItems:'center', justifyContext:'space-between', marginBottom:18 }}>
-              <h3 style={{ margin:0, fontSize:16, fontWeight:700, color:'#1f4e1a' }}>⚙ Manage Columns</h3>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContext: 'space-between', marginBottom: 18 }}>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1f4e1a' }}>⚙ Manage Columns</h3>
               <button onClick={() => setShowColManager(false)}
-                style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#64748b', lineHeight:1 }}>×</button>
+                style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: '#64748b', lineHeight: 1 }}>×</button>
             </div>
-            <p style={{ fontSize:12, color:'#64748b', marginBottom:14 }}>Toggle columns on/off. Hidden columns are saved for your session.</p>
+            <p style={{ fontSize: 12, color: '#64748b', marginBottom: 14 }}>Toggle columns on/off. Hidden columns are saved for your session.</p>
 
-            <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Built-in Columns</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Built-in Columns</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
               {DEFAULT_COLS.map(col => (
-                <label key={col.key} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#f0f7ee', cursor:'pointer', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#bbf7d0' }}>
+                <label key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#f0f7ee', cursor: 'pointer', border: '1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#bbf7d0' }}>
                   <input type="checkbox" checked={!hiddenCols.includes(col.key)}
                     onChange={() => toggleColVisibility(col.key)}
-                    style={{ accentColor:'#2d6a27', width:15, height:15 }} />
-                  <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#1f4e1a', flex:1 }}>{col.label}</span>
-                  {hiddenCols.includes(col.key) && <span style={{ fontSize:10, color:'#94a3b8', background:'#f1f5f9', padding:'1px 6px', borderRadius:4 }}>hidden</span>}
+                    style={{ accentColor: '#2d6a27', width: 15, height: 15 }} />
+                  <span style={{ fontSize: 13, fontWeight: 500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#1f4e1a', flex: 1 }}>{col.label}</span>
+                  {hiddenCols.includes(col.key) && <span style={{ fontSize: 10, color: '#94a3b8', background: '#f1f5f9', padding: '1px 6px', borderRadius: 4 }}>hidden</span>}
                 </label>
               ))}
             </div>
 
             {customCols.length > 0 && (
               <>
-                <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Custom Columns</div>
-                <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Custom Columns</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 16 }}>
                   {customCols.map(col => (
-                    <div key={col.key} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#fefce8', border:'1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#fde68a' }}>
+                    <div key={col.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 6, background: hiddenCols.includes(col.key) ? '#f8fafc' : '#fefce8', border: '1px solid', borderColor: hiddenCols.includes(col.key) ? '#e2e8f0' : '#fde68a' }}>
                       <input type="checkbox" checked={!hiddenCols.includes(col.key)}
                         onChange={() => toggleColVisibility(col.key)}
-                        style={{ accentColor:'#2d6a27', width:15, height:15 }} />
-                      <span style={{ fontSize:13, fontWeight:500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#92400e', flex:1 }}>{col.label}</span>
+                        style={{ accentColor: '#2d6a27', width: 15, height: 15 }} />
+                      <span style={{ fontSize: 13, fontWeight: 500, color: hiddenCols.includes(col.key) ? '#94a3b8' : '#92400e', flex: 1 }}>{col.label}</span>
                       <button onClick={() => {
                         const updated = customCols.filter(c => c.key !== col.key);
                         setCustomCols(updated);
@@ -1076,18 +1092,18 @@ export default function Inventory() {
                         setHiddenCols(prev => prev.filter(k => k !== col.key));
                         showToast(`Column "${col.label}" deleted`);
                       }} title="Delete this column permanently"
-                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:4, width:26, height:26, cursor:'pointer', fontSize:13, display:'flex', alignItems:'center', justifyContext:'center', flexShrink:0 }}>×</button>
+                        style={{ background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, width: 26, height: 26, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContext: 'center', flexShrink: 0 }}>×</button>
                     </div>
                   ))}
                 </div>
               </>
             )}
 
-            <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:14 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Add New Column</div>
-              <div style={{ display:'flex', gap:8 }}>
+            <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Add New Column</div>
+              <div style={{ display: 'flex', gap: 8 }}>
                 <input id="newColInputInv" placeholder="Column name..."
-                  style={{ flex:1, height:34, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13 }} />
+                  style={{ flex: 1, height: 34, border: '1px solid #d1d5db', borderRadius: 6, padding: '0 10px', fontSize: 13 }} />
                 <button onClick={() => {
                   const val = document.getElementById('newColInputInv')?.value?.trim();
                   if (!val) return;
@@ -1097,12 +1113,12 @@ export default function Inventory() {
                   localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
                   document.getElementById('newColInputInv').value = '';
                   showToast(`✓ Column "${val}" added`);
-                }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
+                }} style={{ height: 34, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 6, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
               </div>
             </div>
 
             <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_inventory'); showToast('All columns visible'); }}
-              style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              style={{ marginTop: 14, width: '100%', height: 32, background: '#f1f5f9', color: '#374151', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
               ↺ Reset — Show All Columns
             </button>
           </div>

@@ -13,39 +13,40 @@ function loadSites() {
   } catch { return []; }
 }
 
+
 /* ── Context default ── */
 const SiteContext = createContext({
   // 3-level selection
-  selGA:    'all',
-  selCity:  'all',
-  selArea:  'all',
-  setSelGA:   () => {},
-  setSelCity: () => {},
-  setSelArea: () => {},
+  selGA: 'all',
+  selCity: 'all',
+  selArea: 'all',
+  setSelGA: () => { },
+  setSelCity: () => { },
+  setSelArea: () => { },
 
   // Global location context (from navbar flyout) — for pre-filling entry forms
   globalLocationContext: { gaId: 'all', cityId: 'all', area: 'all' },
-  setGlobalLocationContext: () => {},
+  setGlobalLocationContext: () => { },
 
   // Legacy — kept for backward compat
-  selectedSite:    'all',
-  setSelectedSite: () => {},
-  siteOptions:     [],
-  siteList:        [],
-  mergedGAs:       [],
-  getCitiesForGA:  () => [],
+  selectedSite: 'all',
+  setSelectedSite: () => { },
+  siteOptions: [],
+  siteList: [],
+  mergedGAs: [],
+  getCitiesForGA: () => [],
   getAreasForCity: () => [],
 
   // Backend site selections
-  selectedSiteId:   null,
-  setSelectedSiteId: () => {},
+  selectedSiteId: null,
+  setSelectedSiteId: () => { },
 });
 
 export function SiteProvider({ children }) {
   const { user } = useContext(AuthContext);
 
   // 3-level cascading state
-  const [selGA,   setSelGARaw]   = useState('all');
+  const [selGA, setSelGARaw] = useState('all');
   const [selCity, setSelCityRaw] = useState('all');
   const [selArea, setSelAreaRaw] = useState('all');
 
@@ -72,6 +73,19 @@ export function SiteProvider({ children }) {
       setSelectedSiteId(user.siteId);
     }
   }, [user]);
+
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        const response = await fetch(`${API_URL}/api/sites`);
+        const data = await response.json();
+        setMergedGAs(data);
+      } catch (err) {
+        console.error('Failed to fetch sites:', err);
+      }
+    };
+    fetchSites();
+  }, []);
 
   // Fetch sites from backend and populate siteList
   useEffect(() => {
