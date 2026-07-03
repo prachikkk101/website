@@ -10,14 +10,12 @@ import { useSite } from '../context/SiteContext';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const DEFAULT_COLS = [
-  { key: 'open',    label: 'Opening' },
-  { key: 'recv',    label: 'Received' },
-  { key: 'issued',  label: 'Issued' },
-  { key: 'ret',     label: 'Returned' },
-  { key: 'netUsed', label: 'Net Used' },
-  { key: 'onSite',  label: 'On Site' },
-  { key: 'inStore', label: 'In Store' },
-  { key: 'req',     label: 'Required' },
+  { key: 'unit',      label: 'Unit' },
+  { key: 'received',  label: 'Received' },
+  { key: 'used',      label: 'Used' },
+  { key: 'returned',  label: 'Returned' },
+  { key: 'available', label: 'Available' },
+  { key: 'status',    label: 'Status' },
 ];
 
 
@@ -483,6 +481,12 @@ export default function Inventory() {
   });
 
   const [hiddenCols, setHiddenCols] = useState(() => {
+    // Migration: wipe stale column-visibility prefs that reference old field names
+    const SCHEMA_V = 'v2_2024_schema';
+    if (localStorage.getItem('gppms_inv_col_schema') !== SCHEMA_V) {
+      localStorage.removeItem('gppms_hidden_cols_inventory');
+      localStorage.setItem('gppms_inv_col_schema', SCHEMA_V);
+    }
     try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_inventory') || '[]'); } catch { return []; }
   });
   const [showColManager, setShowColManager] = useState(false);
@@ -521,6 +525,21 @@ export default function Inventory() {
     setCustomCols(updated);
     localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
     showToast(`✓ Column "${removed.label}" removed`);
+  };
+
+  const handleDeleteItem = (materialName) => {
+    const confirmed = window.confirm(
+      `Delete "${materialName}" from inventory?\n\nThis will permanently remove this item and all its stock history (Received / Used / Returned / Available data).`
+    );
+    if (!confirmed) return;
+    const updated = (stockData || []).filter(item =>
+      item.mat !== materialName && item.name !== materialName
+    );
+    // Re-number sr
+    const renumbered = updated.map((item, i) => ({ ...item, sr: i + 1 }));
+    setStockData(renumbered);
+    localStorage.setItem('gppms_stock', JSON.stringify(renumbered));
+    showToast(`✓ "${materialName}" removed from inventory`);
   };
 
   const handleEditCell = (itemSr, colKey, colLabel, currentVal) => {
@@ -665,6 +684,7 @@ export default function Inventory() {
                         { label: 'Returned',  align: 'right'  },
                         { label: 'Available', align: 'right'  },
                         { label: 'Status',    align: 'center' },
+                        ...(canWrite ? [{ label: 'Action', align: 'center', style: { width: 80 } }] : []),
                       ].map(col => (
                         <th key={col.label} style={{
                           padding: '14px 16px',
@@ -752,6 +772,29 @@ export default function Inventory() {
                               {status.label}
                             </span>
                           </td>
+
+                          {/* Delete action */}
+                          {canWrite && (
+                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                              <button
+                                onClick={() => handleDeleteItem(r.mat)}
+                                title={`Delete "${r.mat}" from inventory`}
+                                style={{
+                                  background: 'white',
+                                  border: '1px solid #dc2626',
+                                  color: '#dc2626',
+                                  padding: '4px 8px',
+                                  borderRadius: 4,
+                                  fontSize: 11,
+                                  cursor: 'pointer',
+                                  fontWeight: 600,
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                🗑 Delete
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
@@ -775,6 +818,7 @@ export default function Inventory() {
                         {rows.reduce((s, r) => s + Math.max(0, (r.recv || 0) - (r.issued || 0) - (r.ret || 0)), 0).toLocaleString()}
                       </td>
                       <td />
+                      {canWrite && <td />}
                     </tr>
                   </tfoot>
                 </table>
