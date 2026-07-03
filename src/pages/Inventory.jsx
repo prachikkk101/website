@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { stockCategories } from '../data/stockCategories';
 import { useSite } from '../context/SiteContext';
+import { stockAPI } from '../utils/api';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -203,6 +204,8 @@ export default function Inventory() {
   }, [siteList]);
 
   const [stockData, setStockData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
 
@@ -262,9 +265,48 @@ export default function Inventory() {
     return q;
   }, [stockData]);
 
+  const mapStockData = (items) => {
+    return (items || []).map((item, idx) => ({
+      sr: idx + 1,
+      mat: item.material,
+      material: item.material,
+      unit: item.unit || 'pcs',
+      open: 0,
+      recv: item.received || 0,
+      received: item.received || 0,
+      issued: item.issued || 0,
+      used: item.issued || 0,
+      ret: item.returned || 0,
+      returned: item.returned || 0,
+      onSite: (item.received || 0) - (item.issued || 0) - (item.returned || 0),
+      inStore: item.inStore || 0,
+      available: item.inStore || 0,
+      req: 0
+    }));
+  };
+
   useEffect(() => {
-    document.title = 'GP-PMS \u2014 Stock Management';
-    setStockData(initStore('stock', defaultStockData));
+    document.title = 'GP-PMS — Stock Management';
+    const loadStock = async () => {
+      try {
+        setLoading(true);
+        const data = await stockAPI.getAll();
+        setStockData(mapStockData(data));
+      } catch (err) {
+        console.error('Failed to load stock:', err);
+        setError('Failed to load inventory');
+        setStockData(initStore('stock', defaultStockData));
+      } finally {
+        setLoading(false);
+      }
+    };
+    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+    if (sess.siteId) {
+      loadStock();
+    } else {
+      setStockData(initStore('stock', defaultStockData));
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -311,7 +353,7 @@ export default function Inventory() {
     return retRemark.trim().split(/\s+/).filter(Boolean).length;
   }, [retRemark]);
 
-  function handleSaveReturn() {
+  async function handleSaveReturn() {
     const e = {};
     if (!formGA)   e.ga   = 'GA Location is required';
     if (!formCity) e.city = 'City is required';
@@ -338,54 +380,76 @@ export default function Inventory() {
       return;
     }
 
-    // CORRECT logic: Available = Received - Used - Returned
-    let updatedStock = (stockData || []).map(s => {
-      const match = returnedItems.find(r => r.name === s.mat || r.name === s.material);
-      if (match) {
-        const newReturned = (s.ret || 0) + match.qty;
-        const newAvailable = (s.recv || 0) - (s.issued || 0) - newReturned;
-        const clampedAvailable = Math.max(0, newAvailable);
-        return {
-          ...s,
-          ret: newReturned,
-          returned: newReturned,
-          inStore: clampedAvailable,
-          available: clampedAvailable
-        };
+    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+    if (sess.siteId) {
+      try {
+        const itemsToSend = returnedItems.map(item => ({ material: item.name, qty: item.qty }));
+        await stockAPI.update('return', { items: itemsToSend });
+        const refreshed = await stockAPI.getAll();
+        setStockData(mapStockData(refreshed));
+        showToast('✓ Stock returned');
+
+        // Reset panel form and close
+        setRetDate(todayStr());
+        setRetSite('');
+        setRetRemark('');
+        setRetQuantities({});
+        setRetOpenCategory(null);
+        setRetFormErr({});
+        setReturnStockOpen(false);
+      } catch (err) {
+        showToast('✗ Failed to return stock', 'error');
       }
-      return s;
-    });
+    } else {
+      // CORRECT logic: Available = Received - Used - Returned
+      let updatedStock = (stockData || []).map(s => {
+        const match = returnedItems.find(r => r.name === s.mat || r.name === s.material);
+        if (match) {
+          const newReturned = (s.ret || 0) + match.qty;
+          const newAvailable = (s.recv || 0) - (s.issued || 0) - newReturned;
+          const clampedAvailable = Math.max(0, newAvailable);
+          return {
+            ...s,
+            ret: newReturned,
+            returned: newReturned,
+            inStore: clampedAvailable,
+            available: clampedAvailable
+          };
+        }
+        return s;
+      });
 
-    setStockData(updatedStock);
-    localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+      setStockData(updatedStock);
+      localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
 
-    // Save transaction to localStorage 'gppms_returns'
-    const newReturn = {
-      id: Date.now(),
-      date: retDate,
-      site: formArea, // Store the selected area/site
-      remark: retRemark.trim(),
-      items: returnedItems,
-      returnedBy: session.name || 'Supervisor',
-      createdAt: new Date().toISOString()
-    };
+      // Save transaction to localStorage 'gppms_returns'
+      const newReturn = {
+        id: Date.now(),
+        date: retDate,
+        site: formArea, // Store the selected area/site
+        remark: retRemark.trim(),
+        items: returnedItems,
+        returnedBy: session.name || 'Supervisor',
+        createdAt: new Date().toISOString()
+      };
 
-    let existingReturns = [];
-    try {
-      existingReturns = JSON.parse(localStorage.getItem('gppms_returns') || '[]');
-    } catch {}
-    localStorage.setItem('gppms_returns', JSON.stringify([newReturn, ...existingReturns]));
+      let existingReturns = [];
+      try {
+        existingReturns = JSON.parse(localStorage.getItem('gppms_returns') || '[]');
+      } catch {}
+      localStorage.setItem('gppms_returns', JSON.stringify([newReturn, ...existingReturns]));
 
-    // Reset panel form and close
-    setRetDate(todayStr());
-    setRetSite('');
-    setRetRemark('');
-    setRetQuantities({});
-    setRetOpenCategory(null);
-    setRetFormErr({});
-    setReturnStockOpen(false);
+      // Reset panel form and close
+      setRetDate(todayStr());
+      setRetSite('');
+      setRetRemark('');
+      setRetQuantities({});
+      setRetOpenCategory(null);
+      setRetFormErr({});
+      setReturnStockOpen(false);
 
-    showToast(`✓ Stock returned — ${returnedItems.length} items updated`);
+      showToast(`✓ Stock returned — ${returnedItems.length} items updated`);
+    }
   }
 
   function openPanel() {
@@ -395,7 +459,7 @@ export default function Inventory() {
     setPanelOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     const e = {};
     if (!dateRcv)  e.dateRcv = 'Date is required';
     if (!formGA)   e.ga      = 'GA Location is required';
@@ -420,7 +484,6 @@ export default function Inventory() {
     }
     if (Object.keys(e).length > 0) return;
 
-
     // Collect items with qty > 0
     const receivedItems = [];
     Object.entries(quantities).forEach(([key, qty]) => {
@@ -431,47 +494,61 @@ export default function Inventory() {
     });
 
     if (receivedItems.length === 0) {
-      showToast('\u26a0 No quantities entered');
+      showToast('⚠️ No quantities entered');
       return;
     }
 
-    // Update existing items or add new rows
-    let updatedStock = [...(stockData || [])];
-    let updatedCount = 0;
-
-    receivedItems.forEach(({ name, qty }) => {
-      const idx = updatedStock.findIndex(s => s.mat === name || s.material === name);
-      if (idx >= 0) {
-        const newReceived = (updatedStock[idx].recv || 0) + qty;
-        const newAvailable = newReceived - (updatedStock[idx].issued || 0) - (updatedStock[idx].ret || 0);
-        const clampedAvailable = Math.max(0, newAvailable);
-        updatedStock[idx] = {
-          ...updatedStock[idx],
-          recv: newReceived,
-          received: newReceived,
-          inStore: clampedAvailable,
-          available: clampedAvailable
-        };
-        updatedCount++;
-      } else {
-        // New item
-        updatedStock.push({
-          sr: updatedStock.length + 1,
-          mat: name, material: name,
-          unit: 'pcs', open: 0,
-          recv: qty, received: qty,
-          issued: 0, used: 0,
-          ret: 0, returned: 0,
-          onSite: qty, inStore: qty, available: qty, req: 0,
-        });
-        updatedCount++;
+    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+    if (sess.siteId) {
+      try {
+        const itemsToSend = receivedItems.map(item => ({ material: item.name, qty: item.qty, unit: 'pcs', category: '' }));
+        await stockAPI.create({ items: itemsToSend });
+        const refreshed = await stockAPI.getAll();
+        setStockData(mapStockData(refreshed));
+        showToast('✓ Stock received');
+        setPanelOpen(false);
+      } catch (err) {
+        showToast('✗ Failed to save', 'error');
       }
-    });
+    } else {
+      // Update existing items or add new rows in localStorage
+      let updatedStock = [...(stockData || [])];
+      let updatedCount = 0;
 
-    setStockData(updatedStock);
-    localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
-    setPanelOpen(false);
-    showToast(`\u2713 Stock received \u2014 ${updatedCount} items updated`);
+      receivedItems.forEach(({ name, qty }) => {
+        const idx = updatedStock.findIndex(s => s.mat === name || s.material === name);
+        if (idx >= 0) {
+          const newReceived = (updatedStock[idx].recv || 0) + qty;
+          const newAvailable = newReceived - (updatedStock[idx].issued || 0) - (updatedStock[idx].ret || 0);
+          const clampedAvailable = Math.max(0, newAvailable);
+          updatedStock[idx] = {
+            ...updatedStock[idx],
+            recv: newReceived,
+            received: newReceived,
+            inStore: clampedAvailable,
+            available: clampedAvailable
+          };
+          updatedCount++;
+        } else {
+          // New item
+          updatedStock.push({
+            sr: updatedStock.length + 1,
+            mat: name, material: name,
+            unit: 'pcs', open: 0,
+            recv: qty, received: qty,
+            issued: 0, used: 0,
+            ret: 0, returned: 0,
+            onSite: qty, inStore: qty, available: qty, req: 0,
+          });
+          updatedCount++;
+        }
+      });
+
+      setStockData(updatedStock);
+      localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+      setPanelOpen(false);
+      showToast(`✓ Stock received — ${updatedCount} items updated`);
+    }
   }
 
   const [customCols, setCustomCols] = useState(() => {
@@ -527,19 +604,32 @@ export default function Inventory() {
     showToast(`✓ Column "${removed.label}" removed`);
   };
 
-  const handleDeleteItem = (materialName) => {
+  const handleDeleteItem = async (materialName) => {
     const confirmed = window.confirm(
       `Delete "${materialName}" from inventory?\n\nThis will permanently remove this item and all its stock history (Received / Used / Returned / Available data).`
     );
     if (!confirmed) return;
-    const updated = (stockData || []).filter(item =>
-      item.mat !== materialName && item.name !== materialName
-    );
-    // Re-number sr
-    const renumbered = updated.map((item, i) => ({ ...item, sr: i + 1 }));
-    setStockData(renumbered);
-    localStorage.setItem('gppms_stock', JSON.stringify(renumbered));
-    showToast(`✓ "${materialName}" removed from inventory`);
+
+    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+    if (sess.siteId) {
+      try {
+        await stockAPI.delete(materialName);
+        const refreshed = await stockAPI.getAll();
+        setStockData(mapStockData(refreshed));
+        showToast('✓ Stock deleted');
+      } catch (err) {
+        showToast('✗ Failed to delete', 'error');
+      }
+    } else {
+      const updated = (stockData || []).filter(item =>
+        item.mat !== materialName && item.name !== materialName
+      );
+      // Re-number sr
+      const renumbered = updated.map((item, i) => ({ ...item, sr: i + 1 }));
+      setStockData(rennumbered);
+      localStorage.setItem('gppms_stock', JSON.stringify(rennumbered));
+      showToast(`✓ "${materialName}" removed from inventory`);
+    }
   };
 
   const handleEditCell = (itemSr, colKey, colLabel, currentVal) => {
@@ -625,215 +715,230 @@ export default function Inventory() {
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600,
-          color: '#1f4e1a', marginBottom: 10 }}>
-          Stock by Category
-          {stockData.length === 0 && (
-            <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>
-              — No stock received yet. Use "Receive Stock" to add items.
-            </span>
-          )}
-        </h3>
-        <CategoryAccordion
-          openCategory={openCategoryAccordion}
-          setOpenCategory={setOpenCategoryAccordion}
-          quantities={summaryQuantities}
-          setQuantities={() => {}}
-          readOnly={true}
-        />
-      </div>
+      {loading && (
+        <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
+          Loading inventory...
+        </div>
+      )}
+      {error && (
+        <div style={{ padding: 16, margin: '12px 0', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
+          Error: {error}
+        </div>
+      )}
 
-      {/* ── Stock Statement Table ── */}
-      {rows.length > 0 && (() => {
-        // Status helper
-        const getStockStatus = (available, received) => {
-          if (received === 0) return { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' };
-          const pct = (available / received) * 100;
-          if (pct >= 50) return { label: 'Good',     color: '#16a34a', bg: '#dcfce7' };
-          if (pct >= 20) return { label: 'Low',      color: '#d97706', bg: '#fef3c7' };
-          return              { label: 'Critical',   color: '#dc2626', bg: '#fee2e2' };
-        };
-
-        return (
-          <div style={{ marginBottom: 24 }}>
-            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1f4e1a', marginBottom: 10, letterSpacing: '-0.01em' }}>
-              Stock Statement
+      {!loading && !error && (
+        <>
+          <div style={{ marginBottom: 16 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 600,
+              color: '#1f4e1a', marginBottom: 10 }}>
+              Stock by Category
+              {stockData.length === 0 && (
+                <span style={{ fontSize: 12, fontWeight: 400, color: '#94a3b8', marginLeft: 8 }}>
+                  — No stock received yet. Use "Receive Stock" to add items.
+                </span>
+              )}
             </h3>
-
-            {/* Table card */}
-            <div style={{
-              background: '#fff',
-              borderRadius: 10,
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
-              overflow: 'hidden',
-            }}>
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                  <thead>
-                    <tr style={{
-                      background: 'linear-gradient(135deg, #2d6a27 0%, #1f4e1a 100%)',
-                      color: '#fff',
-                    }}>
-                      {[
-                        { label: 'Sr.',       align: 'center', style: { width: 48 } },
-                        { label: 'Material',  align: 'left',   style: { minWidth: 190 } },
-                        { label: 'Unit',      align: 'center', style: { width: 64 } },
-                        { label: 'Received',  align: 'right'  },
-                        { label: 'Used',      align: 'right'  },
-                        { label: 'Returned',  align: 'right'  },
-                        { label: 'Available', align: 'right'  },
-                        { label: 'Status',    align: 'center' },
-                        ...(canWrite ? [{ label: 'Action', align: 'center', style: { width: 80 } }] : []),
-                      ].map(col => (
-                        <th key={col.label} style={{
-                          padding: '14px 16px',
-                          textAlign: col.align,
-                          fontWeight: 700,
-                          fontSize: 11,
-                          letterSpacing: '0.05em',
-                          textTransform: 'uppercase',
-                          whiteSpace: 'nowrap',
-                          ...col.style,
-                        }}>{col.label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {rows.map((r, i) => {
-                      const recv        = r.recv    || 0;
-                      const used        = r.issued  || 0;
-                      const returned    = r.ret     || 0;
-                      const available   = Math.max(0, recv - used - returned);
-                      const status      = getStockStatus(available, recv);
-                      const base        = i % 2 === 0 ? '#fff' : '#f8fbf8';
-
-                      return (
-                        <tr
-                          key={r.sr}
-                          style={{ background: base, borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#f0f7ee'}
-                          onMouseLeave={e => e.currentTarget.style.background = base}
-                        >
-                          {/* Sr. */}
-                          <td style={{ padding: '14px 16px', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>
-                            {r.sr}
-                          </td>
-
-                          {/* Material */}
-                          <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
-                            {r.mat}
-                          </td>
-
-                          {/* Unit */}
-                          <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>
-                            {r.unit}
-                          </td>
-
-                          {/* Received */}
-                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#2d6a27', fontWeight: 600 }}>
-                            {recv.toLocaleString()}
-                          </td>
-
-                          {/* Used */}
-                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>
-                            {used.toLocaleString()}
-                          </td>
-
-                          {/* Returned */}
-                          <td style={{ padding: '14px 16px', textAlign: 'right', color: '#3b82f6', fontWeight: 600 }}>
-                            {returned.toLocaleString()}
-                          </td>
-
-                          {/* Available */}
-                          <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                            <span style={{
-                              fontWeight: 700,
-                              fontSize: 14,
-                              color: available > 0 ? '#16a34a' : '#dc2626',
-                            }}>
-                              {available.toLocaleString()}
-                            </span>
-                          </td>
-
-                          {/* Status badge */}
-                          <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                            <span style={{
-                              background: status.bg,
-                              color: status.color,
-                              fontSize: 11,
-                              fontWeight: 700,
-                              padding: '4px 10px',
-                              borderRadius: 12,
-                              display: 'inline-block',
-                              whiteSpace: 'nowrap',
-                            }}>
-                              {status.label}
-                            </span>
-                          </td>
-
-                          {/* Delete action */}
-                          {canWrite && (
-                            <td style={{ padding: '14px 16px', textAlign: 'center' }}>
-                              <button
-                                onClick={() => handleDeleteItem(r.mat)}
-                                title={`Delete "${r.mat}" from inventory`}
-                                style={{
-                                  background: 'white',
-                                  border: '1px solid #dc2626',
-                                  color: '#dc2626',
-                                  padding: '4px 8px',
-                                  borderRadius: 4,
-                                  fontSize: 11,
-                                  cursor: 'pointer',
-                                  fontWeight: 600,
-                                  whiteSpace: 'nowrap',
-                                }}
-                              >
-                                🗑 Delete
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-
-                  <tfoot>
-                    <tr style={{ background: '#f0f7ee', borderTop: '2px solid #2d6a27' }}>
-                      <td colSpan={3} style={{ padding: '16px', textAlign: 'right', color: '#1f4e1a', fontWeight: 700, fontSize: 12, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
-                        Total
-                      </td>
-                      <td style={{ padding: '16px', textAlign: 'right', color: '#2d6a27', fontWeight: 700 }}>
-                        {rows.reduce((s, r) => s + (r.recv || 0), 0).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '16px', textAlign: 'right', color: '#1e293b', fontWeight: 700 }}>
-                        {rows.reduce((s, r) => s + (r.issued || 0), 0).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '16px', textAlign: 'right', color: '#3b82f6', fontWeight: 700 }}>
-                        {rows.reduce((s, r) => s + (r.ret || 0), 0).toLocaleString()}
-                      </td>
-                      <td style={{ padding: '16px', textAlign: 'right', color: '#16a34a', fontWeight: 700, fontSize: 14 }}>
-                        {rows.reduce((s, r) => s + Math.max(0, (r.recv || 0) - (r.issued || 0) - (r.ret || 0)), 0).toLocaleString()}
-                      </td>
-                      <td />
-                      {canWrite && <td />}
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            </div>
-
-            {/* Status legend */}
-            <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: '#64748b', flexWrap: 'wrap' }}>
-              <span>🟢 Good — 50%+ available</span>
-              <span>🟡 Low — 20–49% available</span>
-              <span>🔴 Critical — under 20% available</span>
-            </div>
+            <CategoryAccordion
+              openCategory={openCategoryAccordion}
+              setOpenCategory={setOpenCategoryAccordion}
+              quantities={summaryQuantities}
+              setQuantities={() => {}}
+              readOnly={true}
+            />
           </div>
-        );
-      })()}
+
+          {/* ── Stock Statement Table ── */}
+          {rows.length > 0 && (() => {
+            // Status helper
+            const getStockStatus = (available, received) => {
+              if (received === 0) return { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' };
+              const pct = (available / received) * 100;
+              if (pct >= 50) return { label: 'Good',     color: '#16a34a', bg: '#dcfce7' };
+              if (pct >= 20) return { label: 'Low',      color: '#d97706', bg: '#fef3c7' };
+              return              { label: 'Critical',   color: '#dc2626', bg: '#fee2e2' };
+            };
+
+            return (
+              <div style={{ marginBottom: 24 }}>
+                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1f4e1a', marginBottom: 10, letterSpacing: '-0.01em' }}>
+                  Stock Statement
+                </h3>
+
+                {/* Table card */}
+                <div style={{
+                  background: '#fff',
+                  borderRadius: 10,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px rgba(0,0,0,0.04)',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{
+                          background: 'linear-gradient(135deg, #2d6a27 0%, #1f4e1a 100%)',
+                          color: '#fff',
+                        }}>
+                          {[
+                            { label: 'Sr.',       align: 'center', style: { width: 48 } },
+                            { label: 'Material',  align: 'left',   style: { minWidth: 190 } },
+                            { label: 'Unit',      align: 'center', style: { width: 64 } },
+                            { label: 'Received',  align: 'right'  },
+                            { label: 'Used',      align: 'right'  },
+                            { label: 'Returned',  align: 'right'  },
+                            { label: 'Available', align: 'right'  },
+                            { label: 'Status',    align: 'center' },
+                            ...(canWrite ? [{ label: 'Action', align: 'center', style: { width: 80 } }] : []),
+                          ].map(col => (
+                            <th key={col.label} style={{
+                              padding: '14px 16px',
+                              textAlign: col.align,
+                              fontWeight: 700,
+                              fontSize: 11,
+                              letterSpacing: '0.05em',
+                              textTransform: 'uppercase',
+                              whiteSpace: 'nowrap',
+                              ...col.style,
+                            }}>{col.label}</th>
+                          ))}
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {rows.map((r, i) => {
+                          const recv        = r.recv    || 0;
+                          const used        = r.issued  || 0;
+                          const returned    = r.ret     || 0;
+                          const available   = Math.max(0, recv - used - returned);
+                          const status      = getStockStatus(available, recv);
+                          const base        = i % 2 === 0 ? '#fff' : '#f8fbf8';
+
+                          return (
+                            <tr
+                              key={r.sr}
+                              style={{ background: base, borderBottom: '1px solid #f1f5f9', transition: 'background 0.15s' }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#f0f7ee'}
+                              onMouseLeave={e => e.currentTarget.style.background = base}
+                            >
+                              {/* Sr. */}
+                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>
+                                {r.sr}
+                              </td>
+
+                              {/* Material */}
+                              <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
+                                {r.mat}
+                              </td>
+
+                              {/* Unit */}
+                              <td style={{ padding: '14px 16px', textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                                {r.unit}
+                              </td>
+
+                              {/* Received */}
+                              <td style={{ padding: '14px 16px', textAlign: 'right', color: '#2d6a27', fontWeight: 600 }}>
+                                {recv.toLocaleString()}
+                              </td>
+
+                              {/* Used */}
+                              <td style={{ padding: '14px 16px', textAlign: 'right', color: '#1e293b', fontWeight: 600 }}>
+                                {used.toLocaleString()}
+                              </td>
+
+                              {/* Returned */}
+                              <td style={{ padding: '14px 16px', textAlign: 'right', color: '#3b82f6', fontWeight: 600 }}>
+                                {returned.toLocaleString()}
+                              </td>
+
+                              {/* Available */}
+                              <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                                <span style={{
+                                  fontWeight: 700,
+                                  fontSize: 14,
+                                  color: available > 0 ? '#16a34a' : '#dc2626',
+                                }}>
+                                  {available.toLocaleString()}
+                                </span>
+                              </td>
+
+                              {/* Status badge */}
+                              <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                <span style={{
+                                  background: status.bg,
+                                  color: status.color,
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: '4px 10px',
+                                  borderRadius: 12,
+                                  display: 'inline-block',
+                                  whiteSpace: 'nowrap',
+                                }}>
+                                  {status.label}
+                                </span>
+                              </td>
+
+                              {/* Delete action */}
+                              {canWrite && (
+                                <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                                  <button
+                                    onClick={() => handleDeleteItem(r.mat)}
+                                    title={`Delete "${r.mat}" from inventory`}
+                                    style={{
+                                      background: 'white',
+                                      border: '1px solid #dc2626',
+                                      color: '#dc2626',
+                                      padding: '4px 8px',
+                                      borderRadius: 4,
+                                      fontSize: 11,
+                                      cursor: 'pointer',
+                                      fontWeight: 600,
+                                      whiteSpace: 'nowrap',
+                                    }}
+                                  >
+                                    🗑 Delete
+                                  </button>
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+
+                      <tfoot>
+                        <tr style={{ background: '#f0f7ee', borderTop: '2px solid #2d6a27' }}>
+                          <td colSpan={3} style={{ padding: '16px', textAlign: 'right', color: '#1f4e1a', fontWeight: 700, fontSize: 12, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                            Total
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'right', color: '#2d6a27', fontWeight: 700 }}>
+                            {rows.reduce((s, r) => s + (r.recv || 0), 0).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'right', color: '#1e293b', fontWeight: 700 }}>
+                            {rows.reduce((s, r) => s + (r.issued || 0), 0).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'right', color: '#3b82f6', fontWeight: 700 }}>
+                            {rows.reduce((s, r) => s + (r.ret || 0), 0).toLocaleString()}
+                          </td>
+                          <td style={{ padding: '16px', textAlign: 'right', color: '#16a34a', fontWeight: 700, fontSize: 14 }}>
+                            {rows.reduce((s, r) => s + Math.max(0, (r.recv || 0) - (r.issued || 0) - (r.ret || 0)), 0).toLocaleString()}
+                          </td>
+                          <td />
+                          {canWrite && <td />}
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Status legend */}
+                <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: '#64748b', flexWrap: 'wrap' }}>
+                  <span>🟢 Good — 50%+ available</span>
+                  <span>🟡 Low — 20–49% available</span>
+                  <span>🔴 Critical — under 20% available</span>
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      )}
 
 
       <p style={{ marginTop: 10, fontSize: 12, color: '#94a3b8', fontStyle: 'italic' }}>
