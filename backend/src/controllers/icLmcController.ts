@@ -115,13 +115,13 @@ export const getLMCWork = async (req: AuthenticatedRequest, res: Response, next:
 export const createLMCWork = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
     appNo: z.string().min(1),
-    bpNo: z.string().optional(),
+    bpNo: z.string().nullable().optional(),
     customerName: z.string().min(1),
     address: z.string().min(1),
-    lmcDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    regulatorNo: z.string().optional(),
-    meterSerialNo: z.string().optional(),
-    remarks: z.string().optional(),
+    lmcDate: z.string().nullable().optional(),
+    regulatorNo: z.string().nullable().optional(),
+    meterSerialNo: z.string().nullable().optional(),
+    remarks: z.string().nullable().optional(),
   });
 
   try {
@@ -136,8 +136,14 @@ export const createLMCWork = async (req: AuthenticatedRequest, res: Response, ne
     const record = await prisma.lMCWork.create({
       data: {
         siteId,
-        ...data,
+        appNo: data.appNo,
+        bpNo: data.bpNo || null,
+        customerName: data.customerName,
+        address: data.address,
         lmcDate: data.lmcDate ? new Date(data.lmcDate as string) : null,
+        regulatorNo: data.regulatorNo || null,
+        meterSerialNo: data.meterSerialNo || null,
+        remarks: data.remarks || null,
       },
     });
 
@@ -149,10 +155,10 @@ export const createLMCWork = async (req: AuthenticatedRequest, res: Response, ne
 
 export const updateLMCWork = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
-    lmcDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    regulatorNo: z.string().optional(),
-    meterSerialNo: z.string().optional(),
-    remarks: z.string().optional(),
+    lmcDate: z.string().nullable().optional(),
+    regulatorNo: z.string().nullable().optional(),
+    meterSerialNo: z.string().nullable().optional(),
+    remarks: z.string().nullable().optional(),
   });
 
   try {
@@ -162,8 +168,10 @@ export const updateLMCWork = async (req: AuthenticatedRequest, res: Response, ne
     const updated = await prisma.lMCWork.update({
       where: { id: recordId },
       data: {
-        ...data,
-        lmcDate: data.lmcDate ? new Date(data.lmcDate) : undefined,
+        lmcDate: data.lmcDate ? new Date(data.lmcDate) : (data.lmcDate === null ? null : undefined),
+        regulatorNo: data.regulatorNo !== undefined ? data.regulatorNo : undefined,
+        meterSerialNo: data.meterSerialNo !== undefined ? data.meterSerialNo : undefined,
+        remarks: data.remarks !== undefined ? data.remarks : undefined,
         updatedAt: new Date(),
       },
     });

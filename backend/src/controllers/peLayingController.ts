@@ -40,21 +40,21 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
 
 export const createPELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
-    layingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    testingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    chargingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    raBillNo: z.string().optional(),
-    reportNo: z.string().optional(),
-    status: z.nativeEnum(PEStatus).default(PEStatus.LAYING),
+    layingDate: z.string(),
+    testingDate: z.string().nullable().optional(),
+    chargingDate: z.string().nullable().optional(),
+    raBillNo: z.string().nullable().optional(),
+    reportNo: z.string().nullable().optional(),
+    status: z.nativeEnum(PEStatus).nullable().optional(),
     area: z.string().min(1),
-    coilNo: z.string().min(1),
-    d32oc: z.number().nonnegative().default(0),
-    d32b: z.number().nonnegative().default(0),
-    d63oc: z.number().nonnegative().default(0),
-    d63b: z.number().nonnegative().default(0),
-    d63hdd: z.number().nonnegative().default(0),
-    d90tot: z.number().nonnegative().default(0),
-    d125tot: z.number().nonnegative().default(0),
+    coilNo: z.string().nullable().optional(),
+    d32oc: z.number().nonnegative().nullable().optional(),
+    d32b: z.number().nonnegative().nullable().optional(),
+    d63oc: z.number().nonnegative().nullable().optional(),
+    d63b: z.number().nonnegative().nullable().optional(),
+    d63hdd: z.number().nonnegative().nullable().optional(),
+    d90tot: z.number().nonnegative().nullable().optional(),
+    d125tot: z.number().nonnegative().nullable().optional(),
   });
 
   try {
@@ -64,10 +64,21 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
     const record = await prisma.pELaying.create({
       data: {
         siteId,
-        ...data,
         layingDate: new Date(data.layingDate),
         testingDate: data.testingDate ? new Date(data.testingDate) : null,
         chargingDate: data.chargingDate ? new Date(data.chargingDate) : null,
+        raBillNo: data.raBillNo || null,
+        reportNo: data.reportNo || null,
+        status: data.status || PEStatus.LAYING,
+        area: data.area,
+        coilNo: data.coilNo || "",
+        d32oc: data.d32oc ?? 0,
+        d32b: data.d32b ?? 0,
+        d63oc: data.d63oc ?? 0,
+        d63b: data.d63b ?? 0,
+        d63hdd: data.d63hdd ?? 0,
+        d90tot: data.d90tot ?? 0,
+        d125tot: data.d125tot ?? 0,
       },
     });
 
@@ -79,11 +90,11 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
 export const updatePELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
-    testingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    chargingDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-    raBillNo: z.string().optional(),
-    reportNo: z.string().optional(),
-    status: z.nativeEnum(PEStatus).optional(),
+    testingDate: z.string().nullable().optional(),
+    chargingDate: z.string().nullable().optional(),
+    raBillNo: z.string().nullable().optional(),
+    reportNo: z.string().nullable().optional(),
+    status: z.nativeEnum(PEStatus).nullable().optional(),
   });
 
   try {
@@ -93,9 +104,11 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     const updated = await prisma.pELaying.update({
       where: { id: recordId },
       data: {
-        ...data,
-        testingDate: data.testingDate ? new Date(data.testingDate) : undefined,
-        chargingDate: data.chargingDate ? new Date(data.chargingDate) : undefined,
+        testingDate: data.testingDate ? new Date(data.testingDate) : (data.testingDate === null ? null : undefined),
+        chargingDate: data.chargingDate ? new Date(data.chargingDate) : (data.chargingDate === null ? null : undefined),
+        raBillNo: data.raBillNo !== undefined ? data.raBillNo : undefined,
+        reportNo: data.reportNo !== undefined ? data.reportNo : undefined,
+        status: data.status !== undefined && data.status !== null ? data.status : undefined,
         updatedAt: new Date(),
       },
     });
