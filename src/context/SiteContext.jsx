@@ -3,34 +3,6 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { gaLocations } from '../data/gaLocations';
 import { AuthContext } from './AuthContext';
 import api from '../utils/api';
-import { createContext, useState, useEffect } from 'react';
-
-export const SiteContext = createContext();
-
-export function SiteProvider({ children }) {
-  const [mergedGAs, setMergedGAs] = useState([]);
-  const [selectedSiteId, setSelectedSiteId] = useState(null);
-
-  useEffect(() => {
-    const fetchSites = async () => {
-      try {
-        const session = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-        if (session?.siteId) {
-          setSelectedSiteId(session.siteId);
-        }
-      } catch (err) {
-        console.error('Failed to load site:', err);
-      }
-    };
-    fetchSites();
-  }, []);
-
-  return (
-    <SiteContext.Provider value={{ mergedGAs, selectedSiteId }}>
-      {children}
-    </SiteContext.Provider>
-  );
-}
 
 /* ── Read custom sites from localStorage (kept as fallback for offline) ── */
 function loadSites() {
@@ -41,36 +13,28 @@ function loadSites() {
   } catch { return []; }
 }
 
-
 /* ── Context default ── */
-const SiteContext = createContext({
-  // 3-level selection
+export const SiteContext = createContext({
   selGA: 'all',
   selCity: 'all',
   selArea: 'all',
-  setSelGA: () => { },
-  setSelCity: () => { },
-  setSelArea: () => { },
-
-  // Global location context (from navbar flyout) — for pre-filling entry forms
+  setSelGA: () => {},
+  setSelCity: () => {},
+  setSelArea: () => {},
   globalLocationContext: { gaId: 'all', cityId: 'all', area: 'all' },
-  setGlobalLocationContext: () => { },
-
-  // Legacy — kept for backward compat
+  setGlobalLocationContext: () => {},
   selectedSite: 'all',
-  setSelectedSite: () => { },
+  setSelectedSite: () => {},
   siteOptions: [],
   siteList: [],
   mergedGAs: [],
   getCitiesForGA: () => [],
   getAreasForCity: () => [],
-
-  // Backend site selections
   selectedSiteId: null,
-  setSelectedSiteId: () => { },
+  setSelectedSiteId: () => {},
 });
 
-{
+export function SiteProvider({ children }) {
   const { user } = useContext(AuthContext);
 
   // 3-level cascading state
@@ -101,19 +65,6 @@ const SiteContext = createContext({
       setSelectedSiteId(user.siteId);
     }
   }, [user]);
-
-  useEffect(() => {
-    const fetchSites = async () => {
-      try {
-        const response = await fetch(`${API_URL}/api/sites`);
-        const data = await response.json();
-        setMergedGAs(data);
-      } catch (err) {
-        console.error('Failed to fetch sites:', err);
-      }
-    };
-    fetchSites();
-  }, []);
 
   // Fetch sites from backend and populate siteList
   useEffect(() => {
@@ -199,6 +150,7 @@ const SiteContext = createContext({
     setSelAreaRaw('all');
   }
 
+  // Set selected area
   function setSelArea(val) {
     setSelAreaRaw(val);
   }

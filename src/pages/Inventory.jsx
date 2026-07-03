@@ -8,7 +8,6 @@ import { stockCategories } from '../data/stockCategories';
 import { useSite } from '../context/SiteContext';
 import { stockAPI } from '../utils/api';
 
-import { SiteContext } from '../context/SiteContext';
 const todayStr = () => new Date().toISOString().split('T')[0];
 
 const DEFAULT_COLS = [
@@ -194,31 +193,6 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
     </div>
   );
 }
-
-const { selectedSiteId } = useContext(SiteContext);
-const [stock, setStock] = useState([]);
-const [loading, setLoading] = useState(true);
-
-useEffect(() => {
-  if (!selectedSiteId) return;
-  loadStock();
-}, [selectedSiteId]);
-
-const loadStock = async () => {
-  try {
-    setLoading(true);
-    const API_URL = import.meta.env.VITE_API_URL;
-    const response = await fetch(`${API_URL}/api/sites/${selectedSiteId}/inventory`);
-    const data = await response.json();
-    setStock(Array.isArray(data) ? data : []);
-  } catch (err) {
-    console.error('Stock error:', err);
-    setStock([]);
-  } finally {
-    setLoading(false);
-  }
-};
-
 export default function Inventory() {
   const { showToast } = useToast();
   const { user } = useContext(AuthContext);
