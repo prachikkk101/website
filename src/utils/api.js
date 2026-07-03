@@ -145,32 +145,62 @@ export const icWorkAPI = {
                   /api/stock-categories
    All endpoints are authenticated; data is derived from the
    Site and MaterialItem tables in the Neon database.
+   Diagnostic logging (🔵 before / 🟢 after) is intentional —
+   it proves data is coming from the API, not localStorage.
 ───────────────────────────────────────────────────────────── */
 export const dataAPI = {
   /** Returns all distinct GA locations (derived from Site.gaName). */
-  getGALocations: () =>
-    api.get('/ga-locations').then(r => r.data.gaLocations || []),
-
-  /**
-   * Returns cities for a given GA location.
-   * @param {string} [gaLocationId] - filter by GA (optional)
-   */
-  getCities: (gaLocationId) => {
-    const params = gaLocationId ? { gaLocationId } : {};
-    return api.get('/cities', { params }).then(r => r.data.cities || []);
+  getGALocations: () => {
+    console.log('🔵 API CALL: GET /api/ga-locations');
+    return api.get('/ga-locations').then(r => {
+      const data = r.data.gaLocations || [];
+      console.log('🟢 API RESPONSE: /ga-locations — count:', data.length, data);
+      return data;
+    }).catch(err => {
+      console.error('❌ API ERROR: /ga-locations', err.response?.status, err.message);
+      throw err;
+    });
   },
 
-  /**
-   * Returns areas for a given city.
-   * @param {string} [cityId] - filter by city (optional)
-   */
+  /** Returns cities, optionally filtered by GA location. */
+  getCities: (gaLocationId) => {
+    const params = gaLocationId ? { gaLocationId } : {};
+    console.log('🔵 API CALL: GET /api/cities', 'Params:', params);
+    return api.get('/cities', { params }).then(r => {
+      const data = r.data.cities || [];
+      console.log('🟢 API RESPONSE: /cities — count:', data.length, data);
+      return data;
+    }).catch(err => {
+      console.error('❌ API ERROR: /cities', err.response?.status, err.message);
+      throw err;
+    });
+  },
+
+  /** Returns areas, optionally filtered by city. */
   getAreas: (cityId) => {
     const params = cityId ? { cityId } : {};
-    return api.get('/areas', { params }).then(r => r.data.areas || []);
+    console.log('🔵 API CALL: GET /api/areas', 'Params:', params);
+    return api.get('/areas', { params }).then(r => {
+      const data = r.data.areas || [];
+      console.log('🟢 API RESPONSE: /areas — count:', data.length, data);
+      return data;
+    }).catch(err => {
+      console.error('❌ API ERROR: /areas', err.response?.status, err.message);
+      throw err;
+    });
   },
 
   /** Returns all distinct stock categories from MaterialItem table. */
-  getStockCategories: () =>
-    api.get('/stock-categories').then(r => r.data.categories || []),
+  getStockCategories: () => {
+    console.log('🔵 API CALL: GET /api/stock-categories');
+    return api.get('/stock-categories').then(r => {
+      const data = r.data.categories || [];
+      console.log('🟢 API RESPONSE: /stock-categories — count:', data.length, data);
+      return data;
+    }).catch(err => {
+      console.error('❌ API ERROR: /stock-categories', err.response?.status, err.message);
+      throw err;
+    });
+  },
 };
 

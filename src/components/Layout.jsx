@@ -27,12 +27,6 @@ function getSession() {
   try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
 }
 
-function getPendingCount() {
-  try {
-    const reqs = JSON.parse(localStorage.getItem('gppms_access_requests') || '[]');
-    return reqs.filter(r => r.status === 'pending').length;
-  } catch { return 0; }
-}
 
 export default function Layout() {
   const location  = useLocation();
@@ -43,7 +37,7 @@ export default function Layout() {
   const { showToast } = useToast();
   const [mobileMenuOpen,   setMobileMenuOpen]   = useState(false);
   const [backendStatus,    setBackendStatus]    = useState('checking'); // 'checking'|'connected'|'offline'
-  const [pendingCount,     setPendingCount]     = useState(0);
+  const [pendingCount,     setPendingCount]     = useState(0); // updated from backend when access request endpoint is added
   // Site selector modal state (replaces hover flyout)
   const [siteModalOpen,    setSiteModalOpen]    = useState(false);
 
@@ -79,7 +73,7 @@ export default function Layout() {
   useEffect(() => { setSiteModalOpen(false); }, [location.pathname]);
 
   // Re-read pending count whenever location changes (Access page approvals update it)
-  useEffect(() => { setPendingCount(getPendingCount()); }, [location.pathname]);
+  // TODO: fetch pending access request count from backend API
 
   // Refresh user permissions/roles on every page navigation
   useEffect(() => {

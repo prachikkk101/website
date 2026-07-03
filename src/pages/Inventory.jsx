@@ -3,9 +3,8 @@ import { exportStockData } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/SlidePanel';
 import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
-import { stockCategories } from '../data/stockCategories';
 import { useSite } from '../context/SiteContext';
-import { stockAPI } from '../utils/api';
+import { stockAPI, dataAPI } from '../utils/api';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -42,13 +41,21 @@ function getStatus(onSite, inStore, open, recv) {
 
 /* ── Category Accordion for Receive Stock ── */
 function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuantities, readOnly = false }) {
-  // Load categories from localStorage so custom items persist
-  const [categories, setCategories] = useState(() => {
-    try {
-      const saved = localStorage.getItem('gppms_stock_categories');
-      return saved ? JSON.parse(saved) : stockCategories;
-    } catch { return stockCategories; }
-  });
+  // Load categories from the live backend API
+  const [categories, setCategories] = useState([]);
+  const [catLoading, setCatLoading] = useState(true);
+
+  useEffect(() => {
+    dataAPI.getStockCategories()
+      .then(cats => {
+        // getStockCategories returns [{ id, name }]; we need the stockCategories shape.
+        // Since MaterialItem.category stores category names, we group materials by category.
+        // For now map each to a simple expandable group with the category name.
+        setCategories(cats.map(c => ({ id: String(c.id), label: c.name, color: '#1f4e1a', items: [] })));
+      })
+      .catch(() => setCategories([]))
+      .finally(() => setCatLoading(false));
+  }, []);
 
   function toggleCategory(id) {
     setOpenCategory(prev => prev === id ? null : id);
@@ -58,31 +65,15 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
     setQuantities(prev => ({ ...prev, [`${catId}__${item}`]: qty }));
   }
 
-  function handleAddItem(catId) {
-    const name = prompt('Enter new material name to add to this category:');
-    if (!name || !name.trim()) return;
-    const updated = categories.map(cat =>
-      cat.id === catId
-        ? { ...cat, items: [...cat.items, name.trim()] }
-        : cat
-    );
-    setCategories(updated);
-    localStorage.setItem('gppms_stock_categories', JSON.stringify(updated));
-  }
-
-  function handleRemoveItem(catId, itemName) {
-    if (!window.confirm(`Remove "${itemName}" from this category?`)) return;
-    const updated = categories.map(cat =>
-      cat.id === catId
-        ? { ...cat, items: cat.items.filter(i => i !== itemName) }
-        : cat
-    );
-    setCategories(updated);
-    localStorage.setItem('gppms_stock_categories', JSON.stringify(updated));
-  }
+  if (catLoading) return <p style={{ color: '#64748b', fontSize: 13 }}>Loading categories…</p>;
 
   return (
     <div>
+      {categories.length === 0 && (
+        <p style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>
+          No stock categories found. Add materials via the backend admin panel.
+        </p>
+      )}
       {categories.map(cat => {
         const isOpen = openCategory === cat.id;
         return (
@@ -100,53 +91,47 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
               }}
             >
               <span>{cat.label}</span>
-              <span style={{ fontSize: 14 }}>{isOpen ? '\u25b2' : '\u25bc'}</span>
+              <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
             </div>
 
             {/* Expanded items */}
             {isOpen && (
               <div style={{ padding: '12px 16px', background: 'white' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: readOnly ? 0 : 10 }}>
-                  {cat.items.map(item => {
-                    if (readOnly) {
-                      // readOnly mode: quantities[item] is an object { recv, issued, ret, inStore }
-                      const stats = quantities[item] || {};
-                      const recv = stats.recv ?? 0;
-                      const issued = stats.issued ?? 0;
-                      const ret = stats.ret ?? 0;
-                      const inStore = Math.max(0, stats.inStore ?? 0);
-                      return (
-                        <div key={item} style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '10px 12px', fontSize: '12px',
-                          borderBottom: '1px solid #f1f5f9',
-                          background: '#fafafa', borderRadius: 4,
-                        }}>
-                          <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: '#374151' }}>{item}</span>
-                          <div style={{ display: 'flex', gap: 14, fontSize: '11px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                            <span style={{ color: '#64748b' }}>
-                              Received: <b style={{ color: '#2d6a27' }}>{recv}</b>
-                            </span>
-                            <span style={{ color: '#64748b' }}>
-                              Used: <b style={{ color: '#1e293b' }}>{issued}</b>
-                            </span>
-                            <span style={{ color: '#64748b' }}>
-                              Returned: <b style={{ color: '#3b82f6' }}>{ret}</b>
-                            </span>
-                            <span style={{ color: '#64748b' }}>
-                              Available: <b style={{ color: inStore > 0 ? '#16a34a' : '#dc2626' }}>{inStore}</b>
-                            </span>
+                {cat.items.length === 0 ? (
+                  <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
+                    No items in this category.
+                  </p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {cat.items.map(item => {
+                      if (readOnly) {
+                        const stats = quantities[item] || {};
+                        const recv = stats.recv ?? 0;
+                        const issued = stats.issued ?? 0;
+                        const ret = stats.ret ?? 0;
+                        const inStore = Math.max(0, stats.inStore ?? 0);
+                        return (
+                          <div key={item} style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '10px 12px', fontSize: '12px',
+                            borderBottom: '1px solid #f1f5f9',
+                            background: '#fafafa', borderRadius: 4,
+                          }}>
+                            <span style={{ flex: 1, fontSize: 11.5, fontWeight: 500, color: '#374151' }}>{item}</span>
+                            <div style={{ display: 'flex', gap: 14, fontSize: '11px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <span style={{ color: '#64748b' }}>Received: <b style={{ color: '#2d6a27' }}>{recv}</b></span>
+                              <span style={{ color: '#64748b' }}>Used: <b style={{ color: '#1e293b' }}>{issued}</b></span>
+                              <span style={{ color: '#64748b' }}>Returned: <b style={{ color: '#3b82f6' }}>{ret}</b></span>
+                              <span style={{ color: '#64748b' }}>Available: <b style={{ color: inStore > 0 ? '#16a34a' : '#dc2626' }}>{inStore}</b></span>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    }
-
-                    // Edit mode
-                    const val = quantities[`${cat.id}__${item}`] ?? 0;
-                    return (
-                      <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
-                        <>
+                        );
+                      }
+                      // Edit mode
+                      const val = quantities[`${cat.id}__${item}`] ?? 0;
+                      return (
+                        <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
                           <input
                             type="number" min="0"
                             value={val === 0 ? '' : val}
@@ -156,33 +141,14 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
                               const num = raw === '' ? 0 : Number(raw);
                               updateQty(cat.id, item, num);
                             }}
-                            onBlur={(e) => {
-                              if (e.target.value === '') {
-                                updateQty(cat.id, item, 0);
-                              }
-                            }}
+                            onBlur={(e) => { if (e.target.value === '') updateQty(cat.id, item, 0); }}
                             placeholder="0"
                             style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
                           />
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(cat.id, item)}
-                            title={`Remove "${item}"`}
-                            style={{ width: 26, height: 28, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                          >×</button>
-                        </>
-                      </div>
-                    );
-                  })}
-                </div>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem(cat.id)}
-                    style={{ width: '100%', height: 30, background: '#f0f7ee', color: '#2d6a27', border: '1px dashed #2d6a27', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-                  >
-                    + Add Item to {cat.label}
-                  </button>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             )}
@@ -538,14 +504,8 @@ export default function Inventory() {
     if (!canWrite) return;
     const newVal = prompt(`Enter ${colLabel} for this item:`, currentVal || '');
     if (newVal === null) return;
-    const updated = stockData.map(s => {
-      if (s.sr === itemSr) {
-        return { ...s, [colKey]: newVal.trim() };
-      }
-      return s;
-    });
-    setStockData(updated);
-    localStorage.setItem('gppms_stock', JSON.stringify(updated));
+    // Update local display state only (custom column data is UI-side)
+    setStockData(prev => prev.map(s => s.sr === itemSr ? { ...s, [colKey]: newVal.trim() } : s));
     showToast('✓ Value updated');
   };
 

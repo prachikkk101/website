@@ -1,7 +1,7 @@
 // src/components/StockTable.jsx
 import { useState, useMemo } from 'react';
 import { exportStockData } from '../utils/exportExcel';
-import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
+import SlidePanel, { Field, Input, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -25,9 +25,9 @@ function MiniProgress({ pct, status }) {
   );
 }
 
-const SITES = ['Khanna','UE-II','PLA','Kohara'];
-
-export default function StockTable({ data = [], readOnly = false }) {
+/** siteName is passed by the parent (Inventory / MySite) — it is the currently
+ *  selected site from SiteContext, never chosen inside this component. */
+export default function StockTable({ data = [], readOnly = false, siteName = '' }) {
   const { showToast } = useToast();
   const [extraReceived, setExtraReceived] = useState({});
   const [panelOpen,     setPanelOpen]     = useState(false);
@@ -38,7 +38,6 @@ export default function StockTable({ data = [], readOnly = false }) {
   // Receive Stock panel form
   const [challan,  setChallan]  = useState('');
   const [dateRcv,  setDateRcv]  = useState(todayStr());
-  const [site,     setSite]     = useState(SITES[0]);
   const [notes,    setNotes]    = useState('');
   const [qtyMap,   setQtyMap]   = useState({});
   const [formErr,  setFormErr]  = useState({});
@@ -77,7 +76,7 @@ export default function StockTable({ data = [], readOnly = false }) {
       init[sId] = 0; 
     });
     setQtyMap(init);
-    setChallan(''); setDateRcv(todayStr()); setSite(SITES[0]); setNotes(''); setFormErr({});
+    setChallan(''); setDateRcv(todayStr()); setNotes(''); setFormErr({});
     setPanelOpen(true);
   }
 
@@ -209,10 +208,10 @@ export default function StockTable({ data = [], readOnly = false }) {
               <Field label="Date Received" required error={formErr.dateRcv}>
                 <Input type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
               </Field>
-              <Field label="Site" required>
-                <Select value={site} onChange={e => setSite(e.target.value)}>
-                  {SITES.map(s => <option key={s}>{s}</option>)}
-                </Select>
+              <Field label="Site">
+                <div style={{ height: 36, display: 'flex', alignItems: 'center', padding: '0 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#374151', fontWeight: 600 }}>
+                  {siteName || '—'}
+                </div>
               </Field>
             </div>
           </div>

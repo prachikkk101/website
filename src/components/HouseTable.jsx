@@ -6,19 +6,10 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
-import { stockCategories } from '../data/stockCategories';
-import { pngAPI } from '../utils/api';
+import { pngAPI, dataAPI } from '../utils/api';
 
 
 /* ── Helpers ── */
-function initStore(key, defaults) {
-  try {
-    const raw = localStorage.getItem('gppms_' + key);
-    if (!raw) { localStorage.setItem('gppms_' + key, JSON.stringify(defaults)); return defaults; }
-    return JSON.parse(raw);
-  } catch { return defaults; }
-}
-
 function getSession() {
   try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; }
 }
@@ -85,10 +76,8 @@ const DEFAULT_MATERIALS = [
 ];
 
 function loadMatList() {
-  try {
-    const saved = localStorage.getItem('gppms_png_materials');
-    return saved ? JSON.parse(saved) : DEFAULT_MATERIALS;
-  } catch { return DEFAULT_MATERIALS; }
+  // Return the built-in default material list; custom materials added via UI are kept in component state only.
+  return DEFAULT_MATERIALS;
 }
 
 const FLOORS = ['GF', 'FF', 'SF', 'TF', 'FoF'];
@@ -285,23 +274,27 @@ export default function HouseTable() {
   const [customMaterials, setCustomMaterials] = useState([]); // [{label, unit, qty}] per-entry extras
   const [hiddenMaterials, setHiddenMaterials] = useState([]); // keys hidden for THIS entry only
 
-  // Add a material permanently to the global list
+  // Stock categories from backend (for the materials accordion in the PNG Connection form)
+  const [stockCatData, setStockCatData] = useState([]);
+  useEffect(() => {
+    dataAPI.getStockCategories()
+      .then(cats => setStockCatData(cats.map(c => ({ id: String(c.id), label: c.name, color: '#1f4e1a', items: [] }))))
+      .catch(() => setStockCatData([]));
+  }, []);
+
+  // Add a material permanently to the global list (component state only, not persisted)
   function addMaterialGlobal() {
     const label = prompt('Enter new material name:');
     if (!label || !label.trim()) return;
     const unit = prompt('Enter unit (e.g. pcs, mtr, rolls):') || 'pcs';
     const newMat = { key: 'cmat_' + Date.now(), label: label.trim(), unit: unit.trim() };
-    const updated = [...matList, newMat];
-    setMatList(updated);
-    localStorage.setItem('gppms_png_materials', JSON.stringify(updated));
+    setMatList(prev => [...prev, newMat]);
   }
 
-  // Remove a material permanently from the global list
+  // Remove a material from the global list (component state only)
   function removeMaterialGlobal(key) {
     if (!window.confirm('Permanently remove this material from all future entries?')) return;
-    const updated = matList.filter(m => m.key !== key);
-    setMatList(updated);
-    localStorage.setItem('gppms_png_materials', JSON.stringify(updated));
+    setMatList(prev => prev.filter(m => m.key !== key));
   }
 
   // Dynamic custom columns state
@@ -903,7 +896,9 @@ export default function HouseTable() {
               <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>
                 Additional Materials from Stock Categories:
               </p>
-              {stockCategories.map(cat => {
+              {stockCatData.length === 0 ? (
+                <p style={{ color: '#94a3b8', fontSize: 12, margin: '4px 0' }}>No stock categories loaded from server.</p>
+              ) : stockCatData.map(cat => {
                 const isOpen = catOpen === cat.id;
                 return (
                   <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>

@@ -5,12 +5,6 @@ import { adminService } from '../api/adminService';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 
-const LOCAL_SITES_FALLBACK = [
-  { id: 'local-site-1', name: 'Khanna — CA-09',  users: [] },
-  { id: 'local-site-2', name: 'UE-II — Hisar',   users: [] },
-  { id: 'local-site-3', name: 'PLA — Hisar',     users: [] },
-  { id: 'local-site-4', name: 'Kohara — CA-07',  users: [] },
-];
 
 /* ──────────────────────────────────────
    Shared helpers
@@ -232,13 +226,14 @@ function SiteAccessTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
       const data = await adminService.getSiteUsers();
       const list = Array.isArray(data) ? data : (data.sites || []);
-      setSites(list.length > 0 ? list : LOCAL_SITES_FALLBACK);
+      setSites(list);
     } catch {
-      // Backend offline — show local sites with no users
-      setSites(LOCAL_SITES_FALLBACK);
+      setError('Could not load sites from server. Check your connection.');
+      setSites([]);
     } finally {
       setLoading(false);
     }
