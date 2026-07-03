@@ -69,9 +69,9 @@ app.use('/api/sites/:siteId', icLmcRoutes);
 app.use(errorHandler);
 
 // ── Start Server ──────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n🔥 GP-PMS Backend running on http://localhost:${PORT}`);
-  console.log(`📋 Health check: http://localhost:${PORT}/health`);
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`\n🔥 GP-PMS Backend running on http://0.0.0.0:${PORT}`);
+  console.log(`📋 Health check: http://0.0.0.0:${PORT}/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}\n`);
 });
 
