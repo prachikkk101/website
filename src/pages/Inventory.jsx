@@ -194,6 +194,7 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
   );
 }
 
+const session = JSON.parse(localStorage.getItem('gppms_session') || '{}');
 const siteId = session?.siteId;
 
 useEffect(() => {
