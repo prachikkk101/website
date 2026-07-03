@@ -80,28 +80,9 @@ export const changePasswordApi = (currentPassword, newPassword) =>
    STOCK / INVENTORY  — /api/sites/:siteId/inventory
 ───────────────────────────────────────────────────────────── */
 export const stockAPI = {
-  getAll: (siteId) => {
-    const sId = siteId || JSON.parse(localStorage.getItem('gppms_session') || '{}').siteId;
-    return api.get(`/sites/${sId}/inventory`).then(r => r.data.items || []);
-  },
-
-  create: (data) => {
-    const sId = JSON.parse(localStorage.getItem('gppms_session') || '{}').siteId;
-    return api.post(`/sites/${sId}/inventory/receive`, { items: data.items }).then(r => r.data.items || []);
-  },
-
-  update: (action, data) => {
-    const sId = JSON.parse(localStorage.getItem('gppms_session') || '{}').siteId;
-    if (action === 'return') {
-      return api.post(`/sites/${sId}/inventory/return`, { items: data.items }).then(r => r.data.items || []);
-    }
-    return api.put(`/sites/${sId}/inventory/${encodeURIComponent(action)}`, data).then(r => r.data.item);
-  },
-
-  delete: (material) => {
-    const sId = JSON.parse(localStorage.getItem('gppms_session') || '{}').siteId;
-    return api.delete(`/sites/${sId}/inventory/${encodeURIComponent(material)}`).then(r => r.data);
-  },
+  // All methods require siteId explicitly — no localStorage reads here.
+  getAll: (siteId) =>
+    api.get(`/sites/${siteId}/inventory`).then(r => r.data.items || []),
 
   receiveStock: (siteId, items) =>
     api.post(`/sites/${siteId}/inventory/receive`, { items }).then(r => r.data.items || []),

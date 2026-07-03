@@ -197,28 +197,29 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
 export default function Inventory() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext }  = useSite();
+  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
 
-  const sites = useMemo(() => {
-    return siteList.map(s => s.name);
+  const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
+
+  // Derive the active site UUID from SiteContext — always use the first available site
+  // so the page is never stuck in localStorage-only mode.
+  const currentSiteId = useMemo(() => {
+    if (!siteList || siteList.length === 0) return null;
+    return siteList[0]?.id ?? null;
   }, [siteList]);
 
   const [stockData, setStockData] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [error, setError]         = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
 
-  const session    = getSession();
-  const isSupervisor = user?.role === 'SUPERVISOR';
-  const siteAccess   = session.siteAccess;
-  const isAdmin      = (
+  const isAdmin = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
     ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
-      .includes((session.email || '').toLowerCase())
+      .includes((user?.email || '').toLowerCase())
   );
-  const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
-  const canWrite     = !isViewOnly;
+  const canWrite = isAdmin || user?.role === 'SUPERVISOR' || user?.role === 'WORKER';
 
   // Delivery form state
   const [challan, setChallan] = useState('');
@@ -287,27 +288,25 @@ export default function Inventory() {
 
   useEffect(() => {
     document.title = 'GP-PMS — Stock Management';
-    const loadStock = async () => {
+  }, []);
+
+  useEffect(() => {
+    async function load() {
+      if (!currentSiteId) return;
       try {
         setLoading(true);
-        const data = await stockAPI.getAll();
-        setStockData(mapStockData(data));
-      } catch (err) {
-        console.error('Failed to load stock:', err);
+        const items = await stockAPI.getAll(currentSiteId);
+        setStockData(mapStockData(items));
+        setError(null);
+      } catch (e) {
+        console.error('Failed to load stock:', e);
         setError('Failed to load inventory');
-        setStockData(initStore('stock', defaultStockData));
       } finally {
         setLoading(false);
       }
-    };
-    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-    if (sess.siteId) {
-      loadStock();
-    } else {
-      setStockData(initStore('stock', defaultStockData));
-      setLoading(false);
     }
-  }, []);
+    load();
+  }, [currentSiteId]);
 
   useEffect(() => {
     if (panelOpen) {
@@ -380,66 +379,18 @@ export default function Inventory() {
       return;
     }
 
-    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-    if (sess.siteId) {
-      try {
-        const itemsToSend = returnedItems.map(item => ({ material: item.name, qty: item.qty }));
-        await stockAPI.update('return', { items: itemsToSend });
-        const refreshed = await stockAPI.getAll();
-        setStockData(mapStockData(refreshed));
-        showToast('✓ Stock returned');
+    if (!currentSiteId) {
+      showToast('✗ No site selected', 'error');
+      return;
+    }
 
-        // Reset panel form and close
-        setRetDate(todayStr());
-        setRetSite('');
-        setRetRemark('');
-        setRetQuantities({});
-        setRetOpenCategory(null);
-        setRetFormErr({});
-        setReturnStockOpen(false);
-      } catch (err) {
-        showToast('✗ Failed to return stock', 'error');
-      }
-    } else {
-      // CORRECT logic: Available = Received - Used - Returned
-      let updatedStock = (stockData || []).map(s => {
-        const match = returnedItems.find(r => r.name === s.mat || r.name === s.material);
-        if (match) {
-          const newReturned = (s.ret || 0) + match.qty;
-          const newAvailable = (s.recv || 0) - (s.issued || 0) - newReturned;
-          const clampedAvailable = Math.max(0, newAvailable);
-          return {
-            ...s,
-            ret: newReturned,
-            returned: newReturned,
-            inStore: clampedAvailable,
-            available: clampedAvailable
-          };
-        }
-        return s;
-      });
+    try {
+      const itemsToSend = returnedItems.map(item => ({ material: item.name, qty: item.qty }));
+      await stockAPI.returnStock(currentSiteId, itemsToSend);
+      const refreshed = await stockAPI.getAll(currentSiteId);
+      setStockData(mapStockData(refreshed));
+      showToast('✓ Stock returned');
 
-      setStockData(updatedStock);
-      localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
-
-      // Save transaction to localStorage 'gppms_returns'
-      const newReturn = {
-        id: Date.now(),
-        date: retDate,
-        site: formArea, // Store the selected area/site
-        remark: retRemark.trim(),
-        items: returnedItems,
-        returnedBy: session.name || 'Supervisor',
-        createdAt: new Date().toISOString()
-      };
-
-      let existingReturns = [];
-      try {
-        existingReturns = JSON.parse(localStorage.getItem('gppms_returns') || '[]');
-      } catch {}
-      localStorage.setItem('gppms_returns', JSON.stringify([newReturn, ...existingReturns]));
-
-      // Reset panel form and close
       setRetDate(todayStr());
       setRetSite('');
       setRetRemark('');
@@ -447,8 +398,8 @@ export default function Inventory() {
       setRetOpenCategory(null);
       setRetFormErr({});
       setReturnStockOpen(false);
-
-      showToast(`✓ Stock returned — ${returnedItems.length} items updated`);
+    } catch (err) {
+      showToast('✗ Failed to return stock', 'error');
     }
   }
 
@@ -498,56 +449,20 @@ export default function Inventory() {
       return;
     }
 
-    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-    if (sess.siteId) {
-      try {
-        const itemsToSend = receivedItems.map(item => ({ material: item.name, qty: item.qty, unit: 'pcs', category: '' }));
-        await stockAPI.create({ items: itemsToSend });
-        const refreshed = await stockAPI.getAll();
-        setStockData(mapStockData(refreshed));
-        showToast('✓ Stock received');
-        setPanelOpen(false);
-      } catch (err) {
-        showToast('✗ Failed to save', 'error');
-      }
-    } else {
-      // Update existing items or add new rows in localStorage
-      let updatedStock = [...(stockData || [])];
-      let updatedCount = 0;
+    if (!currentSiteId) {
+      showToast('✗ No site selected', 'error');
+      return;
+    }
 
-      receivedItems.forEach(({ name, qty }) => {
-        const idx = updatedStock.findIndex(s => s.mat === name || s.material === name);
-        if (idx >= 0) {
-          const newReceived = (updatedStock[idx].recv || 0) + qty;
-          const newAvailable = newReceived - (updatedStock[idx].issued || 0) - (updatedStock[idx].ret || 0);
-          const clampedAvailable = Math.max(0, newAvailable);
-          updatedStock[idx] = {
-            ...updatedStock[idx],
-            recv: newReceived,
-            received: newReceived,
-            inStore: clampedAvailable,
-            available: clampedAvailable
-          };
-          updatedCount++;
-        } else {
-          // New item
-          updatedStock.push({
-            sr: updatedStock.length + 1,
-            mat: name, material: name,
-            unit: 'pcs', open: 0,
-            recv: qty, received: qty,
-            issued: 0, used: 0,
-            ret: 0, returned: 0,
-            onSite: qty, inStore: qty, available: qty, req: 0,
-          });
-          updatedCount++;
-        }
-      });
-
-      setStockData(updatedStock);
-      localStorage.setItem('gppms_stock', JSON.stringify(updatedStock));
+    try {
+      const itemsToSend = receivedItems.map(item => ({ material: item.name, qty: item.qty, unit: 'pcs', category: '' }));
+      await stockAPI.receiveStock(currentSiteId, itemsToSend);
+      const refreshed = await stockAPI.getAll(currentSiteId);
+      setStockData(mapStockData(refreshed));
+      showToast('✓ Stock received');
       setPanelOpen(false);
-      showToast(`✓ Stock received — ${updatedCount} items updated`);
+    } catch (err) {
+      showToast('✗ Failed to save', 'error');
     }
   }
 
@@ -610,25 +525,18 @@ export default function Inventory() {
     );
     if (!confirmed) return;
 
-    const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
-    if (sess.siteId) {
-      try {
-        await stockAPI.delete(materialName);
-        const refreshed = await stockAPI.getAll();
-        setStockData(mapStockData(refreshed));
-        showToast('✓ Stock deleted');
-      } catch (err) {
-        showToast('✗ Failed to delete', 'error');
-      }
-    } else {
-      const updated = (stockData || []).filter(item =>
-        item.mat !== materialName && item.name !== materialName
-      );
-      // Re-number sr
-      const renumbered = updated.map((item, i) => ({ ...item, sr: i + 1 }));
-      setStockData(rennumbered);
-      localStorage.setItem('gppms_stock', JSON.stringify(rennumbered));
-      showToast(`✓ "${materialName}" removed from inventory`);
+    if (!currentSiteId) {
+      showToast('✗ No site selected', 'error');
+      return;
+    }
+
+    try {
+      await stockAPI.deleteItem(currentSiteId, materialName);
+      const refreshed = await stockAPI.getAll(currentSiteId);
+      setStockData(mapStockData(refreshed));
+      showToast('✓ Item deleted');
+    } catch (err) {
+      showToast('✗ Failed to delete', 'error');
     }
   };
 
