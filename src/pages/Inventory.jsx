@@ -202,10 +202,19 @@ useEffect(() => {
 }, [siteId]);
 
 const loadStock = async () => {
-  const response = await fetch(
-    `${API_URL}/api/sites/${siteId}/inventory`
-  );
-  ...
+  try {
+    setLoading(true);
+    const response = await fetch(
+      `${API_URL}/api/sites/${siteId}/inventory`
+    );
+    const data = await response.json();
+    setStock(Array.isArray(data) ? data : []);
+  } catch (err) {
+    console.error('Stock API error:', err);
+    setStock([]);
+  } finally {
+    setLoading(false);
+  }
 };
 
 export default function Inventory() {
