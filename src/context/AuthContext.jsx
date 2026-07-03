@@ -62,6 +62,8 @@ export function AuthProvider({ children }) {
           name: u.name,
           role: role,
           siteAccess,
+          siteId:   u.siteId   ?? null,
+          siteName: u.siteName ?? null,
           token: token,
         };
 

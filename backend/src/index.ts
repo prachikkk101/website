@@ -5,6 +5,7 @@ import authRoutes from './routes/authRoutes';
 import siteRoutes from './routes/siteRoutes';
 import pngRoutes from './routes/pngRoutes';
 import inventoryRoutes from './routes/inventoryRoutes';
+import stockRoutes from './routes/stockRoutes';
 import peLayingRoutes from './routes/peLayingRoutes';
 import icLmcRoutes from './routes/icLmcRoutes';
 import meterRoutes from './routes/meterRoutes';
@@ -56,6 +57,7 @@ app.use('/api/sites', siteRoutes);
 
 // Site-scoped sub-routes (use :siteId as param prefix)
 app.use('/api/sites/:siteId/png-connections', pngRoutes);
+app.use('/api/sites/:siteId/inventory', stockRoutes);
 app.use('/api/sites/:siteId', inventoryRoutes);
 app.use('/api/sites/:siteId/pe-laying', peLayingRoutes);
 app.use('/api/sites/:siteId/meters', meterRoutes);

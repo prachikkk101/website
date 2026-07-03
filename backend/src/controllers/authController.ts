@@ -147,6 +147,12 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     const accessToken = generateAccessToken(user);
     const refreshToken = generateRefreshToken(user);
 
+    // Fetch the user's assigned site (supervisors have one; admins have none in SiteUser)
+    const assignment = await prisma.siteUser.findFirst({
+      where: { userId: user.id },
+      include: { site: { select: { id: true, name: true } } },
+    });
+
     res.status(200).json({
       success: true,
       accessToken,
@@ -156,6 +162,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
         email: user.email,
         name: user.name,
         role: user.role,
+        siteId:   assignment?.site?.id   ?? null,
+        siteName: assignment?.site?.name ?? null,
       },
     });
   } catch (error) {
@@ -218,9 +226,16 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
       },
     });
 
+    // Convenience shortcut: first assigned site
+    const firstSite = user?.assignedSites?.[0]?.site ?? null;
+
     res.status(200).json({
       success: true,
-      user,
+      user: {
+        ...user,
+        siteId:   firstSite?.id   ?? null,
+        siteName: firstSite?.name ?? null,
+      },
     });
   } catch (error) {
     next(error);
