@@ -458,6 +458,7 @@ export default function HouseTable() {
     const e = {};
     if (!form.name.trim())     e.name     = 'Required';
     if (!form.mobile.trim())   e.mobile   = 'Required';
+    else if (form.mobile.trim().length < 10) e.mobile = 'Must be at least 10 digits';
     if (!form.houseNo.trim())  e.houseNo  = 'Required';
     if (!form.address1.trim()) e.address1 = 'Required';
     if (!formGA)   e.ga   = 'Required';
