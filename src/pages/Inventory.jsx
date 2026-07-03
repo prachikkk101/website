@@ -218,15 +218,6 @@ const loadStock = async () => {
     setLoading(false);
   }
 };
-const data = await response.json();
-setStock(Array.isArray(data) ? data : []);
-  } catch (err) {
-  console.error('Stock API error:', err);
-  setStock([]);
-} finally {
-  setLoading(false);
-}
-};
 
 export default function Inventory() {
   const { showToast } = useToast();
