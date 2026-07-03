@@ -52,7 +52,7 @@ app.get('/api/health', (_req: import('express').Request, res: import('express').
 });
 
 import { authenticate } from './middlewares/auth';
-import { getGALocations, getCities, getAreas } from './controllers/siteController';
+import { getGALocations, getCities, getAreas, getStockCategories } from './controllers/siteController';
 import { getDailyReports, createDailyReport, deleteDailyReport } from './controllers/reportDiaryController';
 
 // ── Routes ────────────────────────────────────────────────
@@ -64,6 +64,7 @@ app.use('/api/sites', siteRoutes);
 app.get('/api/ga-locations', authenticate, getGALocations);
 app.get('/api/cities', authenticate, getCities);
 app.get('/api/areas', authenticate, getAreas);
+app.get('/api/stock-categories', authenticate, getStockCategories);
 
 app.get('/api/daily-reports', authenticate, getDailyReports);
 app.post('/api/daily-reports', authenticate, createDailyReport);

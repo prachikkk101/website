@@ -329,3 +329,23 @@ export const getAreas = async (req: AuthenticatedRequest, res: Response, next: N
   }
 };
 
+export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    // Pull all distinct category values from the MaterialItem table
+    const rows = await prisma.materialItem.findMany({
+      distinct: ['category'],
+      select: { category: true },
+      orderBy: { category: 'asc' },
+    });
+
+    const categories = rows.map((r, i) => ({
+      id: i + 1,
+      name: r.category,
+    }));
+
+    res.status(200).json({ success: true, categories });
+  } catch (error) {
+    next(error);
+  }
+};
+

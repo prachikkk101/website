@@ -139,3 +139,38 @@ export const icWorkAPI = {
   update: (siteId, recordId, data) =>
     api.patch(`/sites/${siteId}/ic/${recordId}`, data).then(r => r.data.record),
 };
+
+/* ─────────────────────────────────────────────────────────────
+   LOOKUP DATA  — /api/ga-locations, /api/cities, /api/areas,
+                  /api/stock-categories
+   All endpoints are authenticated; data is derived from the
+   Site and MaterialItem tables in the Neon database.
+───────────────────────────────────────────────────────────── */
+export const dataAPI = {
+  /** Returns all distinct GA locations (derived from Site.gaName). */
+  getGALocations: () =>
+    api.get('/ga-locations').then(r => r.data.gaLocations || []),
+
+  /**
+   * Returns cities for a given GA location.
+   * @param {string} [gaLocationId] - filter by GA (optional)
+   */
+  getCities: (gaLocationId) => {
+    const params = gaLocationId ? { gaLocationId } : {};
+    return api.get('/cities', { params }).then(r => r.data.cities || []);
+  },
+
+  /**
+   * Returns areas for a given city.
+   * @param {string} [cityId] - filter by city (optional)
+   */
+  getAreas: (cityId) => {
+    const params = cityId ? { cityId } : {};
+    return api.get('/areas', { params }).then(r => r.data.areas || []);
+  },
+
+  /** Returns all distinct stock categories from MaterialItem table. */
+  getStockCategories: () =>
+    api.get('/stock-categories').then(r => r.data.categories || []),
+};
+
