@@ -1,0 +1,100 @@
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async /app/dist/controllers/pngController.js:100:29
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async Proxy._transactionWithCallback (/app/node_modules/@prisma/client/runtime/client.js:75:4800)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async createPNGConnection (/app/dist/controllers/pngController.js:98:28) {
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  code: 'P2003',
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  meta: {
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    modelName: 'PNGConnection',
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    driverAdapterError: DriverAdapterError: ForeignKeyConstraintViolation
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at PgTransaction.onError (/app/node_modules/@prisma/adapter-pg/dist/index.js:678:11)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at PgTransaction.performIO (/app/node_modules/@prisma/adapter-pg/dist/index.js:673:12)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async PgTransaction.queryRaw (/app/node_modules/@prisma/adapter-pg/dist/index.js:604:30)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:44621)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:45065)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:46285)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.run (/app/node_modules/@prisma/client/runtime/client.js:11:43335)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.execute (/app/node_modules/@prisma/client/runtime/client.js:57:815)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async jt.request (/app/node_modules/@prisma/client/runtime/client.js:58:2401)
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async Object.singleLoader (/app/node_modules/@prisma/client/runtime/client.js:65:6569) {
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]      cause: [Object]
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    }
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  },
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  clientVersion: '7.8.0'
+[2m2026-07-04T05:22:45Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]}
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]prisma:error
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]Invalid `prisma.pNGConnection.create()` invocation:
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]Foreign key constraint violated on the constraint: `PNGConnection_siteId_fkey`
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]Error: PrismaClientKnownRequestError:
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]Invalid `prisma.pNGConnection.create()` invocation:
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]Foreign key constraint violated on the constraint: `PNGConnection_siteId_fkey`
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at zr.handleRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:8286)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at zr.handleAndLogRequestError (/app/node_modules/@prisma/client/runtime/client.js:65:7581)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at zr.request (/app/node_modules/@prisma/client/runtime/client.js:65:7288)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async Array.$allOperations (/app/dist/config/db.js:26:32)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async a (/app/node_modules/@prisma/client/runtime/client.js:75:6862)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async /app/dist/controllers/pngController.js:100:29
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async Proxy._transactionWithCallback (/app/node_modules/@prisma/client/runtime/client.js:75:4800)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    at async createPNGConnection (/app/dist/controllers/pngController.js:98:28) {
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  code: 'P2003',
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  meta: {
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    modelName: 'PNGConnection',
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    driverAdapterError: DriverAdapterError: ForeignKeyConstraintViolation
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at PgTransaction.onError (/app/node_modules/@prisma/adapter-pg/dist/index.js:678:11)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at PgTransaction.performIO (/app/node_modules/@prisma/adapter-pg/dist/index.js:673:12)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async PgTransaction.queryRaw (/app/node_modules/@prisma/adapter-pg/dist/index.js:604:30)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:44621)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:45065)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.interpretNode (/app/node_modules/@prisma/client/runtime/client.js:11:46285)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.run (/app/node_modules/@prisma/client/runtime/client.js:11:43335)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async e.execute (/app/node_modules/@prisma/client/runtime/client.js:57:815)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async jt.request (/app/node_modules/@prisma/client/runtime/client.js:58:2401)
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]        at async Object.singleLoader (/app/node_modules/@prisma/client/runtime/client.js:65:6569) {
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]      cause: [Object]
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]    }
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  },
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]  clientVersion: '7.8.0'
+[2m2026-07-04T05:22:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]}
+[2m2026-07-04T07:52:32Z[0m runner[48ee74dc3e6008] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730
+[2m2026-07-04T07:52:47Z[0m runner[2870520c063508] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730
+[2m2026-07-04T07:52:56Z[0m runner[2870520c063508] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730 (8.662672318s)
+[2m2026-07-04T07:53:00Z[0m runner[2870520c063508] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T07:53:05Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]2026-07-04T07:53:05.880861416 [01KWP1V8P0VVBW65G3980Y3N7D:main] Running Firecracker v1.14.4
+[2m2026-07-04T07:53:05Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]2026-07-04T07:53:05.880989523 [01KWP1V8P0VVBW65G3980Y3N7D:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T07:53:06Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T07:53:06Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh npx prisma migrate deploy` as root
+[2m2026-07-04T07:53:06Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T07:53:07Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]2026/07/04 07:53:07 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:85c:2d29:a5ea:2]:22
+[2m2026-07-04T07:53:07Z[0m runner[2870520c063508] [32msin[0m [[34minfo[0m]Machine started in 1.957s
+[2m2026-07-04T07:53:13Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]Loaded Prisma config from prisma.config.ts.
+[2m2026-07-04T07:53:20Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]Prisma schema loaded from prisma/schema.prisma.
+[2m2026-07-04T07:53:20Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-crimson-heart-aod8jt1q.c-2.ap-southeast-1.aws.neon.tech"
+[2m2026-07-04T07:53:22Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]2 migrations found in prisma/migrations
+[2m2026-07-04T07:53:22Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m]No pending migrations to apply.
+[2m2026-07-04T07:53:22Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited normally with code: 0
+[2m2026-07-04T07:53:22Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T07:53:23Z[0m app[2870520c063508] [32msin[0m [[34minfo[0m][   17.166464] reboot: Restarting system
+[2m2026-07-04T07:53:23Z[0m runner[2870520c063508] [32msin[0m [[34minfo[0m]machine restart policy set to 'no', not restarting
+[2m2026-07-04T07:53:31Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730
+[2m2026-07-04T07:53:31Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730
+[2m2026-07-04T07:53:32Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730 (988.761551ms)
+[2m2026-07-04T07:53:34Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T07:53:34Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Sending signal SIGINT to main child process w/ PID 642
+[2m2026-07-04T07:53:34Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited with signal (with signal 'SIGINT', core dumped? false)
+[2m2026-07-04T07:53:34Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T07:53:34Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][ 9857.577771] reboot: Restarting system
+[2m2026-07-04T07:53:34Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:43e940458c7b5441cc2d8199a73f1d6e09068004de94afc7f9382a02e39dd730 (2.870958426s)
+[2m2026-07-04T07:53:35Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T07:53:35.519792158 [01KWP1WKQAZSCFNJ9QD76AWVFT:main] Running Firecracker v1.14.4
+[2m2026-07-04T07:53:35Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T07:53:35.519996982 [01KWP1WKQAZSCFNJ9QD76AWVFT:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T07:53:35Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T07:53:36Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T07:53:36Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh node dist/index.js` as root
+[2m2026-07-04T07:53:36Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T07:53:36Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Machine created and started in 4.781s
+[2m2026-07-04T07:53:36Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026/07/04 07:53:36 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:187:efe5:329b:2]:22
+[2m2026-07-04T07:53:40Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[2m2026-07-04T07:53:41Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌁ auth for agents [www.vestauth.com]
+[2m2026-07-04T07:53:41Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🔥 GP-PMS Backend running on http://0.0.0.0:5001
+[2m2026-07-04T07:53:41Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]📋 Health check: http://0.0.0.0:5001/health
+[2m2026-07-04T07:53:41Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🌍 Environment: production
