@@ -594,6 +594,11 @@ export default function HouseTable() {
       }
 
       try {
+        // Convert materialsUsed { name: {qty, unit} } → array for backend
+        const materialsUsedPayload = Object.entries(materialsUsed)
+          .filter(([, v]) => v.qty > 0)
+          .map(([material, v]) => ({ material, qty: Number(v.qty), unit: v.unit || 'pcs' }));
+
         const payload = {
           appNo: form.appNo, bpNo: form.bpNo || null,
           accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
@@ -602,6 +607,8 @@ export default function HouseTable() {
           city: finalCityLabel, society: formArea || null,
           status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
           plumbingDate: form.gcDate || null,
+          // Sent on CREATE only — triggers stock deduction in backend $transaction
+          materialsUsed: materialsUsedPayload,
         };
         if (editEntry) {
           await pngAPI.update(siteId, editEntry.id, payload);

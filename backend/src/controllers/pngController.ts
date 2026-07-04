@@ -73,6 +73,14 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     giPipeMtr: z.number().nonnegative().nullable().optional(),
     tfCount: z.number().int().nonnegative().nullable().optional(),
     ivCount: z.number().int().nonnegative().nullable().optional(),
+    // Materials used per connection — triggers stock deduction
+    materialsUsed: z.array(
+      z.object({
+        material: z.string().min(1),
+        qty: z.number().positive(),
+        unit: z.string().optional(),
+      })
+    ).optional().default([]),
   });
 
   try {
@@ -88,31 +96,69 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ success: false, error: 'Application number already exists' });
     }
 
-    const connection = await prisma.pNGConnection.create({
-      data: {
-        siteId,
-        appNo,
-        bpNo: data.bpNo || null,
-        accountType: data.accountType || AccountType.DOMESTIC,
-        customerName: data.customerName,
-        mobile: data.mobile,
-        altMobile: data.altMobile || null,
-        houseNo: data.houseNo || "",
-        address1: data.address1 || "",
-        address2: data.address2 || null,
-        city: data.city || "",
-        society: data.society || null,
-        supervisorId: data.supervisorId || null,
-        status: data.status || 'Pending',
-        assignDateAgency: data.assignDateAgency ? new Date(data.assignDateAgency) : null,
-        assignDateSuper: data.assignDateSuper ? new Date(data.assignDateSuper) : null,
-        bpCreationDate: data.bpCreationDate ? new Date(data.bpCreationDate) : null,
-        plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : null,
-        gcLength: data.gcLength ?? null,
-        giPipeMtr: data.giPipeMtr ?? null,
-        tfCount: data.tfCount ?? 0,
-        ivCount: data.ivCount ?? 0,
-      },
+    // Run PNG creation + stock deduction atomically
+    const connection = await prisma.$transaction(async (tx) => {
+      // 1. Create the PNG connection record
+      const pngConn = await tx.pNGConnection.create({
+        data: {
+          siteId,
+          appNo,
+          bpNo: data.bpNo || null,
+          accountType: data.accountType || AccountType.DOMESTIC,
+          customerName: data.customerName,
+          mobile: data.mobile,
+          altMobile: data.altMobile || null,
+          houseNo: data.houseNo || "",
+          address1: data.address1 || "",
+          address2: data.address2 || null,
+          city: data.city || "",
+          society: data.society || null,
+          supervisorId: data.supervisorId || null,
+          status: data.status || 'Pending',
+          assignDateAgency: data.assignDateAgency ? new Date(data.assignDateAgency) : null,
+          assignDateSuper: data.assignDateSuper ? new Date(data.assignDateSuper) : null,
+          bpCreationDate: data.bpCreationDate ? new Date(data.bpCreationDate) : null,
+          plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : null,
+          gcLength: data.gcLength ?? null,
+          giPipeMtr: data.giPipeMtr ?? null,
+          tfCount: data.tfCount ?? 0,
+          ivCount: data.ivCount ?? 0,
+        },
+      });
+
+      // 2. Deduct stock for each material used (only if the item exists in inventory)
+      if (data.materialsUsed && data.materialsUsed.length > 0) {
+        for (const mat of data.materialsUsed) {
+          const qty = Math.round(mat.qty); // InventoryItem uses Int fields
+          if (qty <= 0) continue;
+
+          // Find the inventory item for this site + material name
+          const invItem = await tx.inventoryItem.findUnique({
+            where: { siteId_material: { siteId, material: mat.material } },
+          });
+
+          if (!invItem) {
+            // Material not in inventory yet — skip silently (don't block the save)
+            console.warn(`[PNG save] Material "${mat.material}" not found in inventory for site ${siteId} — skipping deduction`);
+            continue;
+          }
+
+          // issued = used quantity, inStore = received - issued - returned
+          const newIssued  = invItem.issued + qty;
+          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
+
+          await tx.inventoryItem.update({
+            where: { siteId_material: { siteId, material: mat.material } },
+            data: {
+              issued:   newIssued,
+              inStore:  newInStore,
+              updatedAt: new Date(),
+            },
+          });
+        }
+      }
+
+      return pngConn;
     });
 
     res.status(201).json({ success: true, connection });
