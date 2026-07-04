@@ -105,12 +105,14 @@ export const pngAPI = {
     api.get(`/sites/${siteId}/png-connections`, { params: { limit: 500, ...params } })
       .then(r => r.data.connections || []),
 
+  // 30s timeout: creation may include sequential stock-deduction DB calls
   create: (siteId, data) =>
-    api.post(`/sites/${siteId}/png-connections`, data).then(r => r.data.connection),
+    api.post(`/sites/${siteId}/png-connections`, data, { timeout: 30000 }).then(r => r.data.connection),
 
   update: (siteId, connectionId, data) =>
     api.patch(`/sites/${siteId}/png-connections/${connectionId}`, data).then(r => r.data.connection),
 };
+
 
 /* ─────────────────────────────────────────────────────────────
    PE LAYING  — /api/sites/:siteId/pe-laying

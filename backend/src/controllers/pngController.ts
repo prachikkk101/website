@@ -86,12 +86,16 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
   try {
     const siteId = req.params.siteId as string;
 
+    // ── DEBUG: Log full request body so we can diagnose payload issues in fly logs ──
+    console.log('🔵 [PNG create] Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('🔵 [PNG create] materialsUsed received:', JSON.stringify(req.body.materialsUsed, null, 2));
+
     // Parse + validate — Zod strips unknown fields and coerces types
     let data: z.infer<typeof schema>;
     try {
       data = schema.parse(req.body);
     } catch (zodErr: any) {
-      console.error('[PNG create] Zod validation error:', JSON.stringify(zodErr.errors));
+      console.error('[PNG create] Zod validation error:', JSON.stringify(zodErr.errors, null, 2));
       return res.status(400).json({ success: false, error: 'Validation failed', details: zodErr.errors });
     }
 
@@ -133,41 +137,54 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     });
 
     console.log(`[PNG create] Connection saved: ${connection.id} (appNo: ${appNo})`);
+    console.log(`🔵 [PNG create] materialsUsed after Zod parse:`, JSON.stringify(data.materialsUsed, null, 2));
 
-    // ── STEP 2: Deduct stock — runs AFTER the PNG save is committed.
-    //    Failures here are NON-FATAL: they are logged but never block the save response.
+    // ── STEP 2: Deduct stock — fire-and-forget via setImmediate.
+    //    This runs COMPLETELY OUTSIDE the HTTP response cycle so it can NEVER
+    //    block or timeout the save — even if many materials require sequential DB calls.
+    //    Failures are logged but never propagated to the client.
     if (data.materialsUsed && data.materialsUsed.length > 0) {
-      console.log(`[PNG create] Deducting stock for ${data.materialsUsed.length} material(s)...`);
-      for (const mat of data.materialsUsed) {
-        try {
-          const qty = Math.round(mat.qty);
-          if (qty <= 0) continue;
+      const materialsSnapshot = data.materialsUsed;
+      const siteIdSnapshot = siteId;
+      setImmediate(async () => {
+        console.log(`[PNG create] 🟡 Background stock deduction starting for ${materialsSnapshot.length} material(s)...`);
+        for (const mat of materialsSnapshot) {
+          try {
+            const qty = Math.round(mat.qty);
+            if (qty <= 0) {
+              console.log(`[PNG create] Skipping "${mat.material}" — qty ${mat.qty} rounds to 0`);
+              continue;
+            }
 
-          const invItem = await prisma.inventoryItem.findUnique({
-            where: { siteId_material: { siteId, material: mat.material } },
-          });
+            console.log(`[PNG create] Looking up "${mat.material}" in inventory (site: ${siteIdSnapshot})...`);
 
-          if (!invItem) {
-            console.warn(`[PNG create] Material not in inventory: "${mat.material}" (site: ${siteId}) — skipping`);
-            continue;
+            const invItem = await prisma.inventoryItem.findUnique({
+              where: { siteId_material: { siteId: siteIdSnapshot, material: mat.material } },
+            });
+
+            if (!invItem) {
+              console.warn(`[PNG create] ⚠ Material NOT FOUND in inventory: "${mat.material}" — skipping`);
+              continue;
+            }
+
+            const newIssued  = invItem.issued + qty;
+            const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
+
+            await prisma.inventoryItem.update({
+              where: { siteId_material: { siteId: siteIdSnapshot, material: mat.material } },
+              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+            });
+
+            console.log(`[PNG create] ✅ Stock deducted — "${mat.material}" +${qty} issued → ${newIssued} total issued`);
+          } catch (stockErr: any) {
+            console.error(`[PNG create] ❌ Stock deduction failed for "${mat.material}":`, stockErr.message);
           }
-
-          const newIssued  = invItem.issued + qty;
-          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-
-          await prisma.inventoryItem.update({
-            where: { siteId_material: { siteId, material: mat.material } },
-            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-          });
-
-          console.log(`[PNG create] ✓ Stock deducted — "${mat.material}" issued: +${qty} → ${newIssued}`);
-        } catch (stockErr: any) {
-          // Non-fatal: log and continue with next material
-          console.error(`[PNG create] ⚠ Stock deduction failed for "${mat.material}":`, stockErr.message);
         }
-      }
+        console.log(`[PNG create] 🟢 Background stock deduction complete.`);
+      });
     }
 
+    // Response sent immediately — stock deduction runs in background
     res.status(201).json({ success: true, connection });
   } catch (error: any) {
     console.error('[PNG create] Fatal error:', error.message, error);
