@@ -47,29 +47,29 @@ export const register = async (req: Request, res: Response, next: NextFunction) 
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Generate random 6-digit OTP
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const verificationExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-
     const user = await prisma.user.create({
       data: {
         email,
         name,
         passwordHash,
         role: assignedRole,
-        verificationCode: code,
-        verificationExpiry,
+        // Auto-verify email: email service is not yet active.
+        // Users still need admin to assign them to a site before they can access data.
+        emailVerified: true,
+        verificationCode: null,
+        verificationExpiry: null,
       },
     });
 
-    // TODO: Send email with code if email service is available
-    // await sendVerificationEmail(email, code);
+    console.log(`[register] New user registered: ${email} (role: ${assignedRole})`);
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful. Use this code to verify: ' + code,
+      requiresApproval: true, // frontend shows "waiting for admin" message
+      message: assignedRole === Role.ADMIN
+        ? 'Admin account created. You can now sign in.'
+        : 'Registration successful! Your account is now active. Please ask your administrator to assign you to a site.',
       userId: user.id,
-      verificationCode: code, // For testing only - remove in production
     });
   } catch (error) {
     next(error);
@@ -130,16 +130,23 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = schema.parse(req.body);
 
+    console.log(`[login] Attempt: ${email}`);
+
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
+      console.log(`[login] Failed: user not found for ${email}`);
       return res.status(400).json({ success: false, error: 'Invalid credentials' });
     }
 
+    console.log(`[login] User found: ${email} | role: ${user.role} | verified: ${user.emailVerified}`);
+
     if (!user.emailVerified) {
-      return res.status(400).json({ success: false, error: 'Email not verified. Please verify first.' });
+      console.log(`[login] Blocked: email not verified for ${email}`);
+      return res.status(400).json({ success: false, error: 'Email not verified. Please contact your administrator.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
+    console.log(`[login] Password match: ${isMatch} for ${email}`);
     if (!isMatch) {
       return res.status(400).json({ success: false, error: 'Invalid credentials' });
     }
@@ -152,6 +159,8 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       where: { userId: user.id },
       include: { site: { select: { id: true, name: true } } },
     });
+
+    console.log(`[login] Success: ${email} | site: ${assignment?.site?.name ?? 'none'}`);
 
     res.status(200).json({
       success: true,

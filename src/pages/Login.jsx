@@ -58,14 +58,11 @@ export default function Login() {
       }
       const result = await registerUser(name, email, password);
       if (result.success) {
-        if (result.isLocalMode) {
-          setSuccessMsg('Registration successful (Local Mode). You can now sign in!');
-          setIsRegister(false);
-          setName('');
-        } else {
-          setSuccessMsg('Registration submitted. Check your corporate email for verification OTP.');
-          setShowOtp(true);
-        }
+        // Account is auto-verified — no OTP step. Show backend message and switch to login.
+        setSuccessMsg(result.message || 'Registration successful! You can now sign in.');
+        setIsRegister(false);
+        setName('');
+        setShowOtp(false);
       } else {
         setError(result.error || 'Registration failed. Please try again.');
       }

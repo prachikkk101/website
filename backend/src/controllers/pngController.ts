@@ -73,7 +73,7 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     giPipeMtr: z.number().nonnegative().nullable().optional(),
     tfCount: z.number().int().nonnegative().nullable().optional(),
     ivCount: z.number().int().nonnegative().nullable().optional(),
-    // Materials used per connection — triggers stock deduction
+    // Materials used per connection — triggers stock deduction AFTER save
     materialsUsed: z.array(
       z.object({
         material: z.string().min(1),
@@ -85,7 +85,15 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
 
   try {
     const siteId = req.params.siteId as string;
-    const data = schema.parse(req.body);
+
+    // Parse + validate — Zod strips unknown fields and coerces types
+    let data: z.infer<typeof schema>;
+    try {
+      data = schema.parse(req.body);
+    } catch (zodErr: any) {
+      console.error('[PNG create] Zod validation error:', JSON.stringify(zodErr.errors));
+      return res.status(400).json({ success: false, error: 'Validation failed', details: zodErr.errors });
+    }
 
     const appNo = (data.appNo && data.appNo.trim())
       ? data.appNo.trim()
@@ -96,73 +104,73 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ success: false, error: 'Application number already exists' });
     }
 
-    // Run PNG creation + stock deduction atomically
-    const connection = await prisma.$transaction(async (tx) => {
-      // 1. Create the PNG connection record
-      const pngConn = await tx.pNGConnection.create({
-        data: {
-          siteId,
-          appNo,
-          bpNo: data.bpNo || null,
-          accountType: data.accountType || AccountType.DOMESTIC,
-          customerName: data.customerName,
-          mobile: data.mobile,
-          altMobile: data.altMobile || null,
-          houseNo: data.houseNo || "",
-          address1: data.address1 || "",
-          address2: data.address2 || null,
-          city: data.city || "",
-          society: data.society || null,
-          supervisorId: data.supervisorId || null,
-          status: data.status || 'Pending',
-          assignDateAgency: data.assignDateAgency ? new Date(data.assignDateAgency) : null,
-          assignDateSuper: data.assignDateSuper ? new Date(data.assignDateSuper) : null,
-          bpCreationDate: data.bpCreationDate ? new Date(data.bpCreationDate) : null,
-          plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : null,
-          gcLength: data.gcLength ?? null,
-          giPipeMtr: data.giPipeMtr ?? null,
-          tfCount: data.tfCount ?? 0,
-          ivCount: data.ivCount ?? 0,
-        },
-      });
+    // ── STEP 1: Create the PNG connection record (committed independently) ──
+    const connection = await prisma.pNGConnection.create({
+      data: {
+        siteId,
+        appNo,
+        bpNo: data.bpNo || null,
+        accountType: data.accountType || AccountType.DOMESTIC,
+        customerName: data.customerName,
+        mobile: data.mobile,
+        altMobile: data.altMobile || null,
+        houseNo: data.houseNo || '',
+        address1: data.address1 || '',
+        address2: data.address2 || null,
+        city: data.city || '',
+        society: data.society || null,
+        supervisorId: data.supervisorId || null,
+        status: data.status || 'Pending',
+        assignDateAgency: data.assignDateAgency ? new Date(data.assignDateAgency) : null,
+        assignDateSuper: data.assignDateSuper ? new Date(data.assignDateSuper) : null,
+        bpCreationDate: data.bpCreationDate ? new Date(data.bpCreationDate) : null,
+        plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : null,
+        gcLength: data.gcLength ?? null,
+        giPipeMtr: data.giPipeMtr ?? null,
+        tfCount: data.tfCount ?? 0,
+        ivCount: data.ivCount ?? 0,
+      },
+    });
 
-      // 2. Deduct stock for each material used (only if the item exists in inventory)
-      if (data.materialsUsed && data.materialsUsed.length > 0) {
-        for (const mat of data.materialsUsed) {
-          const qty = Math.round(mat.qty); // InventoryItem uses Int fields
+    console.log(`[PNG create] Connection saved: ${connection.id} (appNo: ${appNo})`);
+
+    // ── STEP 2: Deduct stock — runs AFTER the PNG save is committed.
+    //    Failures here are NON-FATAL: they are logged but never block the save response.
+    if (data.materialsUsed && data.materialsUsed.length > 0) {
+      console.log(`[PNG create] Deducting stock for ${data.materialsUsed.length} material(s)...`);
+      for (const mat of data.materialsUsed) {
+        try {
+          const qty = Math.round(mat.qty);
           if (qty <= 0) continue;
 
-          // Find the inventory item for this site + material name
-          const invItem = await tx.inventoryItem.findUnique({
+          const invItem = await prisma.inventoryItem.findUnique({
             where: { siteId_material: { siteId, material: mat.material } },
           });
 
           if (!invItem) {
-            // Material not in inventory yet — skip silently (don't block the save)
-            console.warn(`[PNG save] Material "${mat.material}" not found in inventory for site ${siteId} — skipping deduction`);
+            console.warn(`[PNG create] Material not in inventory: "${mat.material}" (site: ${siteId}) — skipping`);
             continue;
           }
 
-          // issued = used quantity, inStore = received - issued - returned
           const newIssued  = invItem.issued + qty;
           const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
 
-          await tx.inventoryItem.update({
+          await prisma.inventoryItem.update({
             where: { siteId_material: { siteId, material: mat.material } },
-            data: {
-              issued:   newIssued,
-              inStore:  newInStore,
-              updatedAt: new Date(),
-            },
+            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
           });
+
+          console.log(`[PNG create] ✓ Stock deducted — "${mat.material}" issued: +${qty} → ${newIssued}`);
+        } catch (stockErr: any) {
+          // Non-fatal: log and continue with next material
+          console.error(`[PNG create] ⚠ Stock deduction failed for "${mat.material}":`, stockErr.message);
         }
       }
-
-      return pngConn;
-    });
+    }
 
     res.status(201).json({ success: true, connection });
-  } catch (error) {
+  } catch (error: any) {
+    console.error('[PNG create] Fatal error:', error.message, error);
     next(error);
   }
 };

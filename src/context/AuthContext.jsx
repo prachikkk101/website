@@ -134,10 +134,13 @@ export function AuthProvider({ children }) {
 
   const registerUser = async (name, email, password) => {
     try {
-      // Try real backend
       const response = await api.post('/auth/register', { name, email, password });
       if (response.data.success) {
-        return { success: true, message: response.data.message || 'OTP sent to email.' };
+        return {
+          success: true,
+          message: response.data.message || 'Registration successful! You can now sign in.',
+          requiresApproval: response.data.requiresApproval || false,
+        };
       }
       return { success: false, error: response.data.error || 'Registration failed.' };
     } catch (err) {
@@ -145,7 +148,6 @@ export function AuthProvider({ children }) {
       const is5xx = err.response?.status >= 500;
 
       if (isNetworkError || is5xx) {
-        // Backend is unreachable — do NOT silently create local users
         return {
           success: false,
           error: 'Cannot connect to the server. Please check your internet connection and try again.',
