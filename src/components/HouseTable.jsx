@@ -7,6 +7,7 @@ import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
 import { pngAPI, dataAPI } from '../utils/api';
+import { buildAccordionCategories } from '../utils/stockCategories';
 
 
 /* ── Helpers ── */
@@ -278,7 +279,7 @@ export default function HouseTable() {
   const [stockCatData, setStockCatData] = useState([]);
   useEffect(() => {
     dataAPI.getStockCategories()
-      .then(cats => setStockCatData(cats.map(c => ({ id: String(c.id), label: c.name, color: '#1f4e1a', items: [] }))))
+      .then(cats => setStockCatData(buildAccordionCategories(cats, null)))
       .catch(() => setStockCatData([]));
   }, []);
 

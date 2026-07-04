@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { stockAPI, dataAPI } from '../utils/api';
+import { DEFAULT_MATERIALS_BY_CATEGORY, buildAccordionCategories } from '../utils/stockCategories';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -39,22 +40,23 @@ function getStatus(onSite, inStore, open, recv) {
 }
 
 
-/* ── Category Accordion for Receive Stock ── */
-function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuantities, readOnly = false }) {
-  // Load categories from the live backend API
+/* ── Category Accordion for Receive Stock & Return Stock ── */
+function CategoryAccordion({
+  openCategory, setOpenCategory,
+  quantities, setQuantities,
+  readOnly = false,
+  // Optional: existing site stock items (for Return Stock mode)
+  stockItems = null,
+}) {
   const [categories, setCategories] = useState([]);
   const [catLoading, setCatLoading] = useState(true);
 
   useEffect(() => {
     dataAPI.getStockCategories()
-      .then(cats => {
-        // getStockCategories returns [{ id, name }]; we need the stockCategories shape.
-        // Since MaterialItem.category stores category names, we group materials by category.
-        // For now map each to a simple expandable group with the category name.
-        setCategories(cats.map(c => ({ id: String(c.id), label: c.name, color: '#1f4e1a', items: [] })));
-      })
+      .then(cats => setCategories(buildAccordionCategories(cats, stockItems)))
       .catch(() => setCategories([]))
       .finally(() => setCatLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function toggleCategory(id) {
@@ -67,15 +69,19 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
 
   if (catLoading) return <p style={{ color: '#64748b', fontSize: 13 }}>Loading categories…</p>;
 
+  if (categories.length === 0) {
+    return (
+      <p style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>
+        No stock categories loaded. Check backend connection.
+      </p>
+    );
+  }
+
   return (
     <div>
-      {categories.length === 0 && (
-        <p style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>
-          No stock categories found. Add materials via the backend admin panel.
-        </p>
-      )}
       {categories.map(cat => {
         const isOpen = openCategory === cat.id;
+        const itemsToShow = cat.items;
         return (
           <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
             {/* Accordion header */}
@@ -97,19 +103,21 @@ function CategoryAccordion({ openCategory, setOpenCategory, quantities, setQuant
             {/* Expanded items */}
             {isOpen && (
               <div style={{ padding: '12px 16px', background: 'white' }}>
-                {cat.items.length === 0 ? (
+                {itemsToShow.length === 0 ? (
                   <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
-                    No items in this category.
+                    {stockItems !== null
+                      ? 'No items from this category in site inventory.'
+                      : 'No default items for this category.'}
                   </p>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {cat.items.map(item => {
+                    {itemsToShow.map(item => {
                       if (readOnly) {
                         const stats = quantities[item] || {};
                         const recv = stats.recv ?? 0;
                         const issued = stats.issued ?? 0;
                         const ret = stats.ret ?? 0;
-                        const inStore = Math.max(0, stats.inStore ?? 0);
+                        const inStore = Math.max(0, stats.inStore ?? recv - issued - ret);
                         return (
                           <div key={item} style={{
                             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
@@ -395,12 +403,20 @@ export default function Inventory() {
     }
     if (Object.keys(e).length > 0) return;
 
+    // The quantities keys are: `${catId}__${materialName}`
+    // catId is 1-based index matching the sorted DEFAULT_STOCK_CATEGORIES order.
+    // Build a lookup: catId (string) → category label
+    const SORTED_CATS = Object.keys(DEFAULT_MATERIALS_BY_CATEGORY).sort();
+    const catIdToLabel = Object.fromEntries(SORTED_CATS.map((name, i) => [String(i + 1), name]));
+
     // Collect items with qty > 0
     const receivedItems = [];
     Object.entries(quantities).forEach(([key, qty]) => {
       if (qty > 0) {
-        const [, ...itemParts] = key.split('__');
-        receivedItems.push({ name: itemParts.join('__'), qty });
+        const [catId, ...itemParts] = key.split('__');
+        const materialName = itemParts.join('__');
+        const categoryLabel = catIdToLabel[catId] || '';
+        receivedItems.push({ name: materialName, qty, category: categoryLabel });
       }
     });
 
@@ -415,7 +431,12 @@ export default function Inventory() {
     }
 
     try {
-      const itemsToSend = receivedItems.map(item => ({ material: item.name, qty: item.qty, unit: 'pcs', category: '' }));
+      const itemsToSend = receivedItems.map(item => ({
+        material: item.name,
+        qty: item.qty,
+        unit: 'pcs',
+        category: item.category,
+      }));
       await stockAPI.receiveStock(currentSiteId, itemsToSend);
       const refreshed = await stockAPI.getAll(currentSiteId);
       setStockData(mapStockData(refreshed));
@@ -962,6 +983,7 @@ export default function Inventory() {
             setOpenCategory={setRetOpenCategory}
             quantities={retQuantities}
             setQuantities={setRetQuantities}
+            stockItems={stockData}
           />
         </div>
 

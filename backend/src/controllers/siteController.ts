@@ -329,19 +329,33 @@ export const getAreas = async (req: AuthenticatedRequest, res: Response, next: N
   }
 };
 
+/* Default stock categories — always returned so the accordion is never empty.
+   Additional categories appear automatically once stock items are received. */
+const DEFAULT_STOCK_CATEGORIES = [
+  'FIM Material',
+  'GI Fitting — ½ inch',
+  'GI Fitting — ¾ inch',
+  'GI Fitting — 1 inch',
+  'MDPE Fittings',
+  'MLC Fittings',
+];
+
 export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // Pull all distinct category values from the MaterialItem table
-    const rows = await prisma.materialItem.findMany({
+    // Pull all distinct category values already in use from InventoryItem rows
+    const rows = await prisma.inventoryItem.findMany({
       distinct: ['category'],
       select: { category: true },
+      where: { category: { not: '' } },
       orderBy: { category: 'asc' },
-    });
+    }).catch(() => [] as { category: string }[]);
 
-    const categories = rows.map((r, i) => ({
-      id: i + 1,
-      name: r.category,
-    }));
+    const dbCategories = rows.map(r => r.category).filter(Boolean);
+
+    // Merge defaults with DB-derived categories (deduplicated, sorted)
+    const merged = Array.from(new Set([...DEFAULT_STOCK_CATEGORIES, ...dbCategories])).sort();
+
+    const categories = merged.map((name, i) => ({ id: i + 1, name }));
 
     res.status(200).json({ success: true, categories });
   } catch (error) {
