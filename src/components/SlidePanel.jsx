@@ -32,7 +32,7 @@ export function Field({ label, required, error, children }) {
   );
 }
 
-export function Input({ error, style, onFocus: externalOnFocus, onBlur: externalOnBlur, type, ...props }) {
+export function Input({ error, style, onFocus: externalOnFocus, onBlur: externalOnBlur, onChange, type, ...props }) {
   return (
     <input
       type={type}
@@ -42,6 +42,7 @@ export function Input({ error, style, onFocus: externalOnFocus, onBlur: external
         boxShadow: error ? '0 0 0 2px rgba(239,68,68,0.1)' : 'none',
         ...style,
       }}
+      onChange={onChange ? (e => onChange(e.target.value)) : undefined}
       onFocus={e => {
         e.target.style.borderColor = error ? '#ef4444' : '#2d6a27';
         e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)';
@@ -59,7 +60,7 @@ export function Input({ error, style, onFocus: externalOnFocus, onBlur: external
   );
 }
 
-export function Select({ error, style, children, ...props }) {
+export function Select({ error, style, children, options, onChange, ...props }) {
   return (
     <select
       style={{
@@ -69,11 +70,19 @@ export function Select({ error, style, children, ...props }) {
         borderColor: error ? '#ef4444' : '#d1d5db',
         ...style,
       }}
+      onChange={onChange ? (e => onChange(e.target.value)) : undefined}
       onFocus={e => { e.target.style.borderColor = '#2d6a27'; e.target.style.boxShadow = '0 0 0 2px rgba(45,106,39,0.15)'; }}
       onBlur={e => { e.target.style.borderColor = error ? '#ef4444' : '#d1d5db'; e.target.style.boxShadow = 'none'; }}
       {...props}
     >
-      {children}
+      {/* Support both options array prop and children */}
+      {options
+        ? options.map(opt => (
+            typeof opt === 'object'
+              ? <option key={opt.value} value={opt.value}>{opt.label}</option>
+              : <option key={opt} value={opt}>{opt}</option>
+          ))
+        : children}
     </select>
   );
 }

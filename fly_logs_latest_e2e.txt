@@ -1,0 +1,169 @@
+[2m2026-07-04T08:43:58Z[0m runner[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T08:44:05Z[0m runner[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc (6.8168641s)
+[2m2026-07-04T08:44:06Z[0m runner[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T08:44:09Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]2026-07-04T08:44:09.084420974 [01KWP4RZAAB3TMEV14SPJZE0GZ:main] Running Firecracker v1.14.4
+[2m2026-07-04T08:44:09Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]2026-07-04T08:44:09.084612997 [01KWP4RZAAB3TMEV14SPJZE0GZ:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T08:44:09Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T08:44:10Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh npx prisma migrate deploy` as root
+[2m2026-07-04T08:44:10Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T08:44:10Z[0m runner[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Machine started in 1.167s
+[2m2026-07-04T08:44:10Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]2026/07/04 08:44:10 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:1a:f4f1:da5b:2]:22
+[2m2026-07-04T08:44:17Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Loaded Prisma config from prisma.config.ts.
+[2m2026-07-04T08:44:23Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Prisma schema loaded from prisma/schema.prisma.
+[2m2026-07-04T08:44:24Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m]Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-crimson-heart-aod8jt1q.c-2.ap-southeast-1.aws.neon.tech"
+[2m2026-07-04T08:44:24Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m Sending signal SIGINT to main child process w/ PID 640
+[2m2026-07-04T08:44:25Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited with signal (with signal 'SIGINT', core dumped? false)
+[2m2026-07-04T08:44:25Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][33m WARN[0m Reaped child process with pid: 692 and signal: SIGABRT, core dumped? false
+[2m2026-07-04T08:44:25Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T08:44:25Z[0m app[e8207e0a7790e8] [32msin[0m [[34minfo[0m][   15.936981] reboot: Restarting system
+[2m2026-07-04T08:44:28Z[0m runner[7845745f227418] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T08:44:28Z[0m runner[7845745f227418] [32msin[0m [[34minfo[0m]Container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc already prepared
+[2m2026-07-04T08:44:29Z[0m runner[7845745f227418] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T08:44:29Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]2026-07-04T08:44:29.906419368 [01KWP4SWGB3559W625QJHWCHM2:main] Running Firecracker v1.14.4
+[2m2026-07-04T08:44:29Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]2026-07-04T08:44:29.906578261 [01KWP4SWGB3559W625QJHWCHM2:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T08:44:30Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T08:44:30Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh npx prisma migrate deploy` as root
+[2m2026-07-04T08:44:30Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T08:44:31Z[0m runner[7845745f227418] [32msin[0m [[34minfo[0m]Machine started in 1.149s
+[2m2026-07-04T08:44:31Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]2026/07/04 08:44:31 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:1a:eebf:4ade:2]:22
+[2m2026-07-04T08:44:38Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]Loaded Prisma config from prisma.config.ts.
+[2m2026-07-04T08:44:44Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]Prisma schema loaded from prisma/schema.prisma.
+[2m2026-07-04T08:44:44Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-crimson-heart-aod8jt1q.c-2.ap-southeast-1.aws.neon.tech"
+[2m2026-07-04T08:44:46Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]2 migrations found in prisma/migrations
+[2m2026-07-04T08:44:46Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m]No pending migrations to apply.
+[2m2026-07-04T08:44:46Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited normally with code: 0
+[2m2026-07-04T08:44:46Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T08:44:47Z[0m app[7845745f227418] [32msin[0m [[34minfo[0m][   17.055031] reboot: Restarting system
+[2m2026-07-04T08:44:47Z[0m runner[7845745f227418] [32msin[0m [[34minfo[0m]machine restart policy set to 'no', not restarting
+[2m2026-07-04T08:44:54Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T08:44:54Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T08:44:55Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc (1.064682034s)
+[2m2026-07-04T08:44:56Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T08:44:58Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc (3.250584823s)
+[2m2026-07-04T08:44:58Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T08:44:58Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Sending signal SIGINT to main child process w/ PID 641
+[2m2026-07-04T08:44:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited with signal (with signal 'SIGINT', core dumped? false)
+[2m2026-07-04T08:44:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T08:44:59Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][ 3083.704231] reboot: Restarting system
+[2m2026-07-04T08:45:00Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T08:45:00.074751863 [01KWP4TPKXWNH5ZQZJJKN3SM3P:main] Running Firecracker v1.14.4
+[2m2026-07-04T08:45:00Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T08:45:00.074950687 [01KWP4TPKXWNH5ZQZJJKN3SM3P:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T08:45:00Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T08:45:01Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh node dist/index.js` as root
+[2m2026-07-04T08:45:01Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T08:45:01Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Machine created and started in 6.312s
+[2m2026-07-04T08:45:01Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026/07/04 08:45:01 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:187:efe5:329b:2]:22
+[2m2026-07-04T08:45:05Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ◈ encrypted .env [www.dotenvx.com]
+[2m2026-07-04T08:45:06Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌘ suppress logs { quiet: true }
+[2m2026-07-04T08:45:06Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🔥 GP-PMS Backend running on http://0.0.0.0:5001
+[2m2026-07-04T08:45:06Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]📋 Health check: http://0.0.0.0:5001/health
+[2m2026-07-04T08:45:06Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🌍 Environment: production
+[2m2026-07-04T09:03:43Z[0m runner[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T09:03:50Z[0m runner[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Successfully prepared image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc (7.225155789s)
+[2m2026-07-04T09:03:51Z[0m runner[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T09:03:54Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]2026-07-04T09:03:54.215824287 [01KWP5X45BQZR7TA13FMKC0JN2:main] Running Firecracker v1.14.4
+[2m2026-07-04T09:03:54Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]2026-07-04T09:03:54.215951518 [01KWP5X45BQZR7TA13FMKC0JN2:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T09:03:54Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T09:03:55Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh npx prisma migrate deploy` as root
+[2m2026-07-04T09:03:55Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T09:03:55Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]2026/07/04 09:03:55 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:85b:bd82:eee4:2]:22
+[2m2026-07-04T09:03:56Z[0m runner[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Machine started in 1.318s
+[2m2026-07-04T09:04:02Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Loaded Prisma config from prisma.config.ts.
+[2m2026-07-04T09:04:08Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Prisma schema loaded from prisma/schema.prisma.
+[2m2026-07-04T09:04:08Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-crimson-heart-aod8jt1q.c-2.ap-southeast-1.aws.neon.tech"
+[2m2026-07-04T09:04:10Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]2 migrations found in prisma/migrations
+[2m2026-07-04T09:04:11Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m]No pending migrations to apply.
+[2m2026-07-04T09:04:12Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited normally with code: 0
+[2m2026-07-04T09:04:12Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T09:04:12Z[0m app[080d6d6f630ee8] [32msin[0m [[34minfo[0m][   17.909964] reboot: Restarting system
+[2m2026-07-04T09:04:12Z[0m runner[080d6d6f630ee8] [32msin[0m [[34minfo[0m]machine restart policy set to 'no', not restarting
+[2m2026-07-04T09:04:19Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T09:04:19Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc already prepared
+[2m2026-07-04T09:04:20Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T09:04:20Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc already prepared
+[2m2026-07-04T09:04:21Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T09:04:21Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T09:04:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Sending signal SIGINT to main child process w/ PID 642
+[2m2026-07-04T09:04:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited with signal (with signal 'SIGINT', core dumped? false)
+[2m2026-07-04T09:04:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T09:04:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][ 1161.267369] reboot: Restarting system
+[2m2026-07-04T09:04:22Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T09:04:22.288676886 [01KWP5Y8G9M0PBNKAYHBN47Z8W:main] Running Firecracker v1.14.4
+[2m2026-07-04T09:04:22Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T09:04:22.288899790 [01KWP5Y8G9M0PBNKAYHBN47Z8W:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T09:04:23Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T09:04:23Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh node dist/index.js` as root
+[2m2026-07-04T09:04:23Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T09:04:23Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Machine created and started in 3.23s
+[2m2026-07-04T09:04:23Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026/07/04 09:04:23 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:187:efe5:329b:2]:22
+[2m2026-07-04T09:04:27Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌘ override existing { override: true }
+[2m2026-07-04T09:04:28Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌘ override existing { override: true }
+[2m2026-07-04T09:04:28Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🔥 GP-PMS Backend running on http://0.0.0.0:5001
+[2m2026-07-04T09:04:28Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]📋 Health check: http://0.0.0.0:5001/health
+[2m2026-07-04T09:04:28Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🌍 Environment: production
+[2m2026-07-04T09:55:20Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Attempt: radhe.sangwan1980@gmail.com
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m](node:642) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]To prepare for this change:
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]- If you want the current behavior, explicitly use 'sslmode=verify-full'
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+[2m2026-07-04T09:55:21Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m](Use `node --trace-warnings ...` to show where the warning was created)
+[2m2026-07-04T09:55:22Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] User found: radhe.sangwan1980@gmail.com | role: ADMIN | verified: true
+[2m2026-07-04T09:55:22Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Password match: true for radhe.sangwan1980@gmail.com
+[2m2026-07-04T09:55:22Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Success: radhe.sangwan1980@gmail.com | site: none
+[2m2026-07-04T09:59:40Z[0m runner[683e76eb779038] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T09:59:49Z[0m runner[683e76eb779038] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T09:59:52Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]2026-07-04T09:59:52.381199645 [01KWP93JTZMEGPMMD8RTVZDJCP:main] Running Firecracker v1.14.4
+[2m2026-07-04T09:59:52Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]2026-07-04T09:59:52.381428468 [01KWP93JTZMEGPMMD8RTVZDJCP:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T09:59:53Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T09:59:53Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh npx prisma migrate deploy` as root
+[2m2026-07-04T09:59:53Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T09:59:53Z[0m runner[683e76eb779038] [32msin[0m [[34minfo[0m]Machine started in 1.176s
+[2m2026-07-04T09:59:53Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]2026/07/04 09:59:53 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:1a:3993:429a:2]:22
+[2m2026-07-04T10:00:00Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]Loaded Prisma config from prisma.config.ts.
+[2m2026-07-04T10:00:07Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]Prisma schema loaded from prisma/schema.prisma.
+[2m2026-07-04T10:00:07Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]Datasource "db": PostgreSQL database "neondb", schema "public" at "ep-crimson-heart-aod8jt1q.c-2.ap-southeast-1.aws.neon.tech"
+[2m2026-07-04T10:00:08Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]2 migrations found in prisma/migrations
+[2m2026-07-04T10:00:08Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m]No pending migrations to apply.
+[2m2026-07-04T10:00:09Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited normally with code: 0
+[2m2026-07-04T10:00:09Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T10:00:09Z[0m app[683e76eb779038] [32msin[0m [[34minfo[0m][   17.011726] reboot: Restarting system
+[2m2026-07-04T10:00:09Z[0m runner[683e76eb779038] [32msin[0m [[34minfo[0m]machine restart policy set to 'no', not restarting
+[2m2026-07-04T10:00:16Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T10:00:16Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Pulling container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc
+[2m2026-07-04T10:00:16Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc already prepared
+[2m2026-07-04T10:00:16Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Container image registry.fly.io/oxygen-protech-gas@sha256:7238e732c91e9dbc25290d602c693282c1b0e16fe8e16acf2367579e37b779dc already prepared
+[2m2026-07-04T10:00:17Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Sending signal SIGINT to main child process w/ PID 642
+[2m2026-07-04T10:00:17Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T10:00:17Z[0m runner[78465d9ae03558] [32msin[0m [[34minfo[0m]Configuring firecracker
+[2m2026-07-04T10:00:18Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Main child exited with signal (with signal 'SIGINT', core dumped? false)
+[2m2026-07-04T10:00:18Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting clean up.
+[2m2026-07-04T10:00:18Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][ 3355.906202] reboot: Restarting system
+[2m2026-07-04T10:00:19Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T10:00:19.063352056 [01KWP94PR7X73731HK3HXVGPB3:main] Running Firecracker v1.14.4
+[2m2026-07-04T10:00:19Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026-07-04T10:00:19.063544199 [01KWP94PR7X73731HK3HXVGPB3:main] Listening on API socket ("/fc.sock").
+[2m2026-07-04T10:00:19Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Starting init (commit: ea887ee)...
+[2m2026-07-04T10:00:20Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m Preparing to run: `docker-entrypoint.sh node dist/index.js` as root
+[2m2026-07-04T10:00:20Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][32m INFO[0m [fly api proxy] listening at /.fly/api
+[2m2026-07-04T10:00:20Z[0m runner[d8917edb1dde18] [32msin[0m [[34minfo[0m]Machine created and started in 3.134s
+[2m2026-07-04T10:00:20Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]2026/07/04 10:00:20 INFO SSH listening listen_address=[fdaa:8c:fedc:a7b:187:efe5:329b:2]:22
+[2m2026-07-04T10:00:24Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+[2m2026-07-04T10:00:25Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]◇ injected env (0) from .env // tip: ⌘ override existing { override: true }
+[2m2026-07-04T10:00:25Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🔥 GP-PMS Backend running on http://0.0.0.0:5001
+[2m2026-07-04T10:00:25Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]📋 Health check: http://0.0.0.0:5001/health
+[2m2026-07-04T10:00:25Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]🌍 Environment: production
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Attempt: oxygenhisar@gmail.com
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m](node:642) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]In the next major version (pg-connection-string v3.0.0 and pg v9.0.0), these modes will adopt standard libpq semantics, which have weaker security guarantees.
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]To prepare for this change:
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]- If you want the current behavior, explicitly use 'sslmode=verify-full'
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]- If you want libpq compatibility now, use 'uselibpqcompat=true&sslmode=require'
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m]See https://www.postgresql.org/docs/current/libpq-ssl.html for libpq SSL mode definitions.
+[2m2026-07-04T10:00:51Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m](Use `node --trace-warnings ...` to show where the warning was created)
+[2m2026-07-04T10:00:52Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] User found: oxygenhisar@gmail.com | role: WORKER | verified: false
+[2m2026-07-04T10:00:52Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Blocked: email not verified for oxygenhisar@gmail.com
+[2m2026-07-04T10:01:07Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Attempt: radhe.sangwan1980@gmail.com
+[2m2026-07-04T10:01:07Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] User found: radhe.sangwan1980@gmail.com | role: ADMIN | verified: true
+[2m2026-07-04T10:01:07Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Password match: true for radhe.sangwan1980@gmail.com
+[2m2026-07-04T10:01:07Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Success: radhe.sangwan1980@gmail.com | site: none
+[2m2026-07-04T10:05:16Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Attempt: radhe.sangwan1980@gmail.com
+[2m2026-07-04T10:05:16Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] User found: radhe.sangwan1980@gmail.com | role: ADMIN | verified: true
+[2m2026-07-04T10:05:16Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Password match: true for radhe.sangwan1980@gmail.com
+[2m2026-07-04T10:05:16Z[0m app[d8917edb1dde18] [32msin[0m [[34minfo[0m][login] Success: radhe.sangwan1980@gmail.com | site: none

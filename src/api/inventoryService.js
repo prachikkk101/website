@@ -1,5 +1,5 @@
 // src/api/inventoryService.js
-import api from './api';
+import api from '../utils/api';
 
 export const inventoryService = {
   // Daily Consumption

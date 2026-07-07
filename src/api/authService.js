@@ -1,5 +1,5 @@
 // src/api/authService.js
-import api from './api';
+import api from '../utils/api';
 
 export const authService = {
   login: (email, password) =>

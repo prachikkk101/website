@@ -1,5 +1,5 @@
 // src/api/adminService.js
-import api from './api';
+import api from '../utils/api';
 
 export const adminService = {
   // Dashboard

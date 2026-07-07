@@ -1,5 +1,5 @@
 // src/api/icLmcService.js
-import api from './api';
+import api from '../utils/api';
 
 export const icLmcService = {
   // I&C Work

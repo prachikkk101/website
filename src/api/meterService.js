@@ -1,5 +1,5 @@
 // src/api/meterService.js
-import api from './api';
+import api from '../utils/api';
 
 export const meterService = {
   getMeters: (siteId) =>

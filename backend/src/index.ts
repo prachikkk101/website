@@ -36,7 +36,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -73,10 +73,11 @@ app.delete('/api/daily-reports/:id', authenticate, deleteDailyReport);
 // Site-scoped sub-routes (use :siteId as param prefix)
 app.use('/api/sites/:siteId/png-connections', pngRoutes);
 app.use('/api/sites/:siteId/inventory', stockRoutes);
-app.use('/api/sites/:siteId', inventoryRoutes);
 app.use('/api/sites/:siteId/pe-laying', peLayingRoutes);
 app.use('/api/sites/:siteId/meters', meterRoutes);
+// ic and lmc must come before the generic inventoryRoutes catch-all
 app.use('/api/sites/:siteId', icLmcRoutes);
+app.use('/api/sites/:siteId', inventoryRoutes);
 
 // ── Global Error Handler ──────────────────────────────────
 app.use(errorHandler);

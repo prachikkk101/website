@@ -130,25 +130,25 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
   try {
     const { email, password } = schema.parse(req.body);
 
-    console.log(`[login] Attempt: ${email}`);
+    console.log('[login] Attempt:', email);
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      console.log(`[login] Failed: user not found for ${email}`);
-      return res.status(400).json({ success: false, error: 'Invalid credentials' });
+      console.log('[login] Failed: user not found for', email);
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
-    console.log(`[login] User found: ${email} | role: ${user.role} | verified: ${user.emailVerified}`);
+    console.log('[login] User found:', !!user, 'role:', user.role);
 
-    if (!user.emailVerified) {
-      console.log(`[login] Blocked: email not verified for ${email}`);
-      return res.status(400).json({ success: false, error: 'Email not verified. Please contact your administrator.' });
-    }
+    // NOTE: No emailVerified check here for SUPERVISOR / WORKER.
+    // Email verification only applies to the ADMIN forgot-password OTP flow (see adminForgotPassword).
+    // Non-admin users can log in immediately after registration.
+    // Site access (what data they can see) is gated per-route by role/siteId checks, NOT at login.
 
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
-    console.log(`[login] Password match: ${isMatch} for ${email}`);
-    if (!isMatch) {
-      return res.status(400).json({ success: false, error: 'Invalid credentials' });
+    const passwordMatch = await bcrypt.compare(password, user.passwordHash);
+    console.log('[login] Password match:', passwordMatch);
+    if (!passwordMatch) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
     const accessToken = generateAccessToken(user);
@@ -160,7 +160,7 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
       include: { site: { select: { id: true, name: true } } },
     });
 
-    console.log(`[login] Success: ${email} | site: ${assignment?.site?.name ?? 'none'}`);
+    console.log('[login] Success:', email, '| role:', user.role, '| site:', assignment?.site?.name ?? 'none');
 
     res.status(200).json({
       success: true,
