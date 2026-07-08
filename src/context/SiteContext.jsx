@@ -143,9 +143,8 @@ export function SiteProvider({ children }) {
     setSelCityRaw('all');
     setSelAreaRaw('all');
     setSelectedSite(val); // keep legacy in sync
-    if (val && val !== 'all') {
-      setSelectedSiteId(val);
-    }
+    // NOTE: Do NOT set selectedSiteId here — GA names are not site UUIDs.
+    // selectedSiteId is populated from the backend site list (siteList) on load.
   }
 
   function setSelCity(val) {

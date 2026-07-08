@@ -24,14 +24,14 @@ export const getAdminDashboard = async (req: AuthenticatedRequest, res: Response
         });
         const icDone = await prisma.iCWork.count({ where: { siteId: site.id, status: 'Done' } });
 
-        // Low-stock alert check
-        const lowStockItems = await prisma.siteStock.findMany({
-          where: {
-            siteId: site.id,
-            inStoreQty: { lt: prisma.siteStock.fields.requiredQty },
-          },
+        // Low-stock alert check — compare columns in JS since Prisma can't do cross-column WHERE
+        const allStock = await prisma.siteStock.findMany({
+          where: { siteId: site.id },
           include: { material: { select: { name: true, unit: true } } },
         });
+        const lowStockItems = allStock.filter(
+          s => s.inStoreQty.toNumber() < s.requiredQty.toNumber()
+        );
 
         return {
           siteId: site.id,

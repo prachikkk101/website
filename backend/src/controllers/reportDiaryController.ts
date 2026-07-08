@@ -1,14 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import prisma from '../config/db';
-
-interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-    name: string;
-  };
-}
+import { AuthenticatedRequest } from '../middlewares/auth';
 
 export const getDailyReports = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -28,7 +20,7 @@ export const createDailyReport = async (req: AuthenticatedRequest, res: Response
       return res.status(400).json({ success: false, error: 'Site name, date, and work done are required' });
     }
 
-    const postedBy = req.user?.name || 'Admin';
+    const postedBy = req.user?.email || 'Admin';
 
     const report = await prisma.dailyReport.create({
       data: {

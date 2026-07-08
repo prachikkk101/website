@@ -20,16 +20,64 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle 401s (Unauthorized)
+// Response interceptor — silent token refresh on 401, then redirect if refresh fails
+let _isRefreshing = false;
+let _failedQueue = [];
+
+function _processQueue(error, token = null) {
+  _failedQueue.forEach((p) => { error ? p.reject(error) : p.resolve(token); });
+  _failedQueue = [];
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      localStorage.removeItem('gppms_token');
-      localStorage.removeItem('gppms_refresh');
-      localStorage.removeItem('gppms_session');
-      window.location.href = '/login';
+  async (error) => {
+    const originalRequest = error.config;
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (_isRefreshing) {
+        return new Promise((resolve, reject) => {
+          _failedQueue.push({ resolve, reject });
+        }).then((token) => {
+          originalRequest.headers.Authorization = `Bearer ${token}`;
+          return api(originalRequest);
+        }).catch((err) => Promise.reject(err));
+      }
+
+      originalRequest._retry = true;
+      _isRefreshing = true;
+
+      const refreshToken = localStorage.getItem('gppms_refresh');
+      if (!refreshToken) {
+        _processQueue(error, null);
+        localStorage.removeItem('gppms_token');
+        localStorage.removeItem('gppms_refresh');
+        localStorage.removeItem('gppms_session');
+        window.location.href = '/login';
+        return Promise.reject(error);
+      }
+
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+        const { data } = await axios.post(`${BASE_URL}/api/auth/refresh`, { refreshToken });
+        const newToken = data.accessToken;
+        localStorage.setItem('gppms_token', newToken);
+        api.defaults.headers.Authorization = `Bearer ${newToken}`;
+        _processQueue(null, newToken);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch (refreshErr) {
+        _processQueue(refreshErr, null);
+        localStorage.removeItem('gppms_token');
+        localStorage.removeItem('gppms_refresh');
+        localStorage.removeItem('gppms_session');
+        window.location.href = '/login';
+        return Promise.reject(refreshErr);
+      } finally {
+        _isRefreshing = false;
+      }
     }
+
     return Promise.reject(error);
   }
 );

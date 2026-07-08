@@ -7,6 +7,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import Customers from './pages/Customers';
 import Inventory from './pages/Inventory';
@@ -36,6 +37,7 @@ export default function App() {
             <Routes>
               {/* Public */}
               <Route path="/login" element={<SafePage><Login /></SafePage>} />
+              <Route path="/register" element={<SafePage><Register /></SafePage>} />
 
               {/* Protected */}
               <Route element={<ProtectedRoute />}>
