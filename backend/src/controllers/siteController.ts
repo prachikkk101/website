@@ -363,3 +363,92 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
   }
 };
 
+/* ─── Safe Deletion Helpers & Endpoints ─── */
+
+async function checkSiteIsSafeToDelete(siteId: string, tx: any) {
+  const pngCount = await tx.pNGConnection.count({ where: { siteId } });
+  if (pngCount > 0) throw new Error(`Site has ${pngCount} active PNG Connections`);
+  
+  const invTxnCount = await tx.inventoryTransaction.count({ where: { siteId } });
+  if (invTxnCount > 0) throw new Error(`Site has ${invTxnCount} Inventory Transactions`);
+
+  const consumptionCount = await tx.consumptionLog.count({ where: { siteId } });
+  if (consumptionCount > 0) throw new Error(`Site has ${consumptionCount} Consumption Logs`);
+
+  const peCount = await tx.pELaying.count({ where: { siteId } });
+  if (peCount > 0) throw new Error(`Site has ${peCount} PE Laying records`);
+
+  const icCount = await tx.iCWork.count({ where: { siteId } });
+  if (icCount > 0) throw new Error(`Site has ${icCount} I&C records`);
+  
+  const meterCount = await tx.meterRegister.count({ where: { siteId } });
+  if (meterCount > 0) throw new Error(`Site has ${meterCount} Registered Meters`);
+}
+
+// 1. Delete specific Area (Site)
+export const deleteSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const siteId = req.params.id as string;
+    
+    await prisma.$transaction(async (tx: any) => {
+      await checkSiteIsSafeToDelete(siteId, tx);
+      // Safe to delete. Prisma Cascade will handle SiteUser and SiteStock because they have onDelete: Cascade
+      // Wait, let's explicitly delete them if Cascade isn't completely trusted or for safety
+      await tx.siteStock.deleteMany({ where: { siteId } });
+      await tx.siteUser.deleteMany({ where: { siteId } });
+      await tx.site.delete({ where: { id: siteId } });
+    });
+
+    res.status(200).json({ success: true, message: 'Area deleted safely' });
+  } catch (error: any) {
+    res.status(409).json({ success: false, error: error.message });
+  }
+};
+
+// 2. Delete City (all Areas within a City & GA)
+export const deleteCity = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const gaName = req.params.gaName as string;
+    const location = req.params.location as string;
+    
+    await prisma.$transaction(async (tx: any) => {
+      const sites = await tx.site.findMany({ where: { gaName, location } });
+      if (sites.length === 0) throw new Error('No sites found for this City');
+
+      for (const site of sites) {
+        await checkSiteIsSafeToDelete(site.id, tx);
+        await tx.siteStock.deleteMany({ where: { siteId: site.id } });
+        await tx.siteUser.deleteMany({ where: { siteId: site.id } });
+        await tx.site.delete({ where: { id: site.id } });
+      }
+    });
+
+    res.status(200).json({ success: true, message: 'City and its areas deleted safely' });
+  } catch (error: any) {
+    res.status(409).json({ success: false, error: error.message });
+  }
+};
+
+// 3. Delete GA Location (all Cities & Areas within a GA)
+export const deleteGALocation = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const gaName = req.params.gaName as string;
+    
+    await prisma.$transaction(async (tx: any) => {
+      const sites = await tx.site.findMany({ where: { gaName } });
+      if (sites.length === 0) throw new Error('No sites found for this GA Location');
+
+      for (const site of sites) {
+        await checkSiteIsSafeToDelete(site.id, tx);
+        await tx.siteStock.deleteMany({ where: { siteId: site.id } });
+        await tx.siteUser.deleteMany({ where: { siteId: site.id } });
+        await tx.site.delete({ where: { id: site.id } });
+      }
+    });
+
+    res.status(200).json({ success: true, message: 'GA Location deleted safely' });
+  } catch (error: any) {
+    res.status(409).json({ success: false, error: error.message });
+  }
+};
+
