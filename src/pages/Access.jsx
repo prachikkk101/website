@@ -29,21 +29,67 @@ export default function Access() {
   const [showModal, setShowModal] = useState(false);
   const [submittedMessage, setSubmittedMessage] = useState('');
 
-  // GA Location form state — 3-level
+  // GA Location form state
   const [showLocModal, setShowLocModal] = useState(false);
   const [locName,      setLocName]      = useState('');
   const [locStatus,    setLocStatus]    = useState('Active');
-  // Cities array: [{ cityName: '', areasText: '' }]
-  const [locCities, setLocCities] = useState([{ cityName: '', areasText: '' }]);
+  const [locCities,    setLocCities]    = useState([{ cityName: '', areasText: '' }]);
 
-  function addCityRow() {
-    setLocCities(prev => [...prev, { cityName: '', areasText: '' }]);
+  function addCityRow() { setLocCities(prev => [...prev, { cityName: '', areasText: '' }]); }
+  function removeCityRow(idx) { setLocCities(prev => prev.filter((_, i) => i !== idx)); }
+  function updateCityRow(idx, field, val) { setLocCities(prev => prev.map((c, i) => i === idx ? { ...c, [field]: val } : c)); }
+
+  // Edit Details modal state
+  const [editSite,     setEditSite]     = useState(null);  // site object being edited
+  const [editSaving,   setEditSaving]   = useState(false);
+  const [editForm,     setEditForm]     = useState({});
+
+  function openEditModal(site) {
+    setEditForm({
+      name:       site.name       || '',
+      location:   site.location   || '',
+      chargeArea: site.chargeArea || '',
+      zone:       site.zone       || '',
+      district:   site.district   || '',
+      status:     site.status     || 'Active',
+    });
+    setEditSite(site);
   }
-  function removeCityRow(idx) {
-    setLocCities(prev => prev.filter((_, i) => i !== idx));
+
+  async function handleEditSave() {
+    if (!editSite) return;
+    setEditSaving(true);
+    try {
+      await adminService.updateSite(editSite.id, editForm);
+      showToast('✓ Site updated successfully');
+      setEditSite(null);
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) setSites(res.data.sites);
+    } catch (err) {
+      showToast('❌ ' + (err.response?.data?.error || 'Failed to update site.'));
+    } finally {
+      setEditSaving(false);
+    }
   }
-  function updateCityRow(idx, field, val) {
-    setLocCities(prev => prev.map((c, i) => i === idx ? { ...c, [field]: val } : c));
+
+  // Delete confirmation state
+  const [deletePending, setDeletePending] = useState(null); // site object
+  const [deleteLoading, setDeleteLoading] = useState(false);
+
+  async function handleDeleteConfirm() {
+    if (!deletePending) return;
+    setDeleteLoading(true);
+    try {
+      await adminService.deleteSite(deletePending.id);
+      showToast(`✓ "${deletePending.name}" and all associated records deleted.`);
+      setDeletePending(null);
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) setSites(res.data.sites);
+    } catch (err) {
+      showToast('❌ ' + (err.response?.data?.error || 'Failed to delete site.'));
+    } finally {
+      setDeleteLoading(false);
+    }
   }
 
   // Request form state
@@ -191,84 +237,6 @@ export default function Access() {
     }
   }
 
-  // ── Add City (Backend Site) ──
-  async function handleAddCity(siteId) {
-    const parentSite = sites.find(s => s.id === siteId);
-    if (!parentSite) return;
-
-    const cityName = prompt('Enter new city name to add to this GA location:');
-    if (!cityName || !cityName.trim()) return;
-    const areasInput = prompt('Enter areas for this city (comma-separated, optional):') || '';
-    const areas = areasInput.split(',').map(a => a.trim()).filter(Boolean);
-
-    try {
-      const sitesToCreate = [];
-      if (areas.length === 0) {
-        sitesToCreate.push({
-          name: `${cityName.trim()} — General`,
-          location: cityName.trim(),
-          gaName: parentSite.gaName || parentSite.name,
-          chargeArea: 'General',
-          zone: 'Zone 1',
-          district: cityName.trim()
-        });
-      } else {
-        areas.forEach(area => {
-          sitesToCreate.push({
-            name: `${cityName.trim()} — ${area}`,
-            location: cityName.trim(),
-            gaName: parentSite.gaName || parentSite.name,
-            chargeArea: area,
-            zone: 'Zone 1',
-            district: cityName.trim()
-          });
-        });
-      }
-
-      showToast('⏳ Adding city and sites...');
-      for (const sitePayload of sitesToCreate) {
-        await api.post('/sites', sitePayload);
-      }
-
-      showToast('✓ City and sites added successfully');
-      const res = await api.get('/sites');
-      if (res.data?.success && res.data?.sites) {
-        setSites(res.data.sites);
-      }
-    } catch (err) {
-      console.error('Failed to add city sites:', err);
-      showToast('❌ Failed to add city.');
-    }
-  }
-
-  // ── Add Area (Backend Site) ──
-  async function handleAddArea(siteId) {
-    const parentSite = sites.find(s => s.id === siteId);
-    if (!parentSite) return;
-
-    const areaName = prompt('Enter new area name to add:');
-    if (!areaName || !areaName.trim()) return;
-
-    try {
-      await api.post('/sites', {
-        name: `${parentSite.location} — ${areaName.trim()}`,
-        location: parentSite.location,
-        gaName: parentSite.gaName,
-        chargeArea: areaName.trim(),
-        zone: 'Zone 1',
-        district: parentSite.location
-      });
-
-      showToast('✓ Area added successfully');
-      const res = await api.get('/sites');
-      if (res.data?.success && res.data?.sites) {
-        setSites(res.data.sites);
-      }
-    } catch (err) {
-      console.error('Failed to add area site:', err);
-      showToast('❌ Failed to add area.');
-    }
-  }
 
   const handleSiteSelectChange = (userId, siteId) => {
     setSelectedSiteForUser(prev => ({
@@ -377,12 +345,106 @@ export default function Access() {
         </div>
       )}
 
+      {/* Delete confirmation dialog */}
+      {deletePending && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:6000, padding:16 }}>
+          <div style={{ background:'#fff', borderRadius:14, padding:'28px 32px', maxWidth:420, width:'100%', boxShadow:'0 20px 56px rgba(0,0,0,0.28)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:16 }}>
+              <span style={{ fontSize:32 }}>🗑️</span>
+              <div>
+                <p style={{ margin:0, fontSize:16, fontWeight:700, color:'#1e293b' }}>Delete GA Location?</p>
+                <p style={{ margin:'4px 0 0', fontSize:12, color:'#64748b' }}>{deletePending.name}</p>
+              </div>
+            </div>
+            <p style={{ fontSize:13, color:'#475569', lineHeight:1.6, marginBottom:24 }}>
+              Are you sure you want to delete this GA Location? <strong>This cannot be undone.</strong> All associated records (connections, inventory, attendance, PE laying, meter registers, etc.) will also be permanently removed.
+            </p>
+            <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+              <button
+                onClick={() => setDeletePending(null)}
+                disabled={deleteLoading}
+                style={{ padding:'9px 22px', borderRadius:8, border:'1px solid #d1d5db', background:'#fff', color:'#64748b', fontWeight:600, cursor:'pointer', fontSize:13 }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteLoading}
+                style={{ padding:'9px 22px', borderRadius:8, border:'none', background: deleteLoading ? '#94a3b8' : '#dc2626', color:'#fff', fontWeight:700, cursor: deleteLoading ? 'not-allowed' : 'pointer', fontSize:13, display:'flex', alignItems:'center', gap:6 }}
+              >
+                {deleteLoading ? '⏳ Deleting...' : '🗑 Yes, Delete Permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Site Modal */}
+      {editSite && (
+        <div
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:5500, padding:16, overflowY:'auto' }}
+          onClick={e => e.target === e.currentTarget && !editSaving && setEditSite(null)}
+        >
+          <div style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:480, boxShadow:'0 20px 56px rgba(0,0,0,0.25)', overflow:'hidden', margin:'auto' }}>
+            <div style={{ background:'linear-gradient(90deg, #1f4e1a, #2d6a27)', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <span style={{ color:'#fff', fontSize:15, fontWeight:700 }}>✏️ Edit Site Details</span>
+              <button onClick={() => setEditSite(null)} disabled={editSaving}
+                style={{ background:'none', border:'none', color:'rgba(255,255,255,0.8)', fontSize:20, cursor:'pointer', lineHeight:1 }}>✕</button>
+            </div>
+            <div style={{ padding:24, display:'flex', flexDirection:'column', gap:14 }}>
+              {[
+                { label: 'Site Name *',  key: 'name',       placeholder: 'e.g. Dabwali — CA-09' },
+                { label: 'GA Name *',    key: 'gaName',     placeholder: 'e.g. Sirsa',  disabled: true },
+                { label: 'City (Location)', key: 'location', placeholder: 'e.g. Dabwali' },
+                { label: 'Charge Area',  key: 'chargeArea', placeholder: 'e.g. Ward 1' },
+                { label: 'Zone *',       key: 'zone',       placeholder: 'e.g. Zone 1' },
+                { label: 'District *',   key: 'district',   placeholder: 'e.g. Sirsa' },
+              ].map(({ label, key, placeholder, disabled }) => (
+                <div key={key}>
+                  <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>{label}</label>
+                  <input
+                    value={editForm[key] || ''}
+                    onChange={e => !disabled && setEditForm(f => ({ ...f, [key]: e.target.value }))}
+                    placeholder={placeholder}
+                    readOnly={disabled}
+                    style={{ width:'100%', height:36, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13, boxSizing:'border-box', background: disabled ? '#f1f5f9' : '#fff', color: disabled ? '#94a3b8' : '#1e293b', outline:'none' }}
+                    onFocus={e => { if (!disabled) e.target.style.borderColor = '#2d6a27'; }}
+                    onBlur={e => e.target.style.borderColor = '#d1d5db'}
+                  />
+                </div>
+              ))}
+              <div>
+                <label style={{ fontSize:12, fontWeight:600, color:'#374151', display:'block', marginBottom:4 }}>Status</label>
+                <select
+                  value={editForm.status || 'Active'}
+                  onChange={e => setEditForm(f => ({ ...f, status: e.target.value }))}
+                  style={{ width:140, height:36, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13, background:'#fff', outline:'none' }}
+                >
+                  <option>Active</option>
+                  <option>Inactive</option>
+                </select>
+              </div>
+              <div style={{ display:'flex', gap:10, marginTop:6 }}>
+                <button onClick={() => setEditSite(null)} disabled={editSaving}
+                  style={{ flex:1, height:38, background:'#f1f5f9', border:'1px solid #d1d5db', borderRadius:7, fontSize:13, fontWeight:600, cursor:'pointer', color:'#374151' }}>
+                  Cancel
+                </button>
+                <button onClick={handleEditSave} disabled={editSaving}
+                  style={{ flex:1, height:38, background: editSaving ? '#94a3b8' : '#2d6a27', border:'none', borderRadius:7, fontSize:13, fontWeight:700, cursor: editSaving ? 'not-allowed' : 'pointer', color:'#fff' }}>
+                  {editSaving ? '⏳ Saving...' : '✓ Save Changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* GA Locations & Sites — ADMIN ONLY */}
       {isAdmin && (
         <div className="card" style={{ padding:20, marginBottom:20 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 }}>
             <h3 style={{ fontSize:15, fontWeight:600, color:'#1f4e1a', margin:0, display:'flex', alignItems:'center', gap:8 }}>
-              <span>📍</span> GA Locations & Sites
+              <span>📍</span> GA Locations &amp; Sites
             </h3>
             <button onClick={() => setShowLocModal(true)}
               style={{ background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'8px 16px', fontSize:12, fontWeight:600, cursor:'pointer', display:'flex', alignItems:'center', gap:6 }}>
@@ -391,35 +453,44 @@ export default function Access() {
           </div>
           {sites.length === 0 ? (
             <div style={{ textAlign:'center', padding:'32px 0', color:'#94a3b8', fontSize:13 }}>
-              No GA Locations or Sites found. Click "+ Add New GA Location" to get started.
+              No GA Locations or Sites found. Click &quot;+ Add New GA Location&quot; to get started.
             </div>
           ) : (
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
               {sites.map(s => (
-                <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:8, padding:'14px 16px', background:'#f8fafc', display:'flex', flexDirection:'column', gap:8 }}>
+                <div key={s.id} style={{ border:'1px solid #e2e8f0', borderRadius:10, padding:'14px 16px', background:'#f8fafc', display:'flex', flexDirection:'column', gap:6 }}>
+                  {/* Card header */}
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                    <p style={{ margin:0, fontSize:13, fontWeight:700, color:'#1f4e1a' }}>{s.name}</p>
+                    <p style={{ margin:0, fontSize:13, fontWeight:700, color:'#1f4e1a', lineHeight:1.4, flex:1, marginRight:8 }}>{s.name}</p>
                     <span style={{ fontSize:10, fontWeight:700, padding:'2px 6px', borderRadius:4, background: s.status === 'Active' ? '#dcfce7' : '#fee2e2', color: s.status === 'Active' ? '#15803d' : '#b91c1c', flexShrink:0 }}>
                       {s.status}
                     </span>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>GA: <strong>{s.gaName || '—'}</strong></p>
-                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>City: <strong>{s.location || '—'}</strong></p>
-                    <p style={{ margin:0, fontSize:11, color:'#64748b' }}>Area: <strong>{s.chargeArea || '—'}</strong></p>
-                  </div>
-                  <div style={{ display:'flex', gap:6, marginTop:8 }}>
+
+                  {/* GA info only — no City/Area displayed */}
+                  <p style={{ margin:0, fontSize:11, color:'#64748b' }}>GA: <strong>{s.gaName || '—'}</strong></p>
+                  {s.zone && <p style={{ margin:0, fontSize:11, color:'#94a3b8' }}>Zone: {s.zone} · District: {s.district || '—'}</p>}
+
+                  {/* Action buttons */}
+                  <div style={{ display:'flex', gap:6, marginTop:10 }}>
                     <button
-                      onClick={() => handleAddCity(s.id)}
-                      style={{ flex:1, height:28, background:'#2d6a27', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                      id={`edit-site-${s.id}`}
+                      onClick={() => openEditModal(s)}
+                      style={{ flex:1, height:30, background:'#fff', color:'#2d6a27', border:'1.5px solid #2d6a27', borderRadius:6, fontSize:11, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:4, transition:'background 0.15s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
                     >
-                      + Add City
+                      ✏️ Edit Details
                     </button>
                     <button
-                      onClick={() => handleAddArea(s.id)}
-                      style={{ flex:1, height:28, background:'#2d6a27', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                      id={`delete-site-${s.id}`}
+                      onClick={() => setDeletePending(s)}
+                      title="Delete this GA Location"
+                      style={{ width:30, height:30, background:'#fff', color:'#dc2626', border:'1.5px solid #fecaca', borderRadius:6, fontSize:14, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}
+                      onMouseEnter={e => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.borderColor = '#dc2626'; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#fecaca'; }}
                     >
-                      + Add Area
+                      🗑
                     </button>
                   </div>
                 </div>

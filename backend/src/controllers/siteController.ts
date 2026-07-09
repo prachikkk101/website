@@ -54,9 +54,9 @@ export const getSites = async (req: AuthenticatedRequest, res: Response, next: N
 export const createSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
     name: z.string().min(1),
-    location: z.string().min(1),
+    location: z.string().optional(),
     gaName: z.string().min(1),
-    chargeArea: z.string().min(1),
+    chargeArea: z.string().optional(),
     zone: z.string().min(1),
     district: z.string().min(1),
     targetConns: z.number().int().nonnegative().optional(),
@@ -363,3 +363,97 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
   }
 };
 
+export const deleteSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+
+    const site = await prisma.site.findUnique({ where: { id } });
+    if (!site) {
+      return res.status(404).json({ success: false, error: 'Site not found' });
+    }
+
+    // Cascade-delete all child records in FK-safe order
+    // 1. MeterInstallation (references PNGConnection)
+    await prisma.meterInstallation.deleteMany({ where: { siteId: id } });
+
+    // 2. MeterRegister (references Site and optionally PNGConnection)
+    await prisma.meterRegister.deleteMany({ where: { siteId: id } });
+
+    // 3. Attendance
+    await prisma.attendance.deleteMany({ where: { siteId: id } });
+
+    // 4. ICWork & LMCWork
+    await prisma.iCWork.deleteMany({ where: { siteId: id } });
+    await prisma.lMCWork.deleteMany({ where: { siteId: id } });
+
+    // 5. PELaying
+    await prisma.pELaying.deleteMany({ where: { siteId: id } });
+
+    // 6. ToolReturn
+    await prisma.toolReturn.deleteMany({ where: { siteId: id } });
+
+    // 7. ConsumptionLog, PEReturnLog, GIReturnLog
+    await prisma.consumptionLog.deleteMany({ where: { siteId: id } });
+    await prisma.pEReturnLog.deleteMany({ where: { siteId: id } });
+    await prisma.gIReturnLog.deleteMany({ where: { siteId: id } });
+
+    // 8. InventoryTransaction
+    await prisma.inventoryTransaction.deleteMany({ where: { siteId: id } });
+
+    // 9. InventoryItem
+    await prisma.inventoryItem.deleteMany({ where: { siteId: id } });
+
+    // 10. SiteStock
+    await prisma.siteStock.deleteMany({ where: { siteId: id } });
+
+    // 11. PNGConnection (now safe — MeterInstallation & MeterRegister removed)
+    await prisma.pNGConnection.deleteMany({ where: { siteId: id } });
+
+    // 12. SiteUser
+    await prisma.siteUser.deleteMany({ where: { siteId: id } });
+
+    // 13. Finally delete the Site itself
+    await prisma.site.delete({ where: { id } });
+
+    res.status(200).json({ success: true, message: `Site "${site.name}" and all associated records deleted.` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const schema = z.object({
+    name:        z.string().min(1).optional(),
+    location:    z.string().optional(),
+    gaName:      z.string().optional(),
+    chargeArea:  z.string().optional(),
+    zone:        z.string().optional(),
+    district:    z.string().optional(),
+    status:      z.enum(['Active', 'Inactive']).optional(),
+    targetConns: z.number().int().nonnegative().optional(),
+  });
+
+  try {
+    const { id } = req.params;
+    const data = schema.parse(req.body);
+
+    const site = await prisma.site.findUnique({ where: { id } });
+    if (!site) {
+      return res.status(404).json({ success: false, error: 'Site not found' });
+    }
+
+    // If name is being changed, check uniqueness
+    if (data.name && data.name !== site.name) {
+      const existing = await prisma.site.findUnique({ where: { name: data.name } });
+      if (existing) {
+        return res.status(400).json({ success: false, error: 'A site with this name already exists' });
+      }
+    }
+
+    const updated = await prisma.site.update({ where: { id }, data });
+
+    res.status(200).json({ success: true, site: updated });
+  } catch (error) {
+    next(error);
+  }
+};

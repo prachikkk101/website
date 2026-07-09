@@ -65,9 +65,9 @@ model AdminWhitelist {
 model Site {
   id           String                 @id @default(uuid())
   name         String                 @unique // e.g. "Khanna — CA-09"
-  location     String
+  location     String?                // City — now optional
   gaName       String                 // Gas Authority Name
-  chargeArea   String
+  chargeArea   String?                // Area — now optional
   zone         String
   district     String
   status       String                 @default("Active")

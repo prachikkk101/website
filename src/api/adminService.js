@@ -42,6 +42,13 @@ export const adminService = {
   removeFromWhitelist: (id) =>
     api.delete(`/admin/whitelist/${id}`).then((r) => r.data),
 
+  // Site management
+  deleteSite: (siteId) =>
+    api.delete(`/sites/${siteId}`).then((r) => r.data),
+
+  updateSite: (siteId, data) =>
+    api.patch(`/sites/${siteId}`, data).then((r) => r.data),
+
   // Reports
   exportReport: () =>
     api.get('/admin/reports/export', { responseType: 'blob' }).then((r) => {
