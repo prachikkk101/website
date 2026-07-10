@@ -45,6 +45,9 @@ export const getSites = async (req: AuthenticatedRequest, res: Response, next: N
       sites = assignments.map(a => a.site);
     }
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).json({ success: true, sites });
   } catch (error) {
     next(error);
@@ -268,6 +271,9 @@ export const getGALocations = async (req: AuthenticatedRequest, res: Response, n
       name: name,
       label: name
     }));
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).json({ success: true, gaLocations });
   } catch (error) {
     next(error);
@@ -295,6 +301,9 @@ export const getCities = async (req: AuthenticatedRequest, res: Response, next: 
         });
       }
     });
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).json({ success: true, cities });
   } catch (error) {
     next(error);
@@ -323,6 +332,9 @@ export const getAreas = async (req: AuthenticatedRequest, res: Response, next: N
         });
       }
     });
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).json({ success: true, areas });
   } catch (error) {
     next(error);
@@ -365,7 +377,7 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
 
 export const deleteSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const site = await prisma.site.findUnique({ where: { id } });
     if (!site) {
@@ -434,7 +446,7 @@ export const updateSite = async (req: AuthenticatedRequest, res: Response, next:
   });
 
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
     const data = schema.parse(req.body);
 
     const site = await prisma.site.findUnique({ where: { id } });
