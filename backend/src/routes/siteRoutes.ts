@@ -1,5 +1,9 @@
 import { Router } from 'express';
+<<<<<<< HEAD
 import { getSites, createSite, getSiteById, assignWorker, getSiteStock, receiveStock, deleteSite, updateSite } from '../controllers/siteController';
+=======
+import { getSites, createSite, getSiteById, assignWorker, getSiteStock, receiveStock, deleteSite, deleteCity, deleteGALocation } from '../controllers/siteController';
+>>>>>>> 1cc563adfa4c4258901da213cced329828443de9
 import { authenticate, requireRole } from '../middlewares/auth';
 import { checkSiteAccess } from '../middlewares/checkSiteAccess';
 import { Role } from '@prisma/client';
@@ -14,5 +18,9 @@ router.delete('/:id', authenticate, requireRole([Role.ADMIN]), deleteSite);
 router.post('/:id/workers', authenticate, requireRole([Role.ADMIN]), assignWorker);
 router.get('/:id/stock', authenticate, checkSiteAccess, getSiteStock);
 router.post('/:id/stock/receive', authenticate, requireRole([Role.ADMIN]), receiveStock);
+
+router.delete('/:id', authenticate, requireRole([Role.ADMIN]), deleteSite);
+router.delete('/city/:gaName/:location', authenticate, requireRole([Role.ADMIN]), deleteCity);
+router.delete('/ga/:gaName', authenticate, requireRole([Role.ADMIN]), deleteGALocation);
 
 export default router;

@@ -31,6 +31,7 @@ export default function Access() {
 
   // GA Location form state
   const [showLocModal, setShowLocModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'Area' | 'City' | 'GA', site: SiteObject }
   const [locName,      setLocName]      = useState('');
   const [locStatus,    setLocStatus]    = useState('Active');
   const [locCities,    setLocCities]    = useState([{ cityName: '', areasText: '' }]);
@@ -237,6 +238,139 @@ export default function Access() {
     }
   }
 
+<<<<<<< HEAD
+=======
+  // ── Add City (Backend Site) ──
+  async function handleAddCity(siteId) {
+    const parentSite = sites.find(s => s.id === siteId);
+    if (!parentSite) return;
+
+    const cityName = prompt('Enter new city name to add to this GA location:');
+    if (!cityName || !cityName.trim()) return;
+    const areasInput = prompt('Enter areas for this city (comma-separated, optional):') || '';
+    const areas = areasInput.split(',').map(a => a.trim()).filter(Boolean);
+
+    try {
+      const sitesToCreate = [];
+      if (areas.length === 0) {
+        sitesToCreate.push({
+          name: `${cityName.trim()} — General`,
+          location: cityName.trim(),
+          gaName: parentSite.gaName || parentSite.name,
+          chargeArea: 'General',
+          zone: 'Zone 1',
+          district: cityName.trim()
+        });
+      } else {
+        areas.forEach(area => {
+          sitesToCreate.push({
+            name: `${cityName.trim()} — ${area}`,
+            location: cityName.trim(),
+            gaName: parentSite.gaName || parentSite.name,
+            chargeArea: area,
+            zone: 'Zone 1',
+            district: cityName.trim()
+          });
+        });
+      }
+
+      showToast('⏳ Adding city and sites...');
+      for (const sitePayload of sitesToCreate) {
+        await api.post('/sites', sitePayload);
+      }
+
+      showToast('✓ City and sites added successfully');
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+    } catch (err) {
+      console.error('Failed to add city sites:', err);
+      showToast('❌ Failed to add city.');
+    }
+  }
+
+  // ── Add Area (Backend Site) ──
+  async function handleAddArea(siteId) {
+    const parentSite = sites.find(s => s.id === siteId);
+    if (!parentSite) return;
+
+    const areaName = prompt('Enter new area name to add:');
+    if (!areaName || !areaName.trim()) return;
+
+    try {
+      showToast('⏳ Adding area...');
+      await api.post('/sites', {
+        name: `${parentSite.location} — ${areaName.trim()}`,
+        location: parentSite.location,
+        gaName: parentSite.gaName,
+        chargeArea: areaName.trim(),
+        zone: parentSite.zone,
+        district: parentSite.district
+      });
+
+      showToast('✓ Area added successfully');
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+    } catch (err) {
+      console.error('Failed to add area:', err);
+      showToast('❌ Failed to add area.');
+    }
+  }
+
+  // ── Confirm Delete Action ──
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    const { type, site } = deleteTarget;
+    try {
+      showToast(`⏳ Removing ${type}...`);
+      if (type === 'Area') {
+        await api.delete(`/sites/${site.id}`);
+      } else if (type === 'City') {
+        await api.delete(`/sites/city/${encodeURIComponent(site.gaName)}/${encodeURIComponent(site.location)}`);
+      } else if (type === 'GA') {
+        await api.delete(`/sites/ga/${encodeURIComponent(site.gaName)}`);
+      }
+      
+      showToast(`✓ ${type} removed successfully`);
+      setDeleteTarget(null);
+      
+      // Refresh sites
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+    } catch (error) {
+      console.error('Failed to delete:', error);
+      const msg = error.response?.data?.error || `Failed to delete ${type}`;
+      showToast(`❌ ${msg}`);
+      setDeleteTarget(null);
+    }
+  }
+
+    try {
+      await api.post('/sites', {
+        name: `${parentSite.location} — ${areaName.trim()}`,
+        location: parentSite.location,
+        gaName: parentSite.gaName,
+        chargeArea: areaName.trim(),
+        zone: 'Zone 1',
+        district: parentSite.location
+      });
+
+      showToast('✓ Area added successfully');
+      const res = await api.get('/sites');
+      if (res.data?.success && res.data?.sites) {
+        setSites(res.data.sites);
+      }
+    } catch (err) {
+      console.error('Failed to add area site:', err);
+      showToast('❌ Failed to add area.');
+    }
+  }
+>>>>>>> 1cc563adfa4c4258901da213cced329828443de9
 
   const handleSiteSelectChange = (userId, siteId) => {
     setSelectedSiteForUser(prev => ({
@@ -493,6 +627,28 @@ export default function Access() {
                       🗑
                     </button>
                   </div>
+                  <div style={{ display:'flex', gap:6, marginTop:6 }}>
+                    <button
+                      onClick={() => setDeleteTarget({ type: 'City', site: s })}
+                      style={{ flex:1, height:28, background:'#dc2626', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                    >
+                      Remove City
+                    </button>
+                    <button
+                      onClick={() => setDeleteTarget({ type: 'Area', site: s })}
+                      style={{ flex:1, height:28, background:'#dc2626', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                    >
+                      Remove Area
+                    </button>
+                  </div>
+                  <div style={{ display:'flex', marginTop:6 }}>
+                    <button
+                      onClick={() => setDeleteTarget({ type: 'GA', site: s })}
+                      style={{ width: '100%', height:28, background:'#991b1b', color:'#fff', border:'none', borderRadius:4, fontSize:11, fontWeight:600, cursor:'pointer' }}
+                    >
+                      Remove GA Location
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -641,6 +797,61 @@ export default function Access() {
                 <button onClick={handleAddLocation}
                   style={{ flex:1,height:38,background:'#2d6a27',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#fff' }}>
                   Add Location
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Confirmation Modal ── */}
+      {deleteTarget && (
+        <div style={{ position:'fixed',inset:0,zIndex:1100,background:'rgba(0,0,0,0.55)',display:'flex',alignItems:'center',justifyContent:'center',padding:16 }}
+          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}>
+          <div style={{ background:'#fff',borderRadius:14,width:'100%',maxWidth:400,boxShadow:'0 20px 60px rgba(0,0,0,0.25)',overflow:'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ background:'#dc2626',padding:'16px 20px',display:'flex',alignItems:'center',justifyContent:'space-between' }}>
+              <span style={{ color:'#fff',fontSize:15,fontWeight:700 }}>Confirm Removal</span>
+              <button onClick={() => setDeleteTarget(null)} style={{ background:'none',border:'none',color:'rgba(255,255,255,0.8)',fontSize:20,cursor:'pointer' }}>✕</button>
+            </div>
+            <div style={{ padding:24 }}>
+              <p style={{ margin:'0 0 12px', fontSize:14, color:'#374151', lineHeight:1.5 }}>
+                Are you sure you want to remove this <strong>{deleteTarget.type}</strong>?
+              </p>
+              
+              {deleteTarget.type === 'Area' && (
+                <p style={{ margin:'0 0 16px', fontSize:13, color:'#64748b' }}>
+                  This will remove the Area: <br/><strong style={{color:'#1e293b'}}>{deleteTarget.site.chargeArea}</strong>
+                </p>
+              )}
+              {deleteTarget.type === 'City' && (
+                <p style={{ margin:'0 0 16px', fontSize:13, color:'#64748b' }}>
+                  This will remove the City and ALL its Areas: <br/><strong style={{color:'#1e293b'}}>{deleteTarget.site.location}</strong>
+                </p>
+              )}
+              {deleteTarget.type === 'GA' && (
+                <div style={{ background:'#fee2e2', border:'1px solid #fca5a5', borderRadius:6, padding:12, marginBottom:16 }}>
+                  <p style={{ margin:0, fontSize:13, color:'#991b1b', fontWeight:600 }}>
+                    ⚠️ WARNING: DANGER ZONE
+                  </p>
+                  <p style={{ margin:'4px 0 0', fontSize:12, color:'#991b1b' }}>
+                    This will permanently delete the ENTIRE GA Location (<strong style={{color:'#7f1d1d'}}>{deleteTarget.site.gaName}</strong>) including all its Cities, Areas, and assigned users.
+                  </p>
+                </div>
+              )}
+
+              <p style={{ margin:'0 0 20px', fontSize:13, color:'#dc2626', fontWeight:600 }}>
+                This action cannot be undone.
+              </p>
+
+              <div style={{ display:'flex',gap:10 }}>
+                <button onClick={() => setDeleteTarget(null)}
+                  style={{ flex:1,height:38,background:'#f1f5f9',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#374151' }}>
+                  Cancel
+                </button>
+                <button onClick={confirmDelete}
+                  style={{ flex:1,height:38,background:'#dc2626',border:'none',borderRadius:7,fontSize:13,fontWeight:600,cursor:'pointer',color:'#fff' }}>
+                  Yes, Remove {deleteTarget.type}
                 </button>
               </div>
             </div>
