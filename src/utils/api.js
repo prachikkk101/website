@@ -143,6 +143,11 @@ export const stockAPI = {
 
   deleteItem: (siteId, material) =>
     api.delete(`/sites/${siteId}/inventory/${encodeURIComponent(material)}`).then(r => r.data),
+
+  getHistory: (siteId, date) => {
+    const params = date ? { date } : {};
+    return api.get(`/sites/${siteId}/inventory/history`, { params }).then(r => r.data);
+  },
 };
 
 /* ─────────────────────────────────────────────────────────────

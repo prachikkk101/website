@@ -7,6 +7,40 @@ import { Response, NextFunction } from 'express';
 
 const router = Router({ mergeParams: true }); // inherits :siteId from parent
 
+/* ── GET /api/sites/:siteId/inventory/history?date=YYYY-MM-DD
+   Returns stock snapshot for a site as of a given date.
+   Currently returns current InventoryItem state (best-effort).
+   When a StockTransaction log table is added, this endpoint
+   can reconstruct true historical state from cumulative totals.
+─────────────────────────────────────────────────────────── */
+router.get(
+  '/history',
+  authenticate,
+  checkSiteAccess,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const siteId = req.params.siteId as string;
+      const dateStr = (req.query.date as string) || new Date().toISOString().split('T')[0];
+
+      // Return current inventory state (with dateQueried for reference)
+      const items = await prisma.inventoryItem.findMany({
+        where: { siteId },
+        orderBy: { material: 'asc' },
+      });
+
+      res.json({
+        success: true,
+        dateQueried: dateStr,
+        siteId,
+        items,
+        note: 'Snapshot reflects current state. True date-accurate history will be available once transaction logging is enabled.',
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 /* ── GET /api/sites/:siteId/inventory
    Returns all InventoryItems for a site, ordered alphabetically by material.
 ─────────────────────────────────────────────────────────── */
@@ -27,6 +61,7 @@ router.get(
     }
   }
 );
+
 
 /* ── POST /api/sites/:siteId/inventory/receive
    Upserts one or more items. If the material already exists for this site,

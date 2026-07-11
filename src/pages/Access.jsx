@@ -379,33 +379,68 @@ export default function Access() {
         </div>
       )}
 
-      {/* Supervisor without access — Request panel (NOT shown to admins) */}
-      {!isAdmin && (
-        <div className="card" style={{ padding: 20, marginBottom: 20, border: '2px solid #fbbf24', background: '#fffbeb' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-            <span style={{ fontSize: 28 }}>🔐</span>
-            <div style={{ flex: 1 }}>
-              <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#92400e' }}>Request Site Access</p>
-              <p style={{ margin: '0 0 12px', fontSize: 13, color: '#78350f' }}>You currently have view-only access. Request access to edit a specific site.</p>
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button onClick={() => { setRSite(allSiteNames[0] || ''); setShowModal(true); }}
-                  style={{ background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                  Request Access to a Site
-                </button>
-                <button
-                  onClick={async () => {
-                    await refreshSession();
-                    showToast('✓ Access refreshed!');
+      {/* Supervisor / Worker panel — NOT shown to admins */}
+      {!isAdmin && (() => {
+        // Current user's assigned sites (pulled from the users list if admin loaded it,
+        // or from the session object for the logged-in supervisor themselves)
+        const myAssignedSites = user?.assignedSites?.map(as => as.site) || [];
+        const hasAnySite = myAssignedSites.length > 0;
+        const borderColor = hasAnySite ? '#86efac' : '#fbbf24';
+        const bgColor = hasAnySite ? '#f0fdf4' : '#fffbeb';
+        const iconColor = hasAnySite ? '#166534' : '#92400e';
+        const textColor = hasAnySite ? '#14532d' : '#78350f';
+        return (
+          <div className="card" style={{ padding: 20, marginBottom: 20, border: `2px solid ${borderColor}`, background: bgColor }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+              <span style={{ fontSize: 28 }}>{hasAnySite ? '✅' : '🔐'}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: iconColor }}>
+                  {hasAnySite ? 'My Site Access' : 'Request Site Access'}
+                </p>
+                {hasAnySite ? (
+                  <>
+                    <p style={{ margin: '0 0 10px', fontSize: 13, color: textColor }}>You have access to the following sites:</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
+                      {myAssignedSites.map(s => (
+                        <span key={s.id} style={{
+                          background: '#dcfce7', color: '#166534',
+                          border: '1px solid #86efac', borderRadius: 20,
+                          padding: '4px 12px', fontSize: 12, fontWeight: 600
+                        }}>
+                          📍 {s.name}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p style={{ margin: '0 0 12px', fontSize: 13, color: textColor }}>You currently have view-only access. Request access to edit a specific site.</p>
+                )}
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  <button onClick={() => {
+                    // Pre-select first site NOT already assigned
+                    const ownedIds = myAssignedSites.map(s => s.name);
+                    const available = allSiteNames.filter(n => !ownedIds.includes(n));
+                    setRSite(available[0] || allSiteNames[0] || '');
+                    setShowModal(true);
                   }}
-                  style={{ background: '#fff', color: '#92400e', border: '1.5px solid #fbbf24', borderRadius: 7, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-                >
-                  🔄 Refresh Access
-                </button>
+                    style={{ background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    {hasAnySite ? '+ Request Access to Another Site' : 'Request Access to a Site'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await refreshSession();
+                      showToast('✓ Access refreshed!');
+                    }}
+                    style={{ background: '#fff', color: '#92400e', border: '1.5px solid #fbbf24', borderRadius: 7, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                  >
+                    🔄 Refresh Access
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Registered Users — ADMIN ONLY */}
       {isAdmin && (
@@ -694,10 +729,16 @@ export default function Access() {
                 </div>
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: '#374151', display: 'block', marginBottom: 4 }}>Select Site</label>
-                  {allSiteNames.length > 0 ? (
+                    {allSiteNames.length > 0 ? (
                     <select value={rSite} onChange={e => setRSite(e.target.value)}
                       style={{ width: '100%', height: 34, border: '1px solid #d1d5db', borderRadius: 5, padding: '0 10px', fontSize: 13, boxSizing: 'border-box', background: '#fff' }}>
-                      {allSiteNames.map(s => <option key={s}>{s}</option>)}
+                      {allSiteNames
+                        .filter(n => {
+                          // For supervisors, exclude sites they already have access to
+                          const ownedNames = (user?.assignedSites || []).map(as => as.site?.name).filter(Boolean);
+                          return !ownedNames.includes(n);
+                        })
+                        .map(s => <option key={s}>{s}</option>)}
                     </select>
                   ) : (
                     <>

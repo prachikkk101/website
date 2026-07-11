@@ -81,7 +81,16 @@ function CategoryAccordion({
     <div>
       {categories.map(cat => {
         const isOpen = openCategory === cat.id;
-        const itemsToShow = cat.items;
+        // In return mode (stockItems provided), filter to only show items where available > 0
+        const itemsToShow = (stockItems !== null)
+          ? cat.items.filter(item => {
+              // Check if this item has available stock (inStore > 0) from quantities map
+              const stats = quantities[item];
+              if (!stats) return false;
+              const inStore = stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
+              return inStore > 0;
+            })
+          : cat.items;
         return (
           <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
             {/* Accordion header */}
@@ -104,11 +113,13 @@ function CategoryAccordion({
             {isOpen && (
               <div style={{ padding: '12px 16px', background: 'white' }}>
                 {itemsToShow.length === 0 ? (
-                  <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
-                    {stockItems !== null
-                      ? 'No items from this category in site inventory.'
-                      : 'No default items for this category.'}
-                  </p>
+                  <div style={{ padding: '10px 0' }}>
+                    <p style={{ color: '#94a3b8', fontSize: 12, margin: 0 }}>
+                      {stockItems !== null
+                        ? '⚠️ No stock available to return in this category yet. Receive stock first.'
+                        : 'No default items for this category.'}
+                    </p>
+                  </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {itemsToShow.map(item => {
@@ -135,18 +146,27 @@ function CategoryAccordion({
                           </div>
                         );
                       }
-                      // Edit mode
+                      // Edit mode (return stock or receive stock)
                       const val = quantities[`${cat.id}__${item}`] ?? 0;
+                      // In return mode, show max available for guidance
+                      const maxAvail = stockItems !== null ? (() => {
+                        const stats = quantities[item] || {};
+                        return stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
+                      })() : null;
                       return (
                         <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>{item}</label>
+                          <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>
+                            {item}
+                            {maxAvail !== null && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>(max: {maxAvail})</span>}
+                          </label>
                           <input
-                            type="number" min="0"
+                            type="number" min="0" max={maxAvail ?? undefined}
                             value={val === 0 ? '' : val}
                             onFocus={(e) => e.target.select()}
                             onChange={(e) => {
                               const raw = e.target.value;
                               const num = raw === '' ? 0 : Number(raw);
+
                               updateQty(cat.id, item, num);
                             }}
                             onBlur={(e) => { if (e.target.value === '') updateQty(cat.id, item, 0); }}
@@ -181,6 +201,13 @@ export default function Inventory() {
   const [error, setError] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
+
+  // Stock History modal state
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyDate, setHistoryDate] = useState(todayStr());
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyNote, setHistoryNote] = useState('');
 
   const isAdmin = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
@@ -551,6 +578,35 @@ export default function Inventory() {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
             Export
           </button>
+          <button
+            onClick={async () => {
+              if (!currentSiteId) { showToast('✗ No site selected', 'error'); return; }
+              setHistoryLoading(true);
+              setShowHistoryModal(true);
+              try {
+                const result = await stockAPI.getHistory(currentSiteId, historyDate);
+                const mapped = (result.items || []).map((item, idx) => ({
+                  sr: idx + 1,
+                  mat: item.material,
+                  unit: item.unit || 'pcs',
+                  recv: item.received || 0,
+                  issued: item.issued || 0,
+                  ret: item.returned || 0,
+                  inStore: item.inStore || 0,
+                }));
+                setHistoryData(mapped);
+                setHistoryNote(result.note || '');
+              } catch (err) {
+                showToast('✗ Failed to load history', 'error');
+                setShowHistoryModal(false);
+              } finally {
+                setHistoryLoading(false);
+              }
+            }}
+            style={{ height: 32, background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            📅 Stock History
+          </button>
           {canWrite && (
             <>
               <button onClick={handleAddColumn} className="btn btn-primary" style={{ height: 32, fontSize: 12 }}>
@@ -848,7 +904,6 @@ export default function Inventory() {
                 <Select
                   id="inv-field-ga"
                   value={formGA}
-                  disabled={globalLocationContext?.gaId !== 'all'}
                   onChange={e => {
                     setFormGA(e.target.value);
                     setFormCity('');
@@ -865,7 +920,6 @@ export default function Inventory() {
                   <Select
                     id="inv-field-city"
                     value={formCity}
-                    disabled={globalLocationContext?.cityId !== 'all'}
                     onChange={e => {
                       setFormCity(e.target.value);
                       setFormArea('');
@@ -931,7 +985,6 @@ export default function Inventory() {
               <Field label="GA Location" required error={retFormErr.ga}>
                 <Select
                   value={formGA}
-                  disabled={globalLocationContext?.gaId !== 'all'}
                   onChange={e => {
                     setFormGA(e.target.value);
                     setFormCity('');
@@ -947,7 +1000,6 @@ export default function Inventory() {
                 <Field label="City" required error={retFormErr.city}>
                   <Select
                     value={formCity}
-                    disabled={globalLocationContext?.cityId !== 'all'}
                     onChange={e => {
                       setFormCity(e.target.value);
                       setFormArea('');
@@ -1090,7 +1142,130 @@ export default function Inventory() {
           </div>
         </div>
       )}
+      {/* ── Stock History Modal ── */}
+      {showHistoryModal && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowHistoryModal(false); }}
+        >
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+            onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ background: '#1e3a5f', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+              <div>
+                <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>📅 Stock History</span>
+                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 10 }}>View stock levels as of a specific date</span>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 20, cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* Controls */}
+            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Select Date:</label>
+                <input
+                  type="date"
+                  value={historyDate}
+                  onChange={async e => {
+                    const newDate = e.target.value;
+                    setHistoryDate(newDate);
+                    if (!currentSiteId) return;
+                    setHistoryLoading(true);
+                    try {
+                      const result = await stockAPI.getHistory(currentSiteId, newDate);
+                      const mapped = (result.items || []).map((item, idx) => ({
+                        sr: idx + 1, mat: item.material, unit: item.unit || 'pcs',
+                        recv: item.received || 0, issued: item.issued || 0,
+                        ret: item.returned || 0, inStore: item.inStore || 0,
+                      }));
+                      setHistoryData(mapped);
+                      setHistoryNote(result.note || '');
+                    } catch { showToast('✗ Failed to reload', 'error'); }
+                    finally { setHistoryLoading(false); }
+                  }}
+                  style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 6, padding: '0 10px', fontSize: 13 }}
+                />
+              </div>
+              <button
+                onClick={() => {
+                  const exportRows = historyData.map(r => ({ ...r, open: 0, onSite: r.recv - r.issued - r.ret, req: 0, status: { label: r.inStore > 0 ? 'OK' : 'Critical' } }));
+                  exportStockData(exportRows, historyDate);
+                }}
+                style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 6, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                Export
+              </button>
+              <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>{historyData.length} materials</span>
+            </div>
+
+            {/* Note banner */}
+            {historyNote && (
+              <div style={{ padding: '8px 20px', background: '#fef3c7', borderBottom: '1px solid #fde68a', fontSize: 11, color: '#92400e', flexShrink: 0 }}>
+                ℹ️ {historyNote}
+              </div>
+            )}
+
+            {/* Table body */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '0 0 16px' }}>
+              {historyLoading ? (
+                <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Loading history...</div>
+              ) : historyData.length === 0 ? (
+                <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No stock data found for this site.</div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%)', color: '#fff', position: 'sticky', top: 0 }}>
+                      {['Sr.', 'Material', 'Unit', 'Received', 'Used', 'Returned', 'Available', 'Status'].map(h => (
+                        <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Material' ? 'left' : 'center', fontWeight: 700, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData.map((r, i) => {
+                      const avail = Math.max(0, r.recv - r.issued - r.ret);
+                      const pct = r.recv > 0 ? (avail / r.recv) * 100 : 0;
+                      const status = pct >= 50 ? { label: 'Good', color: '#16a34a', bg: '#dcfce7' }
+                        : pct >= 20 ? { label: 'Low', color: '#d97706', bg: '#fef3c7' }
+                        : r.recv === 0 ? { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' }
+                        : { label: 'Critical', color: '#dc2626', bg: '#fee2e2' };
+                      const base = i % 2 === 0 ? '#fff' : '#f8fbf8';
+                      return (
+                        <tr key={r.mat} style={{ background: base, borderBottom: '1px solid #f1f5f9' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                          onMouseLeave={e => e.currentTarget.style.background = base}>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>{r.sr}</td>
+                          <td style={{ padding: '12px 14px', fontWeight: 600, color: '#1e293b' }}>{r.mat}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b' }}>{r.unit}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 600 }}>{r.recv.toLocaleString()}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#1e293b', fontWeight: 600 }}>{r.issued.toLocaleString()}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#3b82f6', fontWeight: 600 }}>{r.ret.toLocaleString()}</td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            <span style={{ fontWeight: 700, fontSize: 13, color: avail > 0 ? '#16a34a' : '#dc2626' }}>{avail.toLocaleString()}</span>
+                          </td>
+                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                            <span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, display: 'inline-block', whiteSpace: 'nowrap' }}>{status.label}</span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr style={{ background: '#eff6ff', borderTop: '2px solid #1e3a5f' }}>
+                      <td colSpan={3} style={{ padding: '12px 14px', textAlign: 'right', color: '#1e3a5f', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Total</td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.recv,0).toLocaleString()}</td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#1e293b', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.issued,0).toLocaleString()}</td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#3b82f6', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.ret,0).toLocaleString()}</td>
+                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#16a34a', fontWeight: 700, fontSize: 13 }}>{historyData.reduce((s,r) => s+Math.max(0,r.recv-r.issued-r.ret),0).toLocaleString()}</td>
+                      <td />
+                    </tr>
+                  </tfoot>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
