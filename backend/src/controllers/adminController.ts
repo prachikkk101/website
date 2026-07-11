@@ -151,8 +151,8 @@ export const updateUser = async (req: AuthenticatedRequest, res: Response, next:
     const data = schema.parse(req.body);
 
     const updateData: any = {};
-    if (data.name) updateData.name = data.name;
-    if (data.role) updateData.role = data.role;
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.role !== undefined) updateData.role = data.role;
     if (data.password) {
       const salt = await bcrypt.genSalt(10);
       updateData.passwordHash = await bcrypt.hash(data.password, salt);
@@ -214,6 +214,13 @@ export const addToWhitelist = async (req: AuthenticatedRequest, res: Response, n
 export const removeFromWhitelist = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const id = parseInt(req.params.id as string, 10);
+    if (isNaN(id)) {
+      return res.status(400).json({ success: false, error: 'Invalid whitelist entry ID' });
+    }
+    const existing = await prisma.adminWhitelist.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Whitelist entry not found' });
+    }
     await prisma.adminWhitelist.delete({ where: { id } });
     res.status(200).json({ success: true, message: 'Email removed from whitelist' });
   } catch (error) {

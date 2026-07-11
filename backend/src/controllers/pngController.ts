@@ -86,10 +86,6 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
   try {
     const siteId = req.params.siteId as string;
 
-    // ── DEBUG: Log full request body so we can diagnose payload issues in fly logs ──
-    console.log('🔵 [PNG create] Full request body:', JSON.stringify(req.body, null, 2));
-    console.log('🔵 [PNG create] materialsUsed received:', JSON.stringify(req.body.materialsUsed, null, 2));
-
     // Parse + validate — Zod strips unknown fields and coerces types
     let data: z.infer<typeof schema>;
     try {
@@ -137,7 +133,6 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     });
 
     console.log(`[PNG create] Connection saved: ${connection.id} (appNo: ${appNo})`);
-    console.log(`🔵 [PNG create] materialsUsed after Zod parse:`, JSON.stringify(data.materialsUsed, null, 2));
 
     // ── STEP 2: Deduct stock — fire-and-forget via setImmediate.
     //    This runs COMPLETELY OUTSIDE the HTTP response cycle so it can NEVER

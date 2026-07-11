@@ -235,8 +235,12 @@ export const me = async (req: AuthenticatedRequest, res: Response, next: NextFun
       },
     });
 
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
     // Convenience shortcut: first assigned site
-    const firstSite = user?.assignedSites?.[0]?.site ?? null;
+    const firstSite = user.assignedSites?.[0]?.site ?? null;
 
     res.status(200).json({
       success: true,

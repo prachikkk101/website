@@ -74,11 +74,11 @@ export const createSite = async (req: AuthenticatedRequest, res: Response, next:
 
     const site = await prisma.site.create({ data });
 
-    // Automatically instantiate site_stock for all materials
+    // Automatically instantiate site_stock for all materials in one batch insert
     const materials = await prisma.materialItem.findMany();
-    for (const mat of materials) {
-      await prisma.siteStock.create({
-        data: {
+    if (materials.length > 0) {
+      await prisma.siteStock.createMany({
+        data: materials.map(mat => ({
           siteId: site.id,
           materialId: mat.id,
           openingQty: 0,
@@ -88,7 +88,8 @@ export const createSite = async (req: AuthenticatedRequest, res: Response, next:
           onSiteQty: 0,
           inStoreQty: 0,
           requiredQty: 0,
-        },
+        })),
+        skipDuplicates: true,
       });
     }
 
