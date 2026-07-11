@@ -14,7 +14,7 @@ function fmtDate(iso) {
 const ADMIN_EMAILS = ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com'];
 
 export default function Access() {
-  const { user } = useContext(AuthContext);
+  const { user, refreshSession } = useContext(AuthContext);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -347,27 +347,7 @@ export default function Access() {
       setDeleteTarget(null);
     }
   }
-  async function handleAddArea() {
-    try {
-      await api.post('/sites', {
-        name: `${parentSite.location} — ${areaName.trim()}`,
-        location: parentSite.location,
-        gaName: parentSite.gaName,
-        chargeArea: areaName.trim(),
-        zone: 'Zone 1',
-        district: parentSite.location
-      });
 
-      showToast('✓ Area added successfully');
-      const res = await api.get('/sites');
-      if (res.data?.success && res.data?.sites) {
-        setSites(res.data.sites);
-      }
-    } catch (err) {
-      console.error('Failed to add area site:', err);
-      showToast('❌ Failed to add area.');
-    }
-  }
 
   const handleSiteSelectChange = (userId, siteId) => {
     setSelectedSiteForUser(prev => ({
@@ -407,10 +387,21 @@ export default function Access() {
             <div style={{ flex: 1 }}>
               <p style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#92400e' }}>Request Site Access</p>
               <p style={{ margin: '0 0 12px', fontSize: 13, color: '#78350f' }}>You currently have view-only access. Request access to edit a specific site.</p>
-              <button onClick={() => { setRSite(allSiteNames[0] || ''); setShowModal(true); }}
-                style={{ background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-                Request Access to a Site
-              </button>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <button onClick={() => { setRSite(allSiteNames[0] || ''); setShowModal(true); }}
+                  style={{ background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 7, padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                  Request Access to a Site
+                </button>
+                <button
+                  onClick={async () => {
+                    await refreshSession();
+                    showToast('✓ Access refreshed!');
+                  }}
+                  style={{ background: '#fff', color: '#92400e', border: '1.5px solid #fbbf24', borderRadius: 7, padding: '9px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  🔄 Refresh Access
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -624,7 +615,27 @@ export default function Access() {
                       🗑
                     </button>
                   </div>
+                  {/* Add City / Add Area row */}
                   <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+                    <button
+                      onClick={() => handleAddCity(s.id)}
+                      style={{ flex: 1, height: 28, background: '#fff', color: '#2d6a27', border: '1.5px solid #2d6a27', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >
+                      + Add City
+                    </button>
+                    <button
+                      onClick={() => handleAddArea(s.id)}
+                      style={{ flex: 1, height: 28, background: '#fff', color: '#2d6a27', border: '1.5px solid #2d6a27', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
+                      onMouseEnter={e => e.currentTarget.style.background = '#f0fdf4'}
+                      onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                    >
+                      + Add Area
+                    </button>
+                  </div>
+                  {/* Remove City / Remove Area row */}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
                     <button
                       onClick={() => setDeleteTarget({ type: 'City', site: s })}
                       style={{ flex: 1, height: 28, background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
@@ -638,7 +649,7 @@ export default function Access() {
                       Remove Area
                     </button>
                   </div>
-                  <div style={{ display: 'flex', marginTop: 6 }}>
+                  <div style={{ display: 'flex', marginTop: 4 }}>
                     <button
                       onClick={() => setDeleteTarget({ type: 'GA', site: s })}
                       style={{ width: '100%', height: 28, background: '#991b1b', color: '#fff', border: 'none', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}

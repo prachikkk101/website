@@ -90,6 +90,24 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
+  // ── Periodic session refresh every 30s for real (non-local) users ──
+  // This allows approved supervisors to pick up new role/siteId without
+  // having to log out and back in.
+  useEffect(() => {
+    const token = localStorage.getItem('gppms_token');
+    if (!token || token.startsWith('local-')) return;
+
+    const interval = setInterval(() => {
+      const currentToken = localStorage.getItem('gppms_token');
+      if (currentToken && !currentToken.startsWith('local-')) {
+        refreshSession(currentToken).catch(() => {});
+      }
+    }, 30000); // every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+
   const login = async (email, password) => {
     // Basic client-side validation
     if (!password || password.length < 4) {
