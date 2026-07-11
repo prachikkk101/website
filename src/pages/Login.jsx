@@ -21,6 +21,7 @@ export default function Login() {
   const [loading,  setLoading]  = useState(false);
   const [focused,  setFocused]  = useState(null);
   const [showForgot, setShowForgot] = useState(false);
+  const [revokedMsg, setRevokedMsg] = useState('');
 
   // Forgot-password 3-step flow state
   const [fpStep,       setFpStep]       = useState(1); // 1 | 2 | 3
@@ -39,6 +40,16 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => { document.title = isRegister ? 'GP-PMS — Register' : 'GP-PMS — Login'; }, [isRegister]);
+
+  // Show revoked-access message if admin removed this user
+  useEffect(() => {
+    const msg = sessionStorage.getItem('gppms_revoked_msg');
+    if (msg) {
+      setRevokedMsg(msg);
+      sessionStorage.removeItem('gppms_revoked_msg');
+    }
+  }, []);
+
 
   if (user) {
     return <Navigate to={user.role === 'ADMIN' ? '/dashboard' : '/customers'} replace />;
@@ -247,11 +258,19 @@ export default function Login() {
             {isRegister ? 'Create your new account' : 'Sign in to your account'}
           </h2>
 
+          {revokedMsg && (
+            <div style={{ display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',marginBottom:20,background:'rgba(220,53,69,0.18)',border:'1px solid rgba(220,53,69,0.5)',borderRadius:10 }}>
+              <span style={{ fontSize:18 }}>🚫</span>
+              <span style={{ color:'#ff6b7a',fontSize:13,lineHeight:1.5,fontWeight:600 }}>{revokedMsg}</span>
+            </div>
+          )}
+
           {error && (
             <div style={{ display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',marginBottom:20,background:'rgba(220,53,69,0.12)',border:'1px solid rgba(220,53,69,0.3)',borderRadius:10 }}>
               <span style={{ color:'#ff6b7a',fontSize:13,lineHeight:1.5,fontWeight:500 }}>⚠ {error}</span>
             </div>
           )}
+
 
           {successMsg && (
             <div style={{ display:'flex',alignItems:'flex-start',gap:10,padding:'12px 14px',marginBottom:20,background:'rgba(34,197,94,0.12)',border:'1px solid rgba(34,197,94,0.3)',borderRadius:10 }}>

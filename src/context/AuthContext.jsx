@@ -42,6 +42,16 @@ export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const forceLogout = (reason) => {
+    localStorage.removeItem('gppms_token');
+    localStorage.removeItem('gppms_refresh');
+    localStorage.removeItem('gppms_session');
+    setUser(null);
+    // Store revocation message for the Login page to display
+    if (reason) sessionStorage.setItem('gppms_revoked_msg', reason);
+    window.location.href = '/login';
+  };
+
   const refreshSession = async (customToken) => {
     const token = customToken || localStorage.getItem('gppms_token');
     if (!token) return;
@@ -62,16 +72,27 @@ export function AuthProvider({ children }) {
           name: u.name,
           role: role,
           siteAccess,
+          assignedSites: u.assignedSites ?? [],
           siteId:   u.siteId   ?? null,
           siteName: u.siteName ?? null,
           token: token,
         };
 
         localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
-        setUser(sessionObj);
+        setUser(prev => {
+          // Only update state if something actually changed (avoid needless re-renders)
+          if (JSON.stringify(prev) === JSON.stringify(sessionObj)) return prev;
+          return sessionObj;
+        });
       }
     } catch (err) {
-      console.warn('Failed to refresh session from backend:', err);
+      const status = err.response?.status;
+      // 401 = token invalid/expired, 404 = user deleted — force immediate logout
+      if (status === 401 || status === 404) {
+        forceLogout('Your access has been revoked. Please contact your administrator.');
+      } else {
+        console.warn('Failed to refresh session from backend:', err);
+      }
     }
   };
 
@@ -90,9 +111,11 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
-  // ── Periodic session refresh every 30s for real (non-local) users ──
-  // This allows approved supervisors to pick up new role/siteId without
-  // having to log out and back in.
+  // ── Combined session-validity + permission-sync interval every 30s ──
+  // Serves two purposes:
+  //   1. Picks up new role/siteAccess for approved supervisors (existing feature)
+  //   2. Forces logout if the user has been deleted by admin (new feature)
+  //      — within 30 seconds of deletion, the removed user is automatically logged out.
   useEffect(() => {
     const token = localStorage.getItem('gppms_token');
     if (!token || token.startsWith('local-')) return;

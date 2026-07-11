@@ -30,8 +30,9 @@ export const getAdminDashboard = async (req: AuthenticatedRequest, res: Response
           include: { material: { select: { name: true, unit: true } } },
         });
         const lowStockItems = allStock.filter(
-          s => s.inStoreQty.toNumber() < s.requiredQty.toNumber()
+          s => s.requiredQty.toNumber() > 0 && s.inStoreQty.toNumber() < s.requiredQty.toNumber()
         );
+
 
         return {
           siteId: site.id,
@@ -235,10 +236,18 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response, next:
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    await prisma.user.delete({ where: { id: userId } });
+
+    // Delete in a transaction: remove related SiteUser rows first (FK constraint),
+    // then delete the user record itself.
+    await prisma.$transaction(async (tx: any) => {
+      await tx.siteUser.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
     res.status(200).json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     next(error);
   }
 };
+
 
