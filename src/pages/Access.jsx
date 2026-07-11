@@ -238,8 +238,6 @@ export default function Access() {
     }
   }
 
-<<<<<<< HEAD
-=======
   // ── Add City (Backend Site) ──
   async function handleAddCity(siteId) {
     const parentSite = sites.find(s => s.id === siteId);
@@ -370,7 +368,6 @@ export default function Access() {
       showToast('❌ Failed to add area.');
     }
   }
->>>>>>> 1cc563adfa4c4258901da213cced329828443de9
 
   const handleSiteSelectChange = (userId, siteId) => {
     setSelectedSiteForUser(prev => ({
