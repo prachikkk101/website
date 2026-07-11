@@ -375,64 +375,6 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
   }
 };
 
-<<<<<<< HEAD
-export const deleteSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  try {
-    const id = req.params.id as string;
-
-    const site = await prisma.site.findUnique({ where: { id } });
-    if (!site) {
-      return res.status(404).json({ success: false, error: 'Site not found' });
-    }
-
-    // Cascade-delete all child records in FK-safe order
-    // 1. MeterInstallation (references PNGConnection)
-    await prisma.meterInstallation.deleteMany({ where: { siteId: id } });
-
-    // 2. MeterRegister (references Site and optionally PNGConnection)
-    await prisma.meterRegister.deleteMany({ where: { siteId: id } });
-
-    // 3. Attendance
-    await prisma.attendance.deleteMany({ where: { siteId: id } });
-
-    // 4. ICWork & LMCWork
-    await prisma.iCWork.deleteMany({ where: { siteId: id } });
-    await prisma.lMCWork.deleteMany({ where: { siteId: id } });
-
-    // 5. PELaying
-    await prisma.pELaying.deleteMany({ where: { siteId: id } });
-
-    // 6. ToolReturn
-    await prisma.toolReturn.deleteMany({ where: { siteId: id } });
-
-    // 7. ConsumptionLog, PEReturnLog, GIReturnLog
-    await prisma.consumptionLog.deleteMany({ where: { siteId: id } });
-    await prisma.pEReturnLog.deleteMany({ where: { siteId: id } });
-    await prisma.gIReturnLog.deleteMany({ where: { siteId: id } });
-
-    // 8. InventoryTransaction
-    await prisma.inventoryTransaction.deleteMany({ where: { siteId: id } });
-
-    // 9. InventoryItem
-    await prisma.inventoryItem.deleteMany({ where: { siteId: id } });
-
-    // 10. SiteStock
-    await prisma.siteStock.deleteMany({ where: { siteId: id } });
-
-    // 11. PNGConnection (now safe — MeterInstallation & MeterRegister removed)
-    await prisma.pNGConnection.deleteMany({ where: { siteId: id } });
-
-    // 12. SiteUser
-    await prisma.siteUser.deleteMany({ where: { siteId: id } });
-
-    // 13. Finally delete the Site itself
-    await prisma.site.delete({ where: { id } });
-
-    res.status(200).json({ success: true, message: `Site "${site.name}" and all associated records deleted.` });
-  } catch (error) {
-    next(error);
-  }
-};
 
 export const updateSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
@@ -470,13 +412,13 @@ export const updateSite = async (req: AuthenticatedRequest, res: Response, next:
     next(error);
   }
 };
-=======
+
 /* ─── Safe Deletion Helpers & Endpoints ─── */
 
 async function checkSiteIsSafeToDelete(siteId: string, tx: any) {
   const pngCount = await tx.pNGConnection.count({ where: { siteId } });
   if (pngCount > 0) throw new Error(`Site has ${pngCount} active PNG Connections`);
-  
+
   const invTxnCount = await tx.inventoryTransaction.count({ where: { siteId } });
   if (invTxnCount > 0) throw new Error(`Site has ${invTxnCount} Inventory Transactions`);
 
@@ -488,20 +430,18 @@ async function checkSiteIsSafeToDelete(siteId: string, tx: any) {
 
   const icCount = await tx.iCWork.count({ where: { siteId } });
   if (icCount > 0) throw new Error(`Site has ${icCount} I&C records`);
-  
+
   const meterCount = await tx.meterRegister.count({ where: { siteId } });
   if (meterCount > 0) throw new Error(`Site has ${meterCount} Registered Meters`);
 }
 
-// 1. Delete specific Area (Site)
+// Delete a single Site (area-level)
 export const deleteSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const siteId = req.params.id as string;
-    
+
     await prisma.$transaction(async (tx: any) => {
       await checkSiteIsSafeToDelete(siteId, tx);
-      // Safe to delete. Prisma Cascade will handle SiteUser and SiteStock because they have onDelete: Cascade
-      // Wait, let's explicitly delete them if Cascade isn't completely trusted or for safety
       await tx.siteStock.deleteMany({ where: { siteId } });
       await tx.siteUser.deleteMany({ where: { siteId } });
       await tx.site.delete({ where: { id: siteId } });
@@ -513,12 +453,12 @@ export const deleteSite = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
-// 2. Delete City (all Areas within a City & GA)
+// Delete City (all Areas within a GA + City)
 export const deleteCity = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const gaName = req.params.gaName as string;
     const location = req.params.location as string;
-    
+
     await prisma.$transaction(async (tx: any) => {
       const sites = await tx.site.findMany({ where: { gaName, location } });
       if (sites.length === 0) throw new Error('No sites found for this City');
@@ -537,11 +477,11 @@ export const deleteCity = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
-// 3. Delete GA Location (all Cities & Areas within a GA)
+// Delete GA Location (all Cities & Areas within a GA)
 export const deleteGALocation = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const gaName = req.params.gaName as string;
-    
+
     await prisma.$transaction(async (tx: any) => {
       const sites = await tx.site.findMany({ where: { gaName } });
       if (sites.length === 0) throw new Error('No sites found for this GA Location');
@@ -560,4 +500,3 @@ export const deleteGALocation = async (req: AuthenticatedRequest, res: Response,
   }
 };
 
->>>>>>> 1cc563adfa4c4258901da213cced329828443de9
