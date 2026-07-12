@@ -118,3 +118,30 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     next(error);
   }
 };
+
+export const deletePELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const recordId = req.params.recordId as string;
+
+    console.log('🔵 Delete request for PE Laying record:', recordId);
+
+    const existing = await prisma.pELaying.findUnique({
+      where: { id: recordId },
+      select: { id: true, siteId: true, area: true, layingDate: true },
+    });
+
+    if (!existing) {
+      console.warn('⚠️  PE Laying record not found for delete:', recordId);
+      return res.status(404).json({ success: false, error: 'PE Laying record not found' });
+    }
+
+    const deleted = await prisma.pELaying.delete({ where: { id: recordId } });
+
+    console.log('🟢 Deleted PE Laying record:', deleted.id, `(area: ${deleted.area})`);
+
+    res.json({ success: true, deletedId: deleted.id });
+  } catch (error: any) {
+    console.error('❌ Delete PE Laying failed:', error.message);
+    next(error);
+  }
+};

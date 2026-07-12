@@ -193,7 +193,22 @@ export const peLayingAPI = {
 
   update: (siteId, recordId, data) =>
     api.patch(`/sites/${siteId}/pe-laying/${recordId}`, data).then(r => r.data.record),
+
+  // Hard-delete a PE Laying record from Neon DB (ADMIN/SUPERVISOR only)
+  delete: (siteId, recordId) => {
+    console.log('🔵 Sending delete request for PE Laying record:', recordId, '(site:', siteId, ')');
+    return api.delete(`/sites/${siteId}/pe-laying/${recordId}`)
+      .then(r => {
+        console.log('🟢 Delete PE Laying API succeeded for:', recordId);
+        return r.data;
+      })
+      .catch(err => {
+        console.error('❌ Delete PE Laying API failed:', err.response?.status, err.response?.data?.error || err.message);
+        throw err;
+      });
+  },
 };
+
 
 /* ─────────────────────────────────────────────────────────────
    I&C WORK  — /api/sites/:siteId/ic

@@ -147,7 +147,15 @@ router.post(
         });
         if (!existing) continue;
 
-        const newReturned  = existing.returned + qty;
+        // Guard: cannot return more than what's currently available in store
+        const availableToReturn = Math.max(0, existing.inStore);
+        if (qty > availableToReturn) {
+          console.warn(`[return] ⚠️ Over-return attempt: "${material}" — requested ${qty} but only ${availableToReturn} available. Clamping to ${availableToReturn}.`);
+        }
+        const safeQty = Math.min(qty, availableToReturn);
+        if (safeQty <= 0) continue; // nothing safe to return
+
+        const newReturned  = existing.returned + safeQty;
         const newAvailable = Math.max(0, existing.received - existing.issued - newReturned);
 
         const updated = await prisma.inventoryItem.update({
@@ -162,6 +170,7 @@ router.post(
       }
 
       res.json({ success: true, items: results });
+
     } catch (err) {
       next(err);
     }

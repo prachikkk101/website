@@ -34,7 +34,7 @@ function getSession() {
 function getStatus(onSite, inStore, open, recv) {
   const total = open + recv;
   const pct = total > 0 ? Math.round(((onSite + inStore) / total) * 100) : 0;
-  if (pct > 60) return { label: 'OK', cls: 'badge-ok', bar: '#16a34a', pct };
+  if (pct >= 50) return { label: 'Good', cls: 'badge-ok', bar: '#16a34a', pct };
   if (pct >= 20) return { label: 'Low', cls: 'badge-low', bar: '#d97706', pct };
   return { label: 'Critical', cls: 'badge-critical', bar: '#dc2626', pct };
 }

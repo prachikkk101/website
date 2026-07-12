@@ -237,7 +237,11 @@ export default function HouseTable() {
         setFormArea(editEntry.area || '');
       } else {
         const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        // Auto-select if user has exactly one GA location (supervisor/worker with one site)
+        const autoGA = ctx.gaId !== 'all'
+          ? ctx.gaId
+          : (mergedGAs.length === 1 ? mergedGAs[0].id : '');
+        setFormGA(autoGA);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
         setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }

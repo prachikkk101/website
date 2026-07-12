@@ -106,7 +106,7 @@ export function SiteProvider({ children }) {
 
   // Dynamic merged list reconstructed from backend lists
   const mergedGAs = useMemo(() => {
-    return backendGALocations.map(ga => {
+    const allGAs = backendGALocations.map(ga => {
       const gaCities = backendCities.filter(c => c.gaId === ga.id);
       return {
         ...ga,
@@ -119,7 +119,20 @@ export function SiteProvider({ children }) {
         })
       };
     });
-  }, [backendGALocations, backendCities, backendAreas]);
+
+    // For non-admins: restrict to only their assigned site's GA location(s).
+    // siteList is already role-filtered by the backend — non-admins only get assigned sites.
+    // Each site's `gaName` field maps directly to a GA location's id/name (they're the same string).
+    if (user?.role !== 'ADMIN' && siteList.length > 0) {
+      const allowedGANames = new Set(siteList.map(s => s.gaName).filter(Boolean));
+      if (allowedGANames.size > 0) {
+        return allGAs.filter(ga => allowedGANames.has(ga.name));
+      }
+    }
+
+    return allGAs;
+  }, [backendGALocations, backendCities, backendAreas, siteList, user]);
+
 
   // Dynamic helper functions
   const getCitiesForGA = useCallback((gaId) => {

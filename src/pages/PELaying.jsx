@@ -101,7 +101,11 @@ export default function PELaying() {
         }
       } else {
         const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        // Auto-select if user has exactly one GA location (supervisor/worker with one site)
+        const autoGA = ctx.gaId !== 'all'
+          ? ctx.gaId
+          : (mergedGAs.length === 1 ? mergedGAs[0].id : '');
+        setFormGA(autoGA);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
         setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }
@@ -324,13 +328,23 @@ export default function PELaying() {
     setEditingId(null);
   }
 
-  function handleDelete() {
-    const updated = allData.filter(r => (r.id !== editingId && r.sr !== editingId));
-    setAllData(updated);
-    setPanelOpen(false);
-    setShowDelete(false);
-    setEditingId(null);
-    showToast('Entry deleted');
+  async function handleDelete() {
+    if (!editingId) return;
+    console.log('🔵 Sending delete request for PE Laying:', editingId);
+    try {
+      await peLayingAPI.delete(siteId, editingId);
+      console.log('🟢 Delete API call succeeded for:', editingId);
+      // Remove from local state AFTER backend confirms
+      setAllData(prev => prev.filter(r => r.id !== editingId && r.sr !== editingId));
+      setPanelOpen(false);
+      setShowDelete(false);
+      setEditingId(null);
+      showToast('✓ Entry deleted');
+    } catch (error) {
+      console.error('❌ Delete PE Laying failed:', error);
+      setShowDelete(false);
+      showToast('❌ Delete failed — entry was not removed. Try again.');
+    }
   }
 
   const d32Total  = (Number(form.d32oc)  || 0) + (Number(form.d32b)  || 0) + (Number(form.d32hdd)  || 0);
