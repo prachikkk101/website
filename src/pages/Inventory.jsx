@@ -77,6 +77,9 @@ function CategoryAccordion({
     );
   }
 
+  // Normalize helper for case/whitespace-insensitive name matching
+  const normalize = (s) => (s || '').toLowerCase().trim();
+
   return (
     <div>
       {categories.map(cat => {
@@ -84,8 +87,9 @@ function CategoryAccordion({
         // In return mode (stockItems provided), filter to only show items where available > 0
         const itemsToShow = (stockItems !== null)
           ? cat.items.filter(item => {
-              // Check if this item has available stock (inStore > 0) from quantities map
-              const stats = quantities[item];
+              // Normalize lookup: match even if backend name has different case/spaces
+              const stats = quantities[item]
+                || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1];
               if (!stats) return false;
               const inStore = stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
               return inStore > 0;
@@ -124,7 +128,9 @@ function CategoryAccordion({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {itemsToShow.map(item => {
                       if (readOnly) {
-                        const stats = quantities[item] || {};
+                        const stats = quantities[item]
+                          || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
+                          || {};
                         const recv = stats.recv ?? 0;
                         const issued = stats.issued ?? 0;
                         const ret = stats.ret ?? 0;
@@ -150,7 +156,9 @@ function CategoryAccordion({
                       const val = quantities[`${cat.id}__${item}`] ?? 0;
                       // In return mode, show max available for guidance
                       const maxAvail = stockItems !== null ? (() => {
-                        const stats = quantities[item] || {};
+                        const stats = quantities[item]
+                          || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
+                          || {};
                         return stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
                       })() : null;
                       return (
@@ -892,11 +900,11 @@ export default function Inventory() {
           <SectionTitle>Delivery Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Field label="Challan / DC Number (optional)">
-              <Input value={challan} onChange={e => setChallan(e.target.value)} placeholder="e.g. DC-2026-001" />
+              <Input value={challan} onChange={val => setChallan(val)} placeholder="e.g. DC-2026-001" />
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
-                <Input id="inv-field-date" type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
+                <Input id="inv-field-date" type="date" value={dateRcv} onChange={val => setDateRcv(val)} error={formErr.dateRcv} />
               </Field>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
@@ -904,8 +912,8 @@ export default function Inventory() {
                 <Select
                   id="inv-field-ga"
                   value={formGA}
-                  onChange={e => {
-                    setFormGA(e.target.value);
+                  onChange={val => {
+                    setFormGA(val);
                     setFormCity('');
                     setFormArea('');
                   }}
@@ -920,8 +928,8 @@ export default function Inventory() {
                   <Select
                     id="inv-field-city"
                     value={formCity}
-                    onChange={e => {
-                      setFormCity(e.target.value);
+                    onChange={val => {
+                      setFormCity(val);
                       setFormArea('');
                     }}
                     error={formErr.city}
@@ -934,7 +942,7 @@ export default function Inventory() {
                   <Select
                     id="inv-field-area"
                     value={formArea}
-                    onChange={e => setFormArea(e.target.value)}
+                    onChange={val => setFormArea(val)}
                     error={formErr.area}
                   >
                     <option value="">Select Area</option>
@@ -978,15 +986,15 @@ export default function Inventory() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               <Field label="Return Date" required error={retFormErr.retDate}>
-                <Input type="date" value={retDate} onChange={e => setRetDate(e.target.value)} error={retFormErr.retDate} />
+                <Input type="date" value={retDate} onChange={val => setRetDate(val)} error={retFormErr.retDate} />
               </Field>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={retFormErr.ga}>
                 <Select
                   value={formGA}
-                  onChange={e => {
-                    setFormGA(e.target.value);
+                  onChange={val => {
+                    setFormGA(val);
                     setFormCity('');
                     setFormArea('');
                   }}
@@ -1000,8 +1008,8 @@ export default function Inventory() {
                 <Field label="City" required error={retFormErr.city}>
                   <Select
                     value={formCity}
-                    onChange={e => {
-                      setFormCity(e.target.value);
+                    onChange={val => {
+                      setFormCity(val);
                       setFormArea('');
                     }}
                     error={retFormErr.city}
@@ -1013,7 +1021,7 @@ export default function Inventory() {
                 <Field label="Area / Site" required error={retFormErr.area}>
                   <Select
                     value={formArea}
-                    onChange={e => setFormArea(e.target.value)}
+                    onChange={val => setFormArea(val)}
                     error={retFormErr.area}
                   >
                     <option value="">Select Area</option>

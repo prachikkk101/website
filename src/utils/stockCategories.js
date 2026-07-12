@@ -166,6 +166,10 @@ export const CAT_COLORS = {
 export function buildAccordionCategories(cats, stockItems = null) {
   const allDefaultItems = Object.values(DEFAULT_MATERIALS_BY_CATEGORY).flat();
 
+  // Normalize: lowercase + trim, for case/whitespace-insensitive matching
+  const normalize = (s) => (s || '').toLowerCase().trim();
+  const normalizedAllDefaults = allDefaultItems.map(normalize);
+
   return cats.map((c, i) => {
     const defaultItems = DEFAULT_MATERIALS_BY_CATEGORY[c.name] || [];
 
@@ -173,9 +177,13 @@ export function buildAccordionCategories(cats, stockItems = null) {
     if (stockItems !== null) {
       // Return mode: only show materials actually in this site's inventory
       const siteMatNames = stockItems.map(s => s.mat || s.material).filter(Boolean);
-      const knownInCat = defaultItems.filter(m => siteMatNames.includes(m));
-      // Orphan items (custom materials not in any category) go into the last category
-      const orphans = siteMatNames.filter(m => !allDefaultItems.includes(m));
+      const normalizedSiteNames = siteMatNames.map(normalize);
+
+      // Match using normalized comparison (handles trailing spaces, case diffs)
+      const knownInCat = defaultItems.filter(m => normalizedSiteNames.includes(normalize(m)));
+
+      // Orphan items (custom materials not in any default category)
+      const orphans = siteMatNames.filter(m => !normalizedAllDefaults.includes(normalize(m)));
       items = i === cats.length - 1 ? [...knownInCat, ...orphans] : knownInCat;
     } else {
       items = defaultItems;

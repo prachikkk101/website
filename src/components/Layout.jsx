@@ -169,10 +169,8 @@ export default function Layout() {
     { label: 'Access',          to: '/access',   badge: pendingCount > 0 ? pendingCount : null },
   ];
 
-  // Show site selector for admins + supervisors with 2+ sites (so they can switch between them)
-  // Hide for supervisors with 0 or 1 site — they have no switching to do
-  const assignedSiteCount = (user?.assignedSites || []).length;
-  const showSiteSelector = isAdmin || assignedSiteCount > 1;
+  // Show site selector ONLY for admins — supervisors have a fixed assigned site
+  const showSiteSelector = isAdmin;
 
 
   return (

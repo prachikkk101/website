@@ -688,37 +688,36 @@ export default function HouseTable() {
           <SectionTitle>1. Customer Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={e => f('bpNo', e.target.value)} /></Field>
-              <Field label="Application No."><Input value={form.appNo} onChange={e => f('appNo', e.target.value)} /></Field>
+              <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={val => f('bpNo', val)} /></Field>
+              <Field label="Application No."><Input value={form.appNo} onChange={val => f('appNo', val)} /></Field>
             </div>
-            <Field label="Customer Name" required error={errors.name}><Input id="ht-field-name" value={form.name} onChange={e => f('name', e.target.value)} error={errors.name} /></Field>
+            <Field label="Customer Name" required error={errors.name}><Input id="ht-field-name" value={form.name} onChange={val => f('name', val)} error={errors.name} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Mobile" required error={errors.mobile}><Input id="ht-field-mobile" type="tel" value={form.mobile} onChange={e => f('mobile', e.target.value)} error={errors.mobile} /></Field>
-              <Field label="Alt Mobile"><Input type="tel" value={form.altMobile} onChange={e => f('altMobile', e.target.value)} /></Field>
+              <Field label="Mobile" required error={errors.mobile}><Input id="ht-field-mobile" type="tel" value={form.mobile} onChange={val => f('mobile', val)} error={errors.mobile} /></Field>
+              <Field label="Alt Mobile"><Input type="tel" value={form.altMobile} onChange={val => f('altMobile', val)} /></Field>
             </div>
-            <Field label="Account Type" required><Select value={form.acctType} onChange={e => f('acctType', e.target.value)}>{ACCT_TYPES.map(t => <option key={t}>{t}</option>)}</Select></Field>
+            <Field label="Account Type" required><Select value={form.acctType} onChange={val => f('acctType', val)}>{ACCT_TYPES.map(t => <option key={t}>{t}</option>)}</Select></Field>
           </div>
         </div>
         <div>
           <SectionTitle>2. Address</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="House No." required error={errors.houseNo}><Input id="ht-field-houseNo" value={form.houseNo} onChange={e => f('houseNo', e.target.value)} error={errors.houseNo} /></Field>
+              <Field label="House No." required error={errors.houseNo}><Input id="ht-field-houseNo" value={form.houseNo} onChange={val => f('houseNo', val)} error={errors.houseNo} /></Field>
               <Field label="Floor">
-                <Select value={form.floor || 'GF'} onChange={e => f('floor', e.target.value)}>
+                <Select value={form.floor || 'GF'} onChange={val => f('floor', val)}>
                   {FLOORS.map(fl => <option key={fl} value={fl}>{fl} — {FLOOR_LABELS_MAP[fl]}</option>)}
                 </Select>
               </Field>
             </div>
-             <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={e => f('address1', e.target.value)} error={errors.address1} /></Field>
+             <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={val => f('address1', val)} error={errors.address1} /></Field>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
                  <Select
                    id="ht-field-ga"
                    value={formGA}
-                   disabled={globalLocationContext?.gaId !== 'all'}
-                   onChange={e => {
-                     setFormGA(e.target.value);
+                   onChange={val => {
+                     setFormGA(val);
                      setFormCity('');
                      setFormArea('');
                    }}
@@ -733,9 +732,8 @@ export default function HouseTable() {
                    <Select
                      id="ht-field-city"
                      value={formCity}
-                     disabled={globalLocationContext?.cityId !== 'all'}
-                     onChange={e => {
-                       setFormCity(e.target.value);
+                     onChange={val => {
+                       setFormCity(val);
                        setFormArea('');
                      }}
                      error={errors.city}
@@ -748,7 +746,7 @@ export default function HouseTable() {
                    <Select
                      id="ht-field-area"
                      value={formArea}
-                     onChange={e => setFormArea(e.target.value)}
+                     onChange={val => setFormArea(val)}
                      error={errors.area}
                    >
                      <option value="">Select Area</option>
@@ -762,21 +760,21 @@ export default function HouseTable() {
         <div>
           <SectionTitle>3. Work Status</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="GC Status"><Select value={form.gcStatus} onChange={e => f('gcStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="GI Status"><Select value={form.giStatus} onChange={e => f('giStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="RFC Status"><Select value={form.rfc} onChange={e => f('rfc', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="NG Status"><Select value={form.ngStatus} onChange={e => f('ngStatus', e.target.value)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
-            <Field label="GC Date"><Input id="ht-field-gcDate" type="date" value={form.gcDate} onChange={e => f('gcDate', e.target.value)} /></Field>
-            <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={e => f('plumbingDate', e.target.value)} /></Field>
+            <Field label="GC Status"><Select value={form.gcStatus} onChange={val => f('gcStatus', val)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GI Status"><Select value={form.giStatus} onChange={val => f('giStatus', val)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="RFC Status"><Select value={form.rfc} onChange={val => f('rfc', val)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="NG Status"><Select value={form.ngStatus} onChange={val => f('ngStatus', val)}>{STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}</Select></Field>
+            <Field label="GC Date"><Input id="ht-field-gcDate" type="date" value={form.gcDate} onChange={val => f('gcDate', val)} /></Field>
+            <Field label="Plumbing Date"><Input type="date" value={form.plumbingDate} onChange={val => f('plumbingDate', val)} /></Field>
           </div>
         </div>
           {/* Section 4: Meter Details */}
           <SectionTitle>4. Meter Details</SectionTitle>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            <Field label="Meter No."><Input value={form.meterNo} onChange={e => f('meterNo', e.target.value)} /></Field>
-            <Field label="Meter Date"><Input type="date" value={form.meterDate} onChange={e => f('meterDate', e.target.value)} /></Field>
-            <Field label="Meter Make"><Input value={form.meterMake} placeholder="e.g. Itron, Elster, etc." onChange={e => f('meterMake', e.target.value)} /></Field>
-            <Field label="Meter Reading"><Input type="number" min={0} value={form.meterReading} onChange={e => f('meterReading', e.target.value)} /></Field>
+            <Field label="Meter No."><Input value={form.meterNo} onChange={val => f('meterNo', val)} /></Field>
+            <Field label="Meter Date"><Input type="date" value={form.meterDate} onChange={val => f('meterDate', val)} /></Field>
+            <Field label="Meter Make"><Input value={form.meterMake} placeholder="e.g. Itron, Elster, etc." onChange={val => f('meterMake', val)} /></Field>
+            <Field label="Meter Reading"><Input type="number" min={0} value={form.meterReading} onChange={val => f('meterReading', val)} /></Field>
           </div>
           <Field label="Side" style={{ marginTop: 10 }}>
             <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
@@ -977,6 +975,7 @@ export default function HouseTable() {
       </>
     );
   }
+
 
   return (
     <div>
