@@ -164,6 +164,20 @@ export const pngAPI = {
 
   update: (siteId, connectionId, data) =>
     api.patch(`/sites/${siteId}/png-connections/${connectionId}`, data).then(r => r.data.connection),
+
+  // Hard-delete a PNG connection from Neon DB (ADMIN/SUPERVISOR only)
+  delete: (siteId, connectionId) => {
+    console.log('🔵 Sending delete request for PNG Connection:', connectionId, '(site:', siteId, ')');
+    return api.delete(`/sites/${siteId}/png-connections/${connectionId}`)
+      .then(r => {
+        console.log('🟢 Delete API call succeeded for:', connectionId);
+        return r.data;
+      })
+      .catch(err => {
+        console.error('❌ Delete PNG Connection API failed:', err.response?.status, err.response?.data?.error || err.message);
+        throw err;
+      });
+  },
 };
 
 

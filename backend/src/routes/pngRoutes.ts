@@ -3,6 +3,7 @@ import {
   getPNGConnections,
   createPNGConnection,
   updatePNGConnection,
+  deletePNGConnection,
   submitMeterInstallation,
 } from '../controllers/pngController';
 import { authenticate, requireRole } from '../middlewares/auth';
@@ -14,6 +15,12 @@ const router = Router({ mergeParams: true }); // mergeParams allows :siteId from
 router.get('/', authenticate, checkSiteAccess, getPNGConnections);
 router.post('/', authenticate, checkSiteAccess, createPNGConnection);
 router.patch('/:connectionId', authenticate, checkSiteAccess, updatePNGConnection);
+router.delete(
+  '/:connectionId',
+  authenticate,
+  requireRole([Role.ADMIN, Role.SUPERVISOR]),
+  deletePNGConnection
+);
 router.post(
   '/:connectionId/meter',
   authenticate,

@@ -303,3 +303,34 @@ export const submitMeterInstallation = async (req: AuthenticatedRequest, res: Re
     next(error);
   }
 };
+export const deletePNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const connectionId = req.params.connectionId as string;
+
+    console.log('🔵 Delete request for PNG Connection:', connectionId);
+
+    // Verify the connection exists before attempting delete
+    const existing = await prisma.pNGConnection.findUnique({
+      where: { id: connectionId },
+      select: { id: true, customerName: true, appNo: true, siteId: true },
+    });
+
+    if (!existing) {
+      console.warn('⚠️  PNG Connection not found for delete:', connectionId);
+      return res.status(404).json({ success: false, error: 'Connection not found' });
+    }
+
+    // Hard-delete from Neon. Related MeterInstallation cascades if schema has onDelete: Cascade.
+    // If not, delete meter first to avoid FK constraint.
+    await prisma.meterInstallation.deleteMany({ where: { pngConnectionId: connectionId } });
+
+    const deleted = await prisma.pNGConnection.delete({ where: { id: connectionId } });
+
+    console.log('🟢 Deleted from Neon:', deleted.id, `(${deleted.customerName}, appNo: ${deleted.appNo})`);
+
+    res.json({ success: true, deletedId: deleted.id });
+  } catch (error: any) {
+    console.error('❌ Delete PNG Connection failed:', error.message, error);
+    next(error);
+  }
+};

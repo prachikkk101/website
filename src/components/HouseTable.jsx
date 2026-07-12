@@ -670,12 +670,24 @@ export default function HouseTable() {
 
   async function handleDelete() {
     if (!editEntry) return;
-    const updated = (allHouses || []).filter(h => h.id !== editEntry.id);
-    setAllHouses(updated);
-    setPanelOpen(false);
-    setEditEntry(null);
-    setShowDelete(false);
-    showToast('✓ Entry deleted');
+
+    console.log('🔵 Sending delete request for:', editEntry.id, `(${editEntry.name})`);
+
+    try {
+      await pngAPI.delete(siteId, editEntry.id);
+      console.log('🟢 Delete API call succeeded for:', editEntry.id);
+
+      // Remove from local state only AFTER backend confirms deletion
+      setAllHouses(prev => prev.filter(h => h.id !== editEntry.id));
+      setPanelOpen(false);
+      setEditEntry(null);
+      setShowDelete(false);
+      showToast('✓ Entry deleted');
+    } catch (error) {
+      console.error('❌ Delete failed:', error);
+      setShowDelete(false);
+      showToast('❌ Delete failed — entry was not removed. Check connection and try again.');
+    }
   }
 
   const panelTitle = editEntry ? `Edit Entry — ${editEntry.name || 'Entry'}` : 'Add House Connection Entry';
