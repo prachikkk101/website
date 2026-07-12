@@ -250,4 +250,16 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
-
+export const removeSiteAssignment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const userId = req.params.userId as string;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    await prisma.siteUser.deleteMany({ where: { userId } });
+    res.status(200).json({ success: true, message: 'Site assignment(s) removed' });
+  } catch (error) {
+    next(error);
+  }
+};

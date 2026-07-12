@@ -119,6 +119,14 @@ export default function Access() {
         .then(res => {
           if (res?.success && res?.users) {
             setUsersList(res.users);
+            // Fix #3: pre-populate dropdown from each user's CURRENT assignment
+            const preSelected = {};
+            res.users.forEach(u => {
+              if (u.assignedSites && u.assignedSites.length > 0) {
+                preSelected[u.id] = u.assignedSites[0].site.id;
+              }
+            });
+            setSelectedSiteForUser(preSelected);
           }
         })
         .catch(err => {
@@ -172,6 +180,24 @@ export default function Access() {
     } catch (err) {
       console.error('Failed to delete user:', err);
       showToast('❌ Failed to remove user.');
+    }
+  }
+
+  // ── Remove Site Assignment ──
+  async function removeSiteAccess(userId, userName) {
+    if (!window.confirm(`Remove all site access for ${userName}?\n\nThey will need to be reassigned to a site to regain access.`)) return;
+    try {
+      await adminService.removeSiteAssignment(userId);
+      showToast(`✓ Site access removed for ${userName}`);
+      // Refresh user list and reset dropdown for this user
+      const res = await adminService.getUsers();
+      if (res?.success && res?.users) {
+        setUsersList(res.users);
+        setSelectedSiteForUser(prev => ({ ...prev, [userId]: '' }));
+      }
+    } catch (err) {
+      console.error('Failed to remove site access:', err);
+      showToast('❌ Failed to remove site access.');
     }
   }
 
@@ -449,56 +475,76 @@ export default function Access() {
             <span>👥</span> Registered Users
             <span style={{ fontSize: 11, color: '#64748b', fontWeight: 400, marginLeft: 4 }}>({usersList.length} total)</span>
           </h3>
-          {usersList.map(u => (
-            <div key={u.id || u.email} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f1f5f9', flexWrap: 'wrap' }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#2d6a27', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
-                {u.name ? u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'U'}
-              </div>
-              <div style={{ flex: 1, minWidth: 200 }}>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{u.name}</p>
-                <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>
-                  {u.email} · Assigned Sites: <strong>
-                    {u.assignedSites && u.assignedSites.length > 0
-                      ? u.assignedSites.map(as => as.site.name).join(', ')
-                      : 'None'}
-                  </strong>
-                </p>
-              </div>
-              <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
-                {u.role}
-              </span>
-
-              {/* Site Assignment controls */}
-              {isAdmin && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <select
-                    value={selectedSiteForUser[u.id] || ''}
-                    onChange={(e) => handleSiteSelectChange(u.id, e.target.value)}
-                    style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid #cbd5e1', background: 'white' }}
-                  >
-                    <option value="">Assign Site...</option>
-                    {sites.map(s => (
-                      <option key={s.id} value={s.id}>{s.name || s.label}</option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => assignUserToSite(u.id)}
-                    style={{ background: '#2d6a27', color: 'white', border: 'none', padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
-                  >
-                    Assign
-                  </button>
+          {usersList.map(u => {
+            const currentSites = (u.assignedSites || []).map(as => as.site);
+            const hasAssignment = currentSites.length > 0;
+            return (
+              <div key={u.id || u.email} style={{ padding: '12px 0', borderBottom: '1px solid #f1f5f9' }}>
+                {/* Top row: avatar + name/email + role badge + remove user */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: hasAssignment ? 8 : 0 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#2d6a27', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                    {u.name ? u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'U'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 160 }}>
+                    <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1e293b' }}>{u.name}</p>
+                    <p style={{ margin: 0, fontSize: 11, color: '#94a3b8' }}>{u.email}</p>
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 4, background: u.role === 'ADMIN' ? '#fee2e2' : u.role === 'WORKER' ? '#dbeafe' : '#dcfce7', color: u.role === 'ADMIN' ? '#b91c1c' : u.role === 'WORKER' ? '#1d4ed8' : '#15803d' }}>
+                    {u.role}
+                  </span>
+                  {isAdmin && u.email !== user?.email && !ADMIN_EMAILS.includes(u.email) && (
+                    <button onClick={() => removeUser(u.id, u.email)}
+                      style={{ background: 'white', color: '#dc2626', border: '1px solid #dc2626', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer' }}>
+                      Remove User
+                    </button>
+                  )}
                 </div>
-              )}
 
-              {/* Remove button */}
-              {isAdmin && u.email !== user?.email && !ADMIN_EMAILS.includes(u.email) && (
-                <button onClick={() => removeUser(u.id, u.email)}
-                  style={{ background: 'white', color: '#dc2626', border: '1px solid #dc2626', padding: '4px 10px', borderRadius: '4px', fontSize: '11px', cursor: 'pointer', marginLeft: '8px' }}>
-                  Remove
-                </button>
-              )}
-            </div>
-          ))}
+                {/* Site assignment row */}
+                {isAdmin && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingLeft: 48 }}>
+                    {/* Current assignment badge(s) */}
+                    {hasAssignment ? (
+                      <>
+                        <span style={{ fontSize: 11, color: '#64748b' }}>Assigned to:</span>
+                        {currentSites.map(s => (
+                          <span key={s.id} style={{ background: '#dcfce7', color: '#166534', border: '1px solid #86efac', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+                            📍 {s.name}
+                          </span>
+                        ))}
+                        <button
+                          onClick={() => removeSiteAccess(u.id, u.name)}
+                          style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', padding: '3px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                        >
+                          ✕ Remove Access
+                        </button>
+                      </>
+                    ) : (
+                      <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No site assigned</span>
+                    )}
+
+                    {/* Assign / change site controls */}
+                    <select
+                      value={selectedSiteForUser[u.id] || ''}
+                      onChange={(e) => handleSiteSelectChange(u.id, e.target.value)}
+                      style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid #cbd5e1', background: 'white' }}
+                    >
+                      <option value="">{hasAssignment ? 'Change to...' : 'Assign Site...'}</option>
+                      {sites.map(s => (
+                        <option key={s.id} value={s.id}>{s.name || s.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      onClick={() => assignUserToSite(u.id)}
+                      style={{ background: '#2d6a27', color: 'white', border: 'none', padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
+                    >
+                      {hasAssignment ? 'Change' : 'Assign'}
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 

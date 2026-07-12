@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import {
   getAdminDashboard,
-  getUsers, createUser, updateUser, deleteUser,
+  getUsers, createUser, updateUser, deleteUser, removeSiteAssignment,
   getWhitelist, addToWhitelist, removeFromWhitelist,
 } from '../controllers/adminController';
 import { authenticate, requireRole } from '../middlewares/auth';
@@ -19,6 +19,9 @@ router.get('/users', ...adminOnly, getUsers);
 router.post('/users', ...adminOnly, createUser);
 router.patch('/users/:userId', ...adminOnly, updateUser);
 router.delete('/users/:userId', ...adminOnly, deleteUser);
+
+// Site assignment management
+router.delete('/users/:userId/site-assignment', ...adminOnly, removeSiteAssignment);
 
 // Admin whitelist
 router.get('/whitelist', ...adminOnly, getWhitelist);

@@ -32,6 +32,9 @@ export const adminService = {
   assignUserToSite: (siteId, data) =>
     api.post(`/sites/${siteId}/workers`, data).then((r) => r.data),
 
+  removeSiteAssignment: (userId) =>
+    api.delete(`/admin/users/${userId}/site-assignment`).then((r) => r.data),
+
   // Admin whitelist
   getWhitelist: () =>
     api.get('/admin/whitelist').then((r) => r.data),
