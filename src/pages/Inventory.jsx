@@ -51,16 +51,46 @@ function CategoryAccordion({
   // If not provided, falls back to quantities (for readOnly/summary mode).
   stockStats = null,
 }) {
-  const [categories, setCategories] = useState([]);
+  // Step 1: fetch raw category definitions ONCE (they don’t change per-site)
+  const [rawCats, setRawCats] = useState([]);
   const [catLoading, setCatLoading] = useState(true);
 
   useEffect(() => {
     dataAPI.getStockCategories()
-      .then(cats => setCategories(buildAccordionCategories(cats, stockItems)))
-      .catch(() => setCategories([]))
+      .then(cats => {
+        console.log('🔵 CategoryAccordion: fetched', cats.length, 'raw categories from API');
+        setRawCats(cats);
+      })
+      .catch(err => {
+        console.error('❌ CategoryAccordion: failed to fetch categories', err);
+        setRawCats([]);
+      })
       .finally(() => setCatLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, []); // only fetch category definitions once — they’re global, not per-site
+
+  // Step 2: BUILD the accordion items reactively whenever rawCats OR stockItems changes.
+  // CRITICAL: this was previously inside the useEffect above with [] deps, which meant
+  // categories were built with stockItems=[] (empty, before stock data loaded from API)
+  // and never rebuilt. Now useMemo reacts to stockItems updates correctly.
+  const categories = useMemo(() => {
+    if (rawCats.length === 0) return [];
+
+    if (stockItems !== null) {
+      // Return mode — log what stock data we have for debugging
+      const materialNames = stockItems.map(s => s.mat || s.material).filter(Boolean);
+      console.log('🟢 CategoryAccordion (return mode): building from', stockItems.length,
+        'stock items:', materialNames);
+
+      if (stockStats) {
+        const returnable = Object.entries(stockStats)
+          .filter(([, s]) => (s.inStore ?? 0) > 0)
+          .map(([name, s]) => `${name} (inStore: ${s.inStore})`);
+        console.log('🟢 CategoryAccordion: items with inStore > 0:', returnable.length, returnable);
+      }
+    }
+
+    return buildAccordionCategories(rawCats, stockItems);
+  }, [rawCats, stockItems]);
 
   function toggleCategory(id) {
     setOpenCategory(prev => prev === id ? null : id);
@@ -87,12 +117,12 @@ function CategoryAccordion({
     <div>
       {categories.map(cat => {
         const isOpen = openCategory === cat.id;
-        // In return mode (stockItems provided), filter to only show items where inStore > 0
-        // Use stockStats for availability (real computed data), NOT quantities (user input)
+        // In return mode (stockItems provided), filter to only show items where inStore > 0.
+        // Use stockStats for availability (real computed data from live stockData),
+        // NOT quantities (which is retQuantities — user-input state, starts as {}).
         const availLookup = stockStats || quantities;
         const itemsToShow = (stockItems !== null)
           ? cat.items.filter(item => {
-              // Normalize lookup: match even if backend name has different case/spaces
               const stats = availLookup[item]
                 || Object.entries(availLookup).find(([k]) => normalize(k) === normalize(item))?.[1];
               if (!stats) return false;
@@ -133,7 +163,7 @@ function CategoryAccordion({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {itemsToShow.map(item => {
                       if (readOnly) {
-                      const stats = (stockStats || quantities)[item]
+                        const stats = (stockStats || quantities)[item]
                           || Object.entries(stockStats || quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
                           || {};
                         const recv = stats.recv ?? 0;
@@ -180,7 +210,6 @@ function CategoryAccordion({
                             onChange={(e) => {
                               const raw = e.target.value;
                               const num = raw === '' ? 0 : Number(raw);
-
                               updateQty(cat.id, item, num);
                             }}
                             onBlur={(e) => { if (e.target.value === '') updateQty(cat.id, item, 0); }}
