@@ -24,6 +24,8 @@ enum PEStatus {
   LAYING
   HDD
   JOINT
+  TESTING
+  COMMISSIONING
 }
 
 enum ICStatus {
@@ -250,6 +252,7 @@ model PELaying {
   raBillNo     String?
   reportNo     String?
   status       PEStatus               @default(LAYING)
+  connType     String                 @default("Domestic")
   area         String
   coilNo       String
   d32oc        Decimal                @db.Decimal(10, 3) @default(0)

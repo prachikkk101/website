@@ -23,7 +23,50 @@ const prisma = new PrismaClient({ adapter });
 async function main() {
   console.log('Seeding database...');
 
-  // 1. Clean existing data
+  // ══════════════════════════════════════════════════════════════════
+  // PRODUCTION SAFETY GUARD
+  // This seed script calls deleteMany({}) on EVERY table — it will
+  // permanently destroy ALL production data if run against the wrong DB.
+  //
+  // It detects production by checking if DATABASE_URL contains known
+  // cloud identifiers (neon.tech, neon.database.azure.com, fly.io).
+  //
+  // To run seed on a dev/staging database ONLY:
+  //   ALLOW_SEED_DESTROY=true npx ts-node prisma/seed.ts
+  //
+  // NEVER run this against the production Neon database.
+  // NEVER add this to fly.toml release_command or Dockerfile.
+  // NEVER add this to the npm start or build script.
+  // The ONLY safe automated command for deploy is: npx prisma migrate deploy
+  // ══════════════════════════════════════════════════════════════════
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isProductionDB =
+    dbUrl.includes('neon.tech') ||
+    dbUrl.includes('neon.database.azure.com') ||
+    dbUrl.includes('fly.io') ||
+    process.env.NODE_ENV === 'production';
+
+  if (isProductionDB) {
+    if (!process.env.ALLOW_SEED_DESTROY) {
+      console.error('');
+      console.error('╔══════════════════════════════════════════════════════════════╗');
+      console.error('║  ❌ SEED ABORTED — PRODUCTION DATABASE DETECTED              ║');
+      console.error('╠══════════════════════════════════════════════════════════════╣');
+      console.error('║  DATABASE_URL appears to point to a production/cloud DB.     ║');
+      console.error('║  Running this seed WILL permanently delete ALL data.         ║');
+      console.error('║                                                              ║');
+      console.error('║  If you are 100% sure you want to wipe this database, run:  ║');
+      console.error('║  ALLOW_SEED_DESTROY=true npx ts-node prisma/seed.ts          ║');
+      console.error('╚══════════════════════════════════════════════════════════════╝');
+      console.error('');
+      process.exit(1);
+    }
+    console.warn('');
+    console.warn('⚠️  ALLOW_SEED_DESTROY=true detected. Proceeding with DESTRUCTIVE seed on production DB...');
+    console.warn('');
+  }
+
+
   await prisma.auditLog.deleteMany({});
   await prisma.attendance.deleteMany({});
   await prisma.toolReturn.deleteMany({});

@@ -39,13 +39,16 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
 };
 
 export const createPELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  console.log('🔵 PE Laying create — full request body:', JSON.stringify(req.body, null, 2));
+
   const schema = z.object({
-    layingDate: z.string(),
+    layingDate: z.string().min(1),
     testingDate: z.string().nullable().optional(),
     chargingDate: z.string().nullable().optional(),
     raBillNo: z.string().nullable().optional(),
     reportNo: z.string().nullable().optional(),
     status: z.nativeEnum(PEStatus).nullable().optional(),
+    connType: z.string().nullable().optional(),   // Domestic / Commercial / Industrial
     area: z.string().min(1),
     coilNo: z.string().nullable().optional(),
     d32oc: z.number().nonnegative().nullable().optional(),
@@ -59,34 +62,54 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
   try {
     const siteId = req.params.siteId as string;
-    const data = schema.parse(req.body);
 
-    const record = await prisma.pELaying.create({
-      data: {
-        siteId,
-        layingDate: new Date(data.layingDate),
-        testingDate: data.testingDate ? new Date(data.testingDate) : null,
-        chargingDate: data.chargingDate ? new Date(data.chargingDate) : null,
-        raBillNo: data.raBillNo || null,
-        reportNo: data.reportNo || null,
-        status: data.status || PEStatus.LAYING,
-        area: data.area,
-        coilNo: data.coilNo || "",
-        d32oc: data.d32oc ?? 0,
-        d32b: data.d32b ?? 0,
-        d63oc: data.d63oc ?? 0,
-        d63b: data.d63b ?? 0,
-        d63hdd: data.d63hdd ?? 0,
-        d90tot: data.d90tot ?? 0,
-        d125tot: data.d125tot ?? 0,
-      },
-    });
+    let data;
+    try {
+      data = schema.parse(req.body);
+      console.log('🟢 PE Laying Zod validation passed. Parsed data:', JSON.stringify(data, null, 2));
+    } catch (zodErr: any) {
+      console.error('❌ PE Laying Zod validation FAILED:', JSON.stringify(zodErr.errors ?? zodErr, null, 2));
+      return res.status(400).json({
+        success: false,
+        error: 'Validation failed',
+        details: zodErr.errors ?? zodErr.message,
+      });
+    }
 
-    res.status(201).json({ success: true, record });
+    try {
+      const record = await prisma.pELaying.create({
+        data: {
+          siteId,
+          layingDate: new Date(data.layingDate),
+          testingDate: data.testingDate ? new Date(data.testingDate) : null,
+          chargingDate: data.chargingDate ? new Date(data.chargingDate) : null,
+          raBillNo: data.raBillNo || null,
+          reportNo: data.reportNo || null,
+          status: data.status || PEStatus.LAYING,
+          connType: data.connType || 'Domestic',
+          area: data.area,
+          coilNo: data.coilNo || '',
+          d32oc: data.d32oc ?? 0,
+          d32b: data.d32b ?? 0,
+          d63oc: data.d63oc ?? 0,
+          d63b: data.d63b ?? 0,
+          d63hdd: data.d63hdd ?? 0,
+          d90tot: data.d90tot ?? 0,
+          d125tot: data.d125tot ?? 0,
+        },
+      });
+
+      console.log('🟢 PE Laying created successfully. ID:', record.id);
+      res.status(201).json({ success: true, record });
+    } catch (prismaErr: any) {
+      console.error('❌ PE Laying Prisma create FAILED:', prismaErr.message, prismaErr);
+      return res.status(500).json({ success: false, error: prismaErr.message });
+    }
   } catch (error) {
     next(error);
   }
 };
+
 
 export const updatePELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({

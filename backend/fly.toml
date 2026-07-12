@@ -9,7 +9,13 @@ primary_region = 'sin'
 [build]
 
 [deploy]
+  # WARNING: NEVER change this to 'prisma migrate reset', 'prisma db push --force-reset',
+  # 'prisma db seed', or ANY command with "reset", "force", or "seed" in it.
+  # Those commands WILL permanently destroy ALL production data in the Neon database.
+  # The ONLY safe automated deploy command is 'prisma migrate deploy':
+  # it applies pending schema migrations WITHOUT touching existing data.
   release_command = 'npx prisma migrate deploy'
+
 
 [http_service]
 internal_port = 5001

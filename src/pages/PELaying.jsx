@@ -122,14 +122,16 @@ export default function PELaying() {
           const mapped = records.map(r => ({
             id: r.id, sr: r.id,
             layDate:    r.layingDate ? r.layingDate.split('T')[0] : '',
-            connType:   r.status     ? capitaliseStatus(r.status) : 'Domestic',
+            // Use stored connType (Domestic/Commercial/Industrial) from DB — do NOT derive from status
+            connType:   r.connType   || 'Domestic',
             area:       r.area       || '',
             coil:       r.coilNo     || '',
             d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
             d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
             d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
             d125oc: 0, d125b: 0, d125hdd: 0, d125tot: Number(r.d125tot) || 0,
-            workStatus: r.status || 'Laying',
+            // Map DB status enum back to display label for the form
+            workStatus: capitaliseStatus(r.status) || 'Laying',
           }));
           setAllData(mapped);
         })
@@ -144,9 +146,27 @@ export default function PELaying() {
   }, [siteId]);
 
   function capitaliseStatus(s) {
-    if (!s) return 'Domestic';
-    const m = { LAYING: 'Laying', HDD: 'HDD', JOINT: 'Joint' };
+    if (!s) return 'Laying';
+    const m = {
+      LAYING:       'Laying',
+      HDD:          'HDD',
+      JOINT:        'Joint',
+      TESTING:      'Testing & Flushing',
+      COMMISSIONING:'Commissioning',
+    };
     return m[s] || s;
+  }
+
+  // Map frontend workStatus display label → PEStatus DB enum value
+  function statusToEnum(displayStatus) {
+    const m = {
+      'Laying':             'LAYING',
+      'HDD':               'HDD',
+      'Joint':             'JOINT',
+      'Testing & Flushing':'TESTING',
+      'Commissioning':     'COMMISSIONING',
+    };
+    return m[displayStatus] || 'LAYING';
   }
 
   // Filter / tab state
@@ -299,7 +319,10 @@ export default function PELaying() {
         area:       entryBase.area,
         coilNo:     entryBase.coil,
         layingDate: entryBase.layDate,
-        status:     entryBase.workStatus?.toUpperCase() || 'LAYING',
+        // Map display label → valid PEStatus enum value
+        status:     statusToEnum(entryBase.workStatus),
+        // Store connection type (Domestic/Commercial/Industrial) so tabs load correctly
+        connType:   entryBase.connType || 'Domestic',
         d32oc: entryBase.d32oc, d32b: entryBase.d32b,
         d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
         d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
