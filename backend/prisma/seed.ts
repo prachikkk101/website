@@ -1,3 +1,8 @@
+// WARNING: Never run broad deletes (deleteMany without highly specific unique
+// where clauses) against production data. Always verify exact record IDs before
+// deleting. Do NOT delete all records matching a site/pattern — only target
+// specific known IDs (e.g. exact user email, exact SiteStock id).
+// This seed file clears ALL data (safe for dev/staging only) — never run on prod.
 import { PrismaClient, Role } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { Pool } from 'pg';

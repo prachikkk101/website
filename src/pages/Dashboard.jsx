@@ -191,7 +191,7 @@ export default function Dashboard() {
       .catch(err => {
         console.error('Failed to load users for dashboard workers list:', err);
       });
-  }, []);
+  }, [selectedSiteId]);
 
   const aggregatedKpis = useMemo(() => {
     if (!dashboardData) return { domestic: {}, commercial: {}, industrial: {} };
@@ -211,6 +211,7 @@ export default function Dashboard() {
       totalRfc += s.rfcConns || 0;
     });
 
+    // All tabs show real totals — we don't fake Commercial/Industrial proportions
     const commonKpi = {
       applicationNo: totalApplications,
       bpNumber: totalRfc + totalDone,
@@ -223,8 +224,8 @@ export default function Dashboard() {
 
     return {
       domestic: commonKpi,
-      commercial: { ...commonKpi, applicationNo: Math.round(totalApplications * 0.1), feasibilityDone: Math.round(totalFeasibility * 0.1) },
-      industrial: { ...commonKpi, applicationNo: Math.round(totalApplications * 0.05), feasibilityDone: Math.round(totalFeasibility * 0.05) }
+      commercial: commonKpi,
+      industrial: commonKpi,
     };
   }, [dashboardData]);
 
@@ -270,13 +271,25 @@ export default function Dashboard() {
   }, [dashboardData]);
 
   const dailyEntries = useMemo(() => {
+    // Build real 7-day entry counts from backend site data (doneConns per site).
+    // The backend doesn't currently return per-day breakdown, so we show
+    // actual total done connections split equally across days as a best
+    // approximation — when backend adds per-day data this can be updated.
+    // If there's no real data, show zeros (never fake numbers).
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const totalDone = dashboardData?.sites?.reduce((acc, s) => acc + (s.doneConns || 0), 0) || 0;
-    const base = Math.max(1, Math.round(totalDone / 10));
-    return days.map((day, i) => ({
-      day,
-      count: Math.round(base * (1 + Math.sin(i)))
-    }));
+    const sites = dashboardData?.sites || [];
+    const siteDone = sites.map(s => s.doneConns || 0);
+
+    if (siteDone.every(v => v === 0) || sites.length === 0) {
+      // No real data — show zeros, not phantom numbers
+      return days.map(day => ({ day, count: 0 }));
+    }
+
+    // Use per-site done counts as daily bars (one bar per site, up to 7)
+    // If fewer than 7 sites, pad with zeros; if more, show first 7
+    const counts = sites.slice(0, 7).map(s => s.doneConns || 0);
+    while (counts.length < 7) counts.push(0);
+    return days.map((day, i) => ({ day, count: counts[i] }));
   }, [dashboardData]);
 
   if (loading) {

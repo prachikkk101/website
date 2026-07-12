@@ -45,8 +45,11 @@ function CategoryAccordion({
   openCategory, setOpenCategory,
   quantities, setQuantities,
   readOnly = false,
-  // Optional: existing site stock items (for Return Stock mode)
+  // stockItems: raw site stock array — used for filtering which materials appear in return mode
   stockItems = null,
+  // stockStats: { itemName -> { recv, issued, ret, inStore } } — used for availability lookup in return mode
+  // If not provided, falls back to quantities (for readOnly/summary mode).
+  stockStats = null,
 }) {
   const [categories, setCategories] = useState([]);
   const [catLoading, setCatLoading] = useState(true);
@@ -84,12 +87,14 @@ function CategoryAccordion({
     <div>
       {categories.map(cat => {
         const isOpen = openCategory === cat.id;
-        // In return mode (stockItems provided), filter to only show items where available > 0
+        // In return mode (stockItems provided), filter to only show items where inStore > 0
+        // Use stockStats for availability (real computed data), NOT quantities (user input)
+        const availLookup = stockStats || quantities;
         const itemsToShow = (stockItems !== null)
           ? cat.items.filter(item => {
               // Normalize lookup: match even if backend name has different case/spaces
-              const stats = quantities[item]
-                || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1];
+              const stats = availLookup[item]
+                || Object.entries(availLookup).find(([k]) => normalize(k) === normalize(item))?.[1];
               if (!stats) return false;
               const inStore = stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
               return inStore > 0;
@@ -128,8 +133,8 @@ function CategoryAccordion({
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {itemsToShow.map(item => {
                       if (readOnly) {
-                        const stats = quantities[item]
-                          || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
+                      const stats = (stockStats || quantities)[item]
+                          || Object.entries(stockStats || quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
                           || {};
                         const recv = stats.recv ?? 0;
                         const issued = stats.issued ?? 0;
@@ -154,10 +159,11 @@ function CategoryAccordion({
                       }
                       // Edit mode (return stock or receive stock)
                       const val = quantities[`${cat.id}__${item}`] ?? 0;
-                      // In return mode, show max available for guidance
+                      // In return mode, show max available for guidance — use stockStats, not user-input quantities
                       const maxAvail = stockItems !== null ? (() => {
-                        const stats = quantities[item]
-                          || Object.entries(quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
+                        const st = stockStats || quantities;
+                        const stats = st[item]
+                          || Object.entries(st).find(([k]) => normalize(k) === normalize(item))?.[1]
                           || {};
                         return stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
                       })() : null;
@@ -1044,6 +1050,7 @@ export default function Inventory() {
             quantities={retQuantities}
             setQuantities={setRetQuantities}
             stockItems={stockData}
+            stockStats={summaryQuantities}
           />
         </div>
 
