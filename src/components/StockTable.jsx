@@ -202,11 +202,11 @@ export default function StockTable({ data = [], readOnly = false, siteName = '' 
           <SectionTitle>Delivery Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Field label="Challan / DC Number" required error={formErr.challan}>
-              <Input value={challan} onChange={e => setChallan(e.target.value)} error={formErr.challan} placeholder="e.g. DC-2026-001" />
+              <Input value={challan} onChange={val => setChallan(val)} error={formErr.challan} placeholder="e.g. DC-2026-001" />
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>
-                <Input type="date" value={dateRcv} onChange={e => setDateRcv(e.target.value)} error={formErr.dateRcv} />
+                <Input type="date" value={dateRcv} onChange={val => setDateRcv(val)} error={formErr.dateRcv} />
               </Field>
               <Field label="Site">
                 <div style={{ height: 36, display: 'flex', alignItems: 'center', padding: '0 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 13, color: '#374151', fontWeight: 600 }}>

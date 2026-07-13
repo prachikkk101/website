@@ -5,7 +5,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
-import { peLayingAPI } from '../utils/api';
+import { peLayingAPI, columnConfigAPI } from '../utils/api';
 
 function initStore(key, defaults) {
   try {
@@ -178,21 +178,35 @@ export default function PELaying() {
   const [exportToDate,   setExportToDate]   = useState(todayStr());
   const dateError = exportFromDate && exportToDate && exportFromDate > exportToDate;
 
-  // Custom and hidden columns state
-  const [customCols, setCustomCols] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gppms_custom_columns_pelaying') || '[]'); } catch { return []; }
-  });
-  const [hiddenCols, setHiddenCols] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_pelaying') || '[]'); } catch { return []; }
-  });
+  // Custom and hidden columns state — loaded from backend (site-wide shared)
+  const [customCols, setCustomCols] = useState([]);
+  const [hiddenCols, setHiddenCols] = useState([]);
   const [showColManager, setShowColManager] = useState(false);
+
+  // Helper — persist column config changes to backend so all users see the same columns
+  function saveColConfig(custom, hidden) {
+    if (!siteId) return;
+    columnConfigAPI.update(siteId, 'pelaying', custom, hidden)
+      .catch(e => console.error('[PELaying] Failed to save column config:', e));
+  }
+
+  // Load column config from backend when siteId changes
+  useEffect(() => {
+    if (!siteId) return;
+    columnConfigAPI.get(siteId, 'pelaying')
+      .then(cfg => {
+        setCustomCols(cfg.customCols || []);
+        setHiddenCols(cfg.hiddenCols || []);
+      })
+      .catch(() => { /* no config yet — start with empty */ });
+  }, [siteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
       ? hiddenCols.filter(k => k !== key)
       : [...hiddenCols, key];
     setHiddenCols(updated);
-    localStorage.setItem('gppms_hidden_cols_pelaying', JSON.stringify(updated));
+    saveColConfig(customCols, updated);
   }
 
   // ── KPI totals (all data) ──
@@ -599,20 +613,20 @@ export default function PELaying() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Laying Date" required error={errors.layDate}>
-                <Input type="date" value={form.layDate} onChange={e => f('layDate', e.target.value)} error={errors.layDate} />
+                <Input type="date" value={form.layDate} onChange={val => f('layDate', val)} error={errors.layDate} />
               </Field>
               <Field label="Laying Type" required error={errors.connType}>
-                <Select value={form.connType} onChange={e => f('connType', e.target.value)} error={errors.connType}>
+                <Select value={form.connType} onChange={val => f('connType', val)} error={errors.connType}>
                   {CONN_TYPES.map(t => <option key={t}>{t}</option>)}
                 </Select>
               </Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="Coil / Batch No.">
-                <Input value={form.coil} onChange={e => f('coil', e.target.value)} />
+                <Input value={form.coil} onChange={val => f('coil', val)} />
               </Field>
               <Field label="Work Status">
-                <Select value={form.workStatus} onChange={e => f('workStatus', e.target.value)}>
+                <Select value={form.workStatus} onChange={val => f('workStatus', val)}>
                   {WK_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </Select>
               </Field>
@@ -621,11 +635,11 @@ export default function PELaying() {
               <Select
                 value={formGA}
                 disabled={globalLocationContext?.gaId !== 'all'}
-                onChange={e => {
-                  setFormGA(e.target.value);
-                  setFormCity('');
-                  setFormArea('');
-                }}
+                onChange={val => {
+                    setFormGA(val);
+                    setFormCity('');
+                    setFormArea('');
+                  }}
                 error={errors.ga}
               >
                 <option value="">Select GA Location</option>
@@ -637,10 +651,10 @@ export default function PELaying() {
                 <Select
                   value={formCity}
                   disabled={globalLocationContext?.cityId !== 'all'}
-                  onChange={e => {
-                    setFormCity(e.target.value);
-                    setFormArea('');
-                  }}
+                  onChange={val => {
+                      setFormCity(val);
+                      setFormArea('');
+                    }}
                   error={errors.city}
                 >
                   <option value="">Select City</option>
@@ -650,7 +664,7 @@ export default function PELaying() {
               <Field label="Area / Society" required error={errors.area}>
                 <Select
                   value={formArea}
-                  onChange={e => setFormArea(e.target.value)}
+                  onChange={val => setFormArea(val)}
                   error={errors.area}
                 >
                   <option value="">Select Area</option>
@@ -675,17 +689,17 @@ export default function PELaying() {
             {/* Row 2: Ø32 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø32mm</div>
             <Input type="number" min={0} value={form.d32oc === 0 || form.d32oc === '' ? '' : form.d32oc}
-              onChange={e => { const val = e.target.value; f('d32oc', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d32oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d32oc', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d32b === 0 || form.d32b === '' ? '' : form.d32b}
-              onChange={e => { const val = e.target.value; f('d32b', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d32b', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d32b', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d32hdd === 0 || form.d32hdd === '' ? '' : form.d32hdd}
-              onChange={e => { const val = e.target.value; f('d32hdd', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d32hdd', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d32hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
@@ -694,17 +708,17 @@ export default function PELaying() {
             {/* Row 3: Ø63 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø63mm</div>
             <Input type="number" min={0} value={form.d63oc === 0 || form.d63oc === '' ? '' : form.d63oc}
-              onChange={e => { const val = e.target.value; f('d63oc', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d63oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d63oc', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d63b === 0 || form.d63b === '' ? '' : form.d63b}
-              onChange={e => { const val = e.target.value; f('d63b', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d63b', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d63b', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d63hdd === 0 || form.d63hdd === '' ? '' : form.d63hdd}
-              onChange={e => { const val = e.target.value; f('d63hdd', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d63hdd', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d63hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
@@ -713,17 +727,17 @@ export default function PELaying() {
             {/* Row 4: Ø90 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø90mm</div>
             <Input type="number" min={0} value={form.d90oc === 0 || form.d90oc === '' ? '' : form.d90oc}
-              onChange={e => { const val = e.target.value; f('d90oc', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d90oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d90oc', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d90b === 0 || form.d90b === '' ? '' : form.d90b}
-              onChange={e => { const val = e.target.value; f('d90b', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d90b', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d90b', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d90hdd === 0 || form.d90hdd === '' ? '' : form.d90hdd}
-              onChange={e => { const val = e.target.value; f('d90hdd', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d90hdd', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d90hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
@@ -732,17 +746,17 @@ export default function PELaying() {
             {/* Row 5: Ø125 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø125mm</div>
             <Input type="number" min={0} value={form.d125oc === 0 || form.d125oc === '' ? '' : form.d125oc}
-              onChange={e => { const val = e.target.value; f('d125oc', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d125oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d125oc', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d125b === 0 || form.d125b === '' ? '' : form.d125b}
-              onChange={e => { const val = e.target.value; f('d125b', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d125b', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d125b', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
             <Input type="number" min={0} value={form.d125hdd === 0 || form.d125hdd === '' ? '' : form.d125hdd}
-              onChange={e => { const val = e.target.value; f('d125hdd', val === '' ? 0 : Number(val)); }}
+              onChange={val => { f('d125hdd', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d125hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
@@ -756,7 +770,7 @@ export default function PELaying() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {customCols.map(col => (
                 <Field key={col.key} label={col.label}>
-                  <Input value={form[col.key] || ''} onChange={e => f(col.key, e.target.value)} />
+                  <Input value={form[col.key] || ''} onChange={val => f(col.key, val)} />
                 </Field>
               ))}
             </div>
@@ -830,7 +844,7 @@ export default function PELaying() {
                       <button onClick={() => {
                         const updated = customCols.filter(c => c.key !== col.key);
                         setCustomCols(updated);
-                        localStorage.setItem('gppms_custom_columns_pelaying', JSON.stringify(updated));
+                        saveColConfig(updated, hiddenCols);
                         setHiddenCols(prev => prev.filter(k => k !== col.key));
                         showToast(`Column "${col.label}" deleted`);
                       }} title="Delete this column permanently"
@@ -852,14 +866,14 @@ export default function PELaying() {
                   const newCol = { key: 'custom_' + Date.now(), label: val };
                   const updated = [...customCols, newCol];
                   setCustomCols(updated);
-                  localStorage.setItem('gppms_custom_columns_pelaying', JSON.stringify(updated));
+                  saveColConfig(updated, hiddenCols);
                   document.getElementById('newColInputPL').value = '';
                   showToast(`✓ Column "${val}" added`);
                 }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
               </div>
             </div>
 
-            <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_pelaying'); showToast('All columns visible'); }}
+            <button onClick={() => { setHiddenCols([]); saveColConfig(customCols, []); showToast('All columns visible'); }}
               style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
               ↺ Reset — Show All Columns
             </button>

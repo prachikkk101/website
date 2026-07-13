@@ -74,6 +74,9 @@ model Site {
   district     String
   status       String                 @default("Active")
   targetConns  Int                    @default(0)
+  // Site-wide shared column config (custom cols + visibility) — replaces per-browser localStorage.
+  // Stored as JSON: { house: { customCols: [...], hiddenCols: [...] }, pelaying: {...} }
+  columnConfig Json?
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
   
@@ -223,6 +226,10 @@ model PNGConnection {
   ngStatus          String?
   meterNo           String?
   meterDate         DateTime?              @db.Date
+  // House photos stored as base64 data URLs — previously only in React local state
+  // (showed immediately after save but disappeared on refresh). Now persisted to DB.
+  photo1Data        String?                // base64 data URL — Photo 1: Meter/Connection
+  photo2Data        String?                // base64 data URL — Photo 2: Additional/Site
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 

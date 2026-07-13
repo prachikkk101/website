@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getSites, createSite, getSiteById, assignWorker, getSiteStock, receiveStock, deleteSite, deleteCity, deleteGALocation, updateSite } from '../controllers/siteController';
+import { getSites, createSite, getSiteById, assignWorker, getSiteStock, receiveStock, deleteSite, deleteCity, deleteGALocation, updateSite, getColumnConfig, updateColumnConfig } from '../controllers/siteController';
 import { authenticate, requireRole } from '../middlewares/auth';
 import { checkSiteAccess } from '../middlewares/checkSiteAccess';
 import { Role } from '@prisma/client';
@@ -20,6 +20,9 @@ router.delete('/:id', authenticate, requireRole([Role.ADMIN]), deleteSite);
 router.post('/:id/workers', authenticate, requireRole([Role.ADMIN]), assignWorker);
 router.get('/:id/stock', authenticate, checkSiteAccess, getSiteStock);
 router.post('/:id/stock/receive', authenticate, requireRole([Role.ADMIN]), receiveStock);
+// Site-wide shared column config — readable and writable by all users with site access
+router.get('/:id/column-config', authenticate, checkSiteAccess, getColumnConfig);
+router.patch('/:id/column-config', authenticate, checkSiteAccess, updateColumnConfig);
 
 export default router;
 

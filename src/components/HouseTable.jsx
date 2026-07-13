@@ -6,7 +6,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
-import { pngAPI, dataAPI } from '../utils/api';
+import { pngAPI, dataAPI, columnConfigAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
 
 
@@ -188,6 +188,11 @@ export default function HouseTable() {
             meterReading: c.meterInstallation?.meterReading || '',
             side:         c.meterInstallation?.lhsRhs || 'LHS',
             materialsUsed: {},
+            // Photos — loaded from DB (base64 data URLs). Previously these were only in
+            // React local state so photos disappeared on every page refresh.
+            photo1Data:   c.photo1Data   || null,
+            photo2Data:   c.photo2Data   || null,
+            photoCount:   [c.photo1Data, c.photo2Data].filter(Boolean).length,
             createdAt: c.createdAt,
           }));
           setAllHouses(mapped);
@@ -305,25 +310,37 @@ export default function HouseTable() {
     setMatList(prev => prev.filter(m => m.key !== key));
   }
 
-  // Dynamic custom columns state
-  const [customCols, setCustomCols] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('gppms_custom_columns_house') || '[]');
-    } catch { return []; }
-  });
+  // Dynamic custom columns state — now site-wide via backend (was per-browser localStorage)
+  const [customCols, setCustomCols] = useState([]);
 
-  // Hidden columns (default + custom) — persisted
-  const [hiddenCols, setHiddenCols] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_house') || '[]'); } catch { return []; }
-  });
+  // Hidden columns — site-wide via backend
+  const [hiddenCols, setHiddenCols] = useState([]);
   const [showColManager, setShowColManager] = useState(false);
+
+  // Helper — persist column config to backend
+  function saveColConfig(custom, hidden) {
+    if (!siteId) return;
+    columnConfigAPI.update(siteId, 'house', custom, hidden)
+      .catch(e => console.error('[HouseTable] Failed to save column config:', e));
+  }
+
+  // Load column config from backend when siteId changes
+  useEffect(() => {
+    if (!siteId) return;
+    columnConfigAPI.get(siteId, 'house')
+      .then(cfg => {
+        setCustomCols(cfg.customCols || []);
+        setHiddenCols(cfg.hiddenCols || []);
+      })
+      .catch(() => { /* no config yet — start empty */ });
+  }, [siteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
       ? hiddenCols.filter(k => k !== key)
       : [...hiddenCols, key];
     setHiddenCols(updated);
-    localStorage.setItem('gppms_hidden_cols_house', JSON.stringify(updated));
+    saveColConfig(customCols, updated);
   }
 
   const handleAddColumn = () => {
@@ -335,7 +352,7 @@ export default function HouseTable() {
     };
     const updated = [...customCols, newCol];
     setCustomCols(updated);
-    localStorage.setItem('gppms_custom_columns_house', JSON.stringify(updated));
+    saveColConfig(updated, hiddenCols);
     showToast(`✓ Column "${name.trim()}" added`);
   };
 
@@ -621,6 +638,11 @@ export default function HouseTable() {
           // Quick meter recording
           meterNo:   form.meterNo   || null,
           meterDate: form.meterDate || null,
+          // Photos — send as base64 if a new file was selected; undefined = keep existing in DB
+          // JSON.stringify strips 'undefined' so if no new photo is chosen, field is absent
+          // from the request body, and the backend leaves the existing photo untouched.
+          photo1Data: p1b64 || undefined,
+          photo2Data: p2b64 || undefined,
           // Sent on CREATE only — triggers stock deduction in backend $transaction
           materialsUsed: materialsUsedPayload,
         };
@@ -1280,7 +1302,7 @@ export default function HouseTable() {
                       <button onClick={() => {
                         const updated = customCols.filter(c => c.key !== col.key);
                         setCustomCols(updated);
-                        localStorage.setItem('gppms_custom_columns_house', JSON.stringify(updated));
+                        saveColConfig(updated, hiddenCols);
                         setHiddenCols(prev => prev.filter(k => k !== col.key));
                         showToast(`Column "${col.label}" deleted`);
                       }} title="Delete this column permanently"
@@ -1302,14 +1324,14 @@ export default function HouseTable() {
                   const newCol = { key: 'custom_' + Date.now(), label: val };
                   const updated = [...customCols, newCol];
                   setCustomCols(updated);
-                  localStorage.setItem('gppms_custom_columns_house', JSON.stringify(updated));
+                  saveColConfig(updated, hiddenCols);
                   document.getElementById('newColInput').value = '';
                   showToast(`✓ Column "${val}" added`);
                 }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
               </div>
             </div>
 
-            <button onClick={() => { setHiddenCols([]); localStorage.removeItem('gppms_hidden_cols_house'); showToast('All columns visible'); }}
+            <button onClick={() => { setHiddenCols([]); saveColConfig(customCols, []); showToast('All columns visible'); }}
               style={{ marginTop:14, width:'100%', height:32, background:'#f1f5f9', color:'#374151', border:'1px solid #e2e8f0', borderRadius:6, fontSize:12, fontWeight:600, cursor:'pointer' }}>
               ↺ Reset — Show All Columns
             </button>

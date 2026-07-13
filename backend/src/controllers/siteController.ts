@@ -501,3 +501,74 @@ export const deleteGALocation = async (req: AuthenticatedRequest, res: Response,
   }
 };
 
+/* ─────────────────────────────────────────────────────────────────────────
+   COLUMN CONFIG  — Site-wide shared column visibility and custom columns.
+   Replaces per-browser localStorage ('gppms_custom_columns_house' etc.).
+   All users viewing the same site see the same column configuration.
+
+   Structure stored in Site.columnConfig (Json):
+   {
+     "house": { "customCols": [{key, label}, ...], "hiddenCols": ["key1", ...] },
+     "pelaying": { "customCols": [...], "hiddenCols": [...] }
+   }
+───────────────────────────────────────────────────────────────────────── */
+export const getColumnConfig = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const idStr = id as string;
+    const table = (req.query.table as string) || 'house';
+
+    const site = await prisma.site.findUnique({
+      where: { id: idStr },
+      select: { columnConfig: true },
+    });
+
+    if (!site) {
+      return res.status(404).json({ success: false, error: 'Site not found' });
+    }
+
+    const config = (site.columnConfig as Record<string, any>) || {};
+    const tableConfig = config[table] || { customCols: [], hiddenCols: [] };
+
+    res.json({ success: true, data: tableConfig });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateColumnConfig = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const idStr = id as string;
+    const schema = z.object({
+      table:      z.string().min(1),
+      customCols: z.array(z.object({ key: z.string(), label: z.string() })),
+      hiddenCols: z.array(z.string()),
+    });
+
+    const { table, customCols, hiddenCols } = schema.parse(req.body);
+
+    // Fetch existing config and merge — so changes to 'house' don't wipe 'pelaying' config
+    const site = await prisma.site.findUnique({
+      where: { id: idStr },
+      select: { columnConfig: true },
+    });
+
+    if (!site) {
+      return res.status(404).json({ success: false, error: 'Site not found' });
+    }
+
+    const existing = (site.columnConfig as Record<string, any>) || {};
+    const merged = { ...existing, [table]: { customCols, hiddenCols } };
+
+    await prisma.site.update({
+      where: { id: idStr },
+      data: { columnConfig: merged },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+

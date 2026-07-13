@@ -225,6 +225,22 @@ export const icWorkAPI = {
 };
 
 /* ─────────────────────────────────────────────────────────────
+   COLUMN CONFIG  — /api/sites/:siteId/column-config
+   Site-wide shared column visibility and custom columns.
+   Replaces per-browser localStorage so all users see the same config.
+───────────────────────────────────────────────────────────── */
+export const columnConfigAPI = {
+  /** Fetch column config for a given table ('house' or 'pelaying') */
+  get: (siteId, table) =>
+    api.get(`/sites/${siteId}/column-config`, { params: { table } })
+       .then(r => r.data.data || { customCols: [], hiddenCols: [] }),
+
+  /** Persist updated column config for a table */
+  update: (siteId, table, customCols, hiddenCols) =>
+    api.patch(`/sites/${siteId}/column-config`, { table, customCols, hiddenCols }),
+};
+
+/* ─────────────────────────────────────────────────────────────
    LOOKUP DATA  — /api/ga-locations, /api/cities, /api/areas,
                   /api/stock-categories
    All endpoints are authenticated; data is derived from the

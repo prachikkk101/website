@@ -53,13 +53,15 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
 export const createPNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // ── DIAGNOSTIC LOGGING — captures exact incoming body BEFORE Zod strips unknown fields
   console.log('🔵 PNG Create — incoming fields:', {
-    meterNo:   req.body.meterNo,
-    meterDate: req.body.meterDate,
-    gcStatus:  req.body.gcStatus,
-    giStatus:  req.body.giStatus,
-    rfcStatus: req.body.rfcStatus,
-    ngStatus:  req.body.ngStatus,
-    gcDate:    req.body.gcDate,
+    meterNo:    req.body.meterNo,
+    meterDate:  req.body.meterDate,
+    gcStatus:   req.body.gcStatus,
+    giStatus:   req.body.giStatus,
+    rfcStatus:  req.body.rfcStatus,
+    ngStatus:   req.body.ngStatus,
+    gcDate:     req.body.gcDate,
+    photo1Data: req.body.photo1Data ? `[base64 ${Math.round((req.body.photo1Data.length * 3 / 4) / 1024)}KB]` : null,
+    photo2Data: req.body.photo2Data ? `[base64 ${Math.round((req.body.photo2Data.length * 3 / 4) / 1024)}KB]` : null,
   });
 
   const schema = z.object({
@@ -91,6 +93,10 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     // Quick meter recording before formal MeterInstallation
     meterNo:   z.string().nullable().optional(),
     meterDate: z.string().nullable().optional(),
+    // House photos as base64 data URLs — stored in DB TEXT columns.
+    // Frontend enforces ≤4MB per photo before base64 conversion (~5.3MB encoded max).
+    photo1Data: z.string().nullable().optional(),
+    photo2Data: z.string().nullable().optional(),
     // Materials used per connection — triggers stock deduction AFTER save
     materialsUsed: z.array(
       z.object({
@@ -148,21 +154,26 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
         tfCount: data.tfCount ?? 0,
         ivCount: data.ivCount ?? 0,
         // Newly persisted status fields
-        giStatus:  data.giStatus  || null,
-        rfcStatus: data.rfcStatus || null,
-        ngStatus:  data.ngStatus  || null,
-        meterNo:   data.meterNo   || null,
-        meterDate: data.meterDate ? new Date(data.meterDate) : null,
+        giStatus:   data.giStatus  || null,
+        rfcStatus:  data.rfcStatus || null,
+        ngStatus:   data.ngStatus  || null,
+        meterNo:    data.meterNo   || null,
+        meterDate:  data.meterDate ? new Date(data.meterDate) : null,
+        // Photos — base64 data URLs. Null if user didn't upload a photo.
+        photo1Data: data.photo1Data || null,
+        photo2Data: data.photo2Data || null,
       },
     });
 
     console.log(`[PNG create] Connection saved: ${connection.id} (appNo: ${appNo})`);
     console.log('🟢 PNG Created — saved values:', {
-      meterNo:   connection.meterNo,
-      gcStatus:  connection.status,
-      giStatus:  connection.giStatus,
-      rfcStatus: connection.rfcStatus,
-      ngStatus:  connection.ngStatus,
+      meterNo:    connection.meterNo,
+      gcStatus:   connection.status,
+      giStatus:   connection.giStatus,
+      rfcStatus:  connection.rfcStatus,
+      ngStatus:   connection.ngStatus,
+      hasPhoto1:  !!connection.photo1Data,
+      hasPhoto2:  !!connection.photo2Data,
     });
 
     // ── STEP 2: Deduct stock — fire-and-forget via setImmediate.
@@ -234,6 +245,9 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     ngStatus:  z.string().nullable().optional(),
     meterNo:   z.string().nullable().optional(),
     meterDate: z.string().nullable().optional(),
+    // Photos — only present if user selected a new photo; undefined = keep existing in DB
+    photo1Data: z.string().nullable().optional(),
+    photo2Data: z.string().nullable().optional(),
   });
 
   try {
@@ -261,6 +275,9 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         ngStatus:  data.ngStatus  !== undefined ? data.ngStatus  : undefined,
         meterNo:   data.meterNo   !== undefined ? data.meterNo   : undefined,
         meterDate: data.meterDate ? new Date(data.meterDate) : (data.meterDate === null ? null : undefined),
+        // Photos — only update if explicitly provided (undefined = keep existing)
+        photo1Data: data.photo1Data !== undefined ? data.photo1Data : undefined,
+        photo2Data: data.photo2Data !== undefined ? data.photo2Data : undefined,
         updatedAt: new Date(),
       },
     });
