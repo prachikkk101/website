@@ -3,7 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import * as bcrypt from 'bcryptjs';
 import prisma from '../config/db';
-import { Role } from '@prisma/client';
+import { Role, Prisma } from '@prisma/client';
 
 /* ─── Aggregate Admin Dashboard ─────────────────────────── */
 
@@ -24,15 +24,22 @@ export const getAdminDashboard = async (req: AuthenticatedRequest, res: Response
         });
         const icDone = await prisma.iCWork.count({ where: { siteId: site.id, status: 'Done' } });
 
-        // Low-stock alert check — compare columns in JS since Prisma can't do cross-column WHERE
+        // Low-stock alert check — use same percentage thresholds as Inventory Stock Statement:
+        // Critical: inStore < 20% of received; Low: inStore < 50% of received.
+        // Only flag items where stock has actually been received (received > 0).
+        // NOTE: We no longer use requiredQty because that field was seeded with dummy data
+        // and is never set by the real UI, causing phantom low-stock banners.
         const allStock = await prisma.siteStock.findMany({
           where: { siteId: site.id },
           include: { material: { select: { name: true, unit: true } } },
         });
-        const lowStockItems = allStock.filter(
-          s => s.requiredQty.toNumber() > 0 && s.inStoreQty.toNumber() < s.requiredQty.toNumber()
-        );
-
+        const lowStockItems = allStock.filter(s => {
+          const received = s.receivedQty.toNumber();
+          const inStore  = s.inStoreQty.toNumber();
+          if (received === 0) return false; // never received — no data yet, not low stock
+          const pct = (inStore / received) * 100;
+          return pct < 50; // Low (<50%) or Critical (<20%)
+        });
 
         return {
           siteId: site.id,
@@ -46,12 +53,19 @@ export const getAdminDashboard = async (req: AuthenticatedRequest, res: Response
           lmcDone,
           icDone,
           completionPct: site.targetConns > 0 ? Math.round((doneConns / site.targetConns) * 100) : 0,
-          lowStockAlerts: lowStockItems.map(s => ({
-            material: s.material.name,
-            unit: s.material.unit,
-            inStore: s.inStoreQty,
-            required: s.requiredQty,
-          })),
+          lowStockAlerts: lowStockItems.map(s => {
+            const received = s.receivedQty.toNumber();
+            const inStore  = s.inStoreQty.toNumber();
+            const pct = received > 0 ? Math.round((inStore / received) * 100) : 0;
+            return {
+              material: s.material.name,
+              unit: s.material.unit,
+              inStore,
+              received,
+              pct,
+              severity: pct < 20 ? 'Critical' : 'Low',
+            };
+          }),
         };
       })
     );
@@ -237,15 +251,36 @@ export const deleteUser = async (req: AuthenticatedRequest, res: Response, next:
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
-    // Delete in a transaction: remove related SiteUser rows first (FK constraint),
-    // then delete the user record itself.
+    // Delete all records that reference this user (FK constraints without onDelete: Cascade).
+    // SiteUser and Attendance[userId] already have onDelete: Cascade on the schema,
+    // but we still clean up the others explicitly to avoid constraint violations.
     await prisma.$transaction(async (tx: any) => {
+      // Nullify AuditLog (nullable userId — Prisma handles SetNull when nullable and
+      // we set it explicitly here to be safe across DB providers)
+      await tx.auditLog.updateMany({ where: { userId }, data: { userId: null } });
+      // Delete stock-related logs
+      await tx.consumptionLog.deleteMany({ where: { userId } });
+      await tx.pEReturnLog.deleteMany({ where: { userId } });
+      await tx.gIReturnLog.deleteMany({ where: { userId } });
+      await tx.inventoryTransaction.deleteMany({ where: { loggedByUserId: userId } });
+      // Delete attendance records either attended by OR marked by this user
+      await tx.attendance.deleteMany({ where: { OR: [{ userId }, { markedByUserId: userId }] } });
+      // SiteUser has onDelete: Cascade but explicit delete ensures the user row can be removed
       await tx.siteUser.deleteMany({ where: { userId } });
+      // Finally delete the user itself
       await tx.user.delete({ where: { id: userId } });
     });
 
     res.status(200).json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
+    // Surface FK constraint errors with a helpful message
+    const prismaError = error as Prisma.PrismaClientKnownRequestError;
+    if (prismaError.code === 'P2003') {
+      return (res as Response).status(409).json({
+        success: false,
+        error: 'Cannot delete user — they have associated records. Please contact your admin to remove their data entries first.',
+      });
+    }
     next(error);
   }
 };
@@ -259,6 +294,20 @@ export const removeSiteAssignment = async (req: AuthenticatedRequest, res: Respo
     }
     await prisma.siteUser.deleteMany({ where: { userId } });
     res.status(200).json({ success: true, message: 'Site assignment(s) removed' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Remove a SINGLE specific site assignment (not all sites) for a user
+export const removeSingleSiteAssignment = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    const { userId, siteId } = req.params as { userId: string; siteId: string };
+    const result = await prisma.siteUser.deleteMany({ where: { userId, siteId } });
+    if (result.count === 0) {
+      return res.status(404).json({ success: false, error: 'Assignment not found' });
+    }
+    res.status(200).json({ success: true, message: 'Site removed from user' });
   } catch (error) {
     next(error);
   }

@@ -156,6 +156,7 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState(null);
   const [activeWorkers, setActiveWorkers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [alertDismissed, setAlertDismissed] = useState(false);
 
   useEffect(() => {
     document.title = 'GP-PMS — GA Dashboard';
@@ -302,22 +303,35 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Alert Strip */}
-      {lowStockAlerts.length > 0 && (
-        <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', marginBottom: 12 }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0 }}>
+      {/* Low-Stock Alert Strip — only shown when there are real Critical/Low items AND not dismissed */}
+      {lowStockAlerts.length > 0 && !alertDismissed && (
+        <div className="alert-strip" style={{ background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', marginBottom: 12, alignItems: 'flex-start' }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c0440a" strokeWidth="2" style={{ flexShrink: 0, marginTop: 2 }}>
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
             <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
           </svg>
-          <span>
+          <span style={{ flex: 1 }}>
             <strong>Low stock: </strong>
             {lowStockAlerts.map((a, i) => (
               <span key={i}>
-                <strong>{a.site}</strong> — {a.material} ({a.qty})
+                <strong>{a.site}</strong> — {a.material}
+                <span style={{
+                  display: 'inline-block', marginLeft: 4,
+                  fontSize: 10, fontWeight: 700, padding: '1px 5px',
+                  borderRadius: 3,
+                  background: a.severity === 'Critical' ? '#fee2e2' : '#fff7ed',
+                  color: a.severity === 'Critical' ? '#dc2626' : '#c0440a',
+                  border: `1px solid ${a.severity === 'Critical' ? '#fca5a5' : '#fed7aa'}`,
+                }}>{a.severity} {a.pct}%</span>
                 {i < lowStockAlerts.length - 1 ? ' | ' : ''}
               </span>
             ))}
           </span>
+          <button
+            onClick={() => setAlertDismissed(true)}
+            title="Dismiss"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9a3412', fontSize: 16, lineHeight: 1, padding: '0 0 0 8px', flexShrink: 0 }}
+          >✕</button>
         </div>
       )}
 

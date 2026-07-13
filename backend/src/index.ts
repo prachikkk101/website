@@ -40,8 +40,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // ── Health Check ──────────────────────────────────────────
 app.get('/health', (_req: import('express').Request, res: import('express').Response) => {

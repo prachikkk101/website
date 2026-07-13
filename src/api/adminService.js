@@ -35,6 +35,9 @@ export const adminService = {
   removeSiteAssignment: (userId) =>
     api.delete(`/admin/users/${userId}/site-assignment`).then((r) => r.data),
 
+  removeSingleSiteAssignment: (userId, siteId) =>
+    api.delete(`/admin/users/${userId}/site-assignment/${siteId}`).then((r) => r.data),
+
   // Admin whitelist
   getWhitelist: () =>
     api.get('/admin/whitelist').then((r) => r.data),

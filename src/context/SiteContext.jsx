@@ -21,6 +21,7 @@ export const SiteContext = createContext({
   getAreasForCity: () => [],
   selectedSiteId: null,
   setSelectedSiteId: () => { },
+  siteLoading: true,
 });
 
 export function SiteProvider({ children }) {
@@ -41,6 +42,7 @@ export function SiteProvider({ children }) {
   const [backendGALocations, setBackendGALocations] = useState([]);
   const [backendCities, setBackendCities] = useState([]);
   const [backendAreas, setBackendAreas] = useState([]);
+  const [siteLoading, setSiteLoading] = useState(true); // true until first sites fetch completes
 
   // Store the active selected site ID (UUID)
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
@@ -81,6 +83,9 @@ export function SiteProvider({ children }) {
       })
       .catch(err => {
         console.error('Failed to fetch sites from backend in SiteContext:', err);
+      })
+      .finally(() => {
+        setSiteLoading(false); // sites fetch done (success or failure)
       });
 
     Promise.all([
@@ -184,7 +189,8 @@ export function SiteProvider({ children }) {
       selectedSite, setSelectedSite,
       siteOptions, siteList, mergedGAs,
       getCitiesForGA, getAreasForCity,
-      selectedSiteId, setSelectedSiteId
+      selectedSiteId, setSelectedSiteId,
+      siteLoading,
     }}>
       {children}
     </SiteContext.Provider>

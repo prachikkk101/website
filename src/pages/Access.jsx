@@ -119,14 +119,8 @@ export default function Access() {
         .then(res => {
           if (res?.success && res?.users) {
             setUsersList(res.users);
-            // Fix #3: pre-populate dropdown from each user's CURRENT assignment
-            const preSelected = {};
-            res.users.forEach(u => {
-              if (u.assignedSites && u.assignedSites.length > 0) {
-                preSelected[u.id] = u.assignedSites[0].site.id;
-              }
-            });
-            setSelectedSiteForUser(preSelected);
+            // Do NOT pre-populate the assignment dropdown with current sites.
+            // The dropdown is an "Add new" control and should always show the placeholder.
           }
         })
         .catch(err => {
@@ -156,6 +150,9 @@ export default function Access() {
       await adminService.assignUserToSite(siteId, { userId });
       showToast('✓ User assigned to site successfully');
 
+      // Reset dropdown to placeholder for this user
+      setSelectedSiteForUser(prev => ({ ...prev, [userId]: '' }));
+
       // Refresh user list
       const res = await adminService.getUsers();
       if (res?.success && res?.users) {
@@ -163,7 +160,7 @@ export default function Access() {
       }
     } catch (err) {
       console.error('Failed to assign user to site:', err);
-      showToast('❌ Failed to assign user to site.');
+      showToast('❌ ' + (err.response?.data?.error || 'Failed to assign user to site.'));
     }
   }
 
@@ -179,25 +176,22 @@ export default function Access() {
       showToast(`✓ User ${email} has been removed`);
     } catch (err) {
       console.error('Failed to delete user:', err);
-      showToast('❌ Failed to remove user.');
+      const msg = err.response?.data?.error || 'Failed to remove user.';
+      showToast('❌ ' + msg);
     }
   }
 
-  // ── Remove Site Assignment ──
-  async function removeSiteAccess(userId, userName) {
-    if (!window.confirm(`Remove all site access for ${userName}?\n\nThey will need to be reassigned to a site to regain access.`)) return;
+  // ── Remove Single Site Assignment (per-site pill ✕ button) ──
+  async function removeSingleSite(userId, siteId, siteName) {
+    if (!window.confirm(`Remove access to "${siteName}" for this user?`)) return;
     try {
-      await adminService.removeSiteAssignment(userId);
-      showToast(`✓ Site access removed for ${userName}`);
-      // Refresh user list and reset dropdown for this user
+      await adminService.removeSingleSiteAssignment(userId, siteId);
+      showToast(`✓ Removed access to ${siteName}`);
       const res = await adminService.getUsers();
-      if (res?.success && res?.users) {
-        setUsersList(res.users);
-        setSelectedSiteForUser(prev => ({ ...prev, [userId]: '' }));
-      }
+      if (res?.success && res?.users) setUsersList(res.users);
     } catch (err) {
-      console.error('Failed to remove site access:', err);
-      showToast('❌ Failed to remove site access.');
+      console.error('Failed to remove site:', err);
+      showToast('❌ ' + (err.response?.data?.error || 'Failed to remove site.'));
     }
   }
 
@@ -503,33 +497,37 @@ export default function Access() {
                 {/* Site assignment row */}
                 {isAdmin && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingLeft: 48 }}>
-                    {/* Current assignment badge(s) */}
+                    {/* Current assignment pills — each has its own ✕ to remove just that site */}
                     {hasAssignment ? (
                       <>
                         <span style={{ fontSize: 11, color: '#64748b' }}>Assigned to:</span>
                         {currentSites.map(s => (
-                          <span key={s.id} style={{ background: '#dcfce7', color: '#166534', border: '1px solid #86efac', borderRadius: 12, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+                          <span key={s.id} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            background: '#dcfce7', color: '#166534',
+                            border: '1px solid #86efac', borderRadius: 12,
+                            padding: '2px 6px 2px 10px', fontSize: 11, fontWeight: 600
+                          }}>
                             📍 {s.name}
+                            <button
+                              onClick={() => removeSingleSite(u.id, s.id, s.name)}
+                              title={`Remove ${s.name}`}
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#166534', fontSize: 13, lineHeight: 1, padding: 0, display: 'flex', alignItems: 'center' }}
+                            >✕</button>
                           </span>
                         ))}
-                        <button
-                          onClick={() => removeSiteAccess(u.id, u.name)}
-                          style={{ background: '#fff7ed', color: '#9a3412', border: '1px solid #fed7aa', padding: '3px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
-                        >
-                          ✕ Remove Access
-                        </button>
                       </>
                     ) : (
                       <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>No site assigned</span>
                     )}
 
-                    {/* Assign / change site controls */}
+                    {/* Add site dropdown — always shows placeholder; resets after assign */}
                     <select
                       value={selectedSiteForUser[u.id] || ''}
                       onChange={(e) => handleSiteSelectChange(u.id, e.target.value)}
                       style={{ fontSize: 11, padding: '4px 8px', borderRadius: 4, border: '1px solid #cbd5e1', background: 'white' }}
                     >
-                      <option value="">{hasAssignment ? 'Change to...' : 'Assign Site...'}</option>
+                      <option value=''>Assign Site...</option>
                       {sites.map(s => (
                         <option key={s.id} value={s.id}>{s.name || s.label}</option>
                       ))}
@@ -538,7 +536,7 @@ export default function Access() {
                       onClick={() => assignUserToSite(u.id)}
                       style={{ background: '#2d6a27', color: 'white', border: 'none', padding: '4px 10px', borderRadius: 4, fontSize: 11, cursor: 'pointer', fontWeight: 600 }}
                     >
-                      {hasAssignment ? 'Change' : 'Assign'}
+                      + Assign
                     </button>
                   </div>
                 )}

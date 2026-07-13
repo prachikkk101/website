@@ -182,6 +182,7 @@ export default function PELaying() {
   const [customCols, setCustomCols] = useState([]);
   const [hiddenCols, setHiddenCols] = useState([]);
   const [showColManager, setShowColManager] = useState(false);
+  const [newColNamePL, setNewColNamePL] = useState(''); // controlled input for col manager
 
   // Helper — persist column config changes to backend so all users see the same columns
   function saveColConfig(custom, hidden) {
@@ -858,16 +859,22 @@ export default function PELaying() {
             <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:14 }}>
               <div style={{ fontSize:11, fontWeight:700, color:'#94a3b8', textTransform:'uppercase', letterSpacing:1, marginBottom:8 }}>Add New Column</div>
               <div style={{ display:'flex', gap:8 }}>
-                <input id="newColInputPL" placeholder="Column name..."
+                <input
+                  placeholder="Column name..."
+                  value={newColNamePL}
+                  onChange={e => setNewColNamePL(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.nextElementSibling?.click();
+                  }}
                   style={{ flex:1, height:34, border:'1px solid #d1d5db', borderRadius:6, padding:'0 10px', fontSize:13 }} />
                 <button onClick={() => {
-                  const val = document.getElementById('newColInputPL')?.value?.trim();
+                  const val = newColNamePL.trim();
                   if (!val) return;
                   const newCol = { key: 'custom_' + Date.now(), label: val };
                   const updated = [...customCols, newCol];
                   setCustomCols(updated);
                   saveColConfig(updated, hiddenCols);
-                  document.getElementById('newColInputPL').value = '';
+                  setNewColNamePL('');
                   showToast(`✓ Column "${val}" added`);
                 }} style={{ height:34, background:'#2d6a27', color:'#fff', border:'none', borderRadius:6, padding:'0 14px', fontSize:13, fontWeight:600, cursor:'pointer' }}>+ Add</button>
               </div>

@@ -232,7 +232,7 @@ function CategoryAccordion({
 export default function Inventory() {
   const { showToast } = useToast();
   const { user } = useContext(AuthContext);
-  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, selectedSiteId } = useSite();
+  const { siteList, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, selectedSiteId, siteLoading } = useSite();
 
   const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
 
@@ -330,7 +330,16 @@ export default function Inventory() {
 
   useEffect(() => {
     async function load() {
-      if (!currentSiteId) return;
+      // Guard: if sites haven't finished loading yet, wait — don't treat null siteId as "no access"
+      if (!currentSiteId) {
+        if (!siteLoading) {
+          // Sites loaded but still no site — user has no assigned site
+          setLoading(false);
+          setStockData([]);
+        }
+        // If siteLoading is still true, stay in loading state (will re-run when siteId is set)
+        return;
+      }
       try {
         setLoading(true);
         const items = await stockAPI.getAll(currentSiteId);
@@ -344,7 +353,7 @@ export default function Inventory() {
       }
     }
     load();
-  }, [currentSiteId]);
+  }, [currentSiteId, siteLoading]);
 
   useEffect(() => {
     if (panelOpen) {
@@ -533,6 +542,7 @@ export default function Inventory() {
     try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_inventory') || '[]'); } catch { return []; }
   });
   const [showColManager, setShowColManager] = useState(false);
+  const [newColNameInv, setNewColNameInv] = useState(''); // controlled input for col manager
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
@@ -1164,16 +1174,22 @@ export default function Inventory() {
             <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>Add New Column</div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <input id="newColInputInv" placeholder="Column name..."
+                <input
+                  placeholder="Column name..."
+                  value={newColNameInv}
+                  onChange={e => setNewColNameInv(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.currentTarget.nextElementSibling?.click();
+                  }}
                   style={{ flex: 1, height: 34, border: '1px solid #d1d5db', borderRadius: 6, padding: '0 10px', fontSize: 13 }} />
                 <button onClick={() => {
-                  const val = document.getElementById('newColInputInv')?.value?.trim();
+                  const val = newColNameInv.trim();
                   if (!val) return;
                   const newCol = { key: 'custom_' + Date.now(), label: val };
                   const updated = [...customCols, newCol];
                   setCustomCols(updated);
                   localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
-                  document.getElementById('newColInputInv').value = '';
+                  setNewColNameInv('');
                   showToast(`✓ Column "${val}" added`);
                 }} style={{ height: 34, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 6, padding: '0 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>+ Add</button>
               </div>
