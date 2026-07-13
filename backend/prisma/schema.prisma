@@ -216,8 +216,16 @@ model PNGConnection {
   giPipeMtr         Decimal?               @db.Decimal(10, 3)
   tfCount           Int?                   @default(0)
   ivCount           Int?                   @default(0)
+  // Status fields — giStatus, rfcStatus, ngStatus were previously frontend-only;
+  // meterNo/meterDate allow quick recording before formal MeterInstallation.
+  giStatus          String?
+  rfcStatus         String?
+  ngStatus          String?
+  meterNo           String?
+  meterDate         DateTime?              @db.Date
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
+
   
   site              Site                   @relation(fields: [siteId], references: [id])
   supervisor        User?                  @relation("Supervisor", fields: [supervisorId], references: [id])

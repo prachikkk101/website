@@ -51,6 +51,17 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
 };
 
 export const createPNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // ── DIAGNOSTIC LOGGING — captures exact incoming body BEFORE Zod strips unknown fields
+  console.log('🔵 PNG Create — incoming fields:', {
+    meterNo:   req.body.meterNo,
+    meterDate: req.body.meterDate,
+    gcStatus:  req.body.gcStatus,
+    giStatus:  req.body.giStatus,
+    rfcStatus: req.body.rfcStatus,
+    ngStatus:  req.body.ngStatus,
+    gcDate:    req.body.gcDate,
+  });
+
   const schema = z.object({
     appNo: z.string().nullable().optional(),
     bpNo: z.string().nullable().optional(),
@@ -73,6 +84,13 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     giPipeMtr: z.number().nonnegative().nullable().optional(),
     tfCount: z.number().int().nonnegative().nullable().optional(),
     ivCount: z.number().int().nonnegative().nullable().optional(),
+    // Status fields — previously stripped by Zod (not in schema), never saved to DB
+    giStatus:  z.string().nullable().optional(),
+    rfcStatus: z.string().nullable().optional(),
+    ngStatus:  z.string().nullable().optional(),
+    // Quick meter recording before formal MeterInstallation
+    meterNo:   z.string().nullable().optional(),
+    meterDate: z.string().nullable().optional(),
     // Materials used per connection — triggers stock deduction AFTER save
     materialsUsed: z.array(
       z.object({
@@ -129,10 +147,23 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
         giPipeMtr: data.giPipeMtr ?? null,
         tfCount: data.tfCount ?? 0,
         ivCount: data.ivCount ?? 0,
+        // Newly persisted status fields
+        giStatus:  data.giStatus  || null,
+        rfcStatus: data.rfcStatus || null,
+        ngStatus:  data.ngStatus  || null,
+        meterNo:   data.meterNo   || null,
+        meterDate: data.meterDate ? new Date(data.meterDate) : null,
       },
     });
 
     console.log(`[PNG create] Connection saved: ${connection.id} (appNo: ${appNo})`);
+    console.log('🟢 PNG Created — saved values:', {
+      meterNo:   connection.meterNo,
+      gcStatus:  connection.status,
+      giStatus:  connection.giStatus,
+      rfcStatus: connection.rfcStatus,
+      ngStatus:  connection.ngStatus,
+    });
 
     // ── STEP 2: Deduct stock — fire-and-forget via setImmediate.
     //    This runs COMPLETELY OUTSIDE the HTTP response cycle so it can NEVER
@@ -197,6 +228,12 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     tfCount: z.number().int().nonnegative().nullable().optional(),
     ivCount: z.number().int().nonnegative().nullable().optional(),
     supervisorId: z.string().uuid().nullable().optional(),
+    // Status fields now persisted
+    giStatus:  z.string().nullable().optional(),
+    rfcStatus: z.string().nullable().optional(),
+    ngStatus:  z.string().nullable().optional(),
+    meterNo:   z.string().nullable().optional(),
+    meterDate: z.string().nullable().optional(),
   });
 
   try {
@@ -219,6 +256,11 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         tfCount: data.tfCount !== undefined ? data.tfCount : undefined,
         ivCount: data.ivCount !== undefined ? data.ivCount : undefined,
         supervisorId: data.supervisorId !== undefined ? data.supervisorId : undefined,
+        giStatus:  data.giStatus  !== undefined ? data.giStatus  : undefined,
+        rfcStatus: data.rfcStatus !== undefined ? data.rfcStatus : undefined,
+        ngStatus:  data.ngStatus  !== undefined ? data.ngStatus  : undefined,
+        meterNo:   data.meterNo   !== undefined ? data.meterNo   : undefined,
+        meterDate: data.meterDate ? new Date(data.meterDate) : (data.meterDate === null ? null : undefined),
         updatedAt: new Date(),
       },
     });

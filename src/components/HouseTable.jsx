@@ -173,14 +173,17 @@ export default function HouseTable() {
             area:         c.society      || '',
             city:         c.city         || '',
             gcStatus:     c.status       || '—',
-            giStatus:     '—',
-            rfc:          c.status === 'RFC' ? 'RFC' : '—',
-            ngStatus:     '—',
+            giStatus:     c.giStatus     || '—',
+            rfc:          c.rfcStatus    || (c.status === 'RFC' ? 'RFC' : '—'),
+            ngStatus:     c.ngStatus     || '—',
             gcDate:       c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
             plumbingDate: c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
-            meterNo:      c.meterInstallation?.serialNo || '',
-            meterDate:    c.meterInstallation?.installationDate
-                            ? c.meterInstallation.installationDate.split('T')[0] : '',
+            // Prefer direct meterNo/meterDate on the connection; fall back to MeterInstallation
+            meterNo:      c.meterNo      || c.meterInstallation?.serialNo || '',
+            meterDate:    c.meterDate
+                            ? c.meterDate.split('T')[0]
+                            : (c.meterInstallation?.installationDate
+                                ? c.meterInstallation.installationDate.split('T')[0] : ''),
             meterMake:    c.meterInstallation?.meterMake || '',
             meterReading: c.meterInstallation?.meterReading || '',
             side:         c.meterInstallation?.lhsRhs || 'LHS',
@@ -611,6 +614,13 @@ export default function HouseTable() {
           city: finalCityLabel, society: formArea || null,
           status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
           plumbingDate: form.gcDate || null,
+          // Status fields — now saved to DB (were frontend-only before)
+          giStatus:  form.giStatus  !== '—' ? form.giStatus  : null,
+          rfcStatus: form.rfc       !== '—' ? form.rfc       : null,
+          ngStatus:  form.ngStatus  !== '—' ? form.ngStatus  : null,
+          // Quick meter recording
+          meterNo:   form.meterNo   || null,
+          meterDate: form.meterDate || null,
           // Sent on CREATE only — triggers stock deduction in backend $transaction
           materialsUsed: materialsUsedPayload,
         };
