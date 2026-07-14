@@ -105,6 +105,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
         unit: z.string().optional(),
       })
     ).optional().default([]),
+    // Arbitrary custom-column values added via "Manage Columns" — { columnKey: value }
+    customFields: z.record(z.string(), z.string()).optional(),
   });
 
   try {
@@ -162,6 +164,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
         // Photos — base64 data URLs. Null if user didn't upload a photo.
         photo1Data: data.photo1Data || null,
         photo2Data: data.photo2Data || null,
+        // Custom column values — stored as a JSON object { columnKey: value }
+        customFields: data.customFields ?? {},
       },
     });
 
@@ -248,6 +252,8 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     // Photos — only present if user selected a new photo; undefined = keep existing in DB
     photo1Data: z.string().nullable().optional(),
     photo2Data: z.string().nullable().optional(),
+    // Custom column values
+    customFields: z.record(z.string(), z.string()).optional(),
   });
 
   try {
@@ -278,6 +284,8 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         // Photos — only update if explicitly provided (undefined = keep existing)
         photo1Data: data.photo1Data !== undefined ? data.photo1Data : undefined,
         photo2Data: data.photo2Data !== undefined ? data.photo2Data : undefined,
+        // Custom column values — merge new values into existing to avoid clobbering
+        customFields: data.customFields !== undefined ? data.customFields : undefined,
         updatedAt: new Date(),
       },
     });

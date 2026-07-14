@@ -559,7 +559,7 @@ export default function HouseTable() {
       initForm[m.key] = saved && saved.qty !== 0 ? saved.qty : '';
     });
 
-    customCols.forEach(c => { initForm[c.key] = h[c.key] || ''; });
+    customCols.forEach(c => { initForm[c.key] = h.customFields?.[c.key] ?? h[c.key] ?? ''; });
     setForm(initForm);
     setErrors({});
     setCustomMaterials(h.customMaterials || []);
@@ -646,6 +646,8 @@ export default function HouseTable() {
           photo2Data: p2b64 || undefined,
           // Sent on CREATE only — triggers stock deduction in backend $transaction
           materialsUsed: materialsUsedPayload,
+          // Custom column values grouped into one JSON field
+          customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
         };
         if (editEntry) {
           await pngAPI.update(siteId, editEntry.id, payload);
@@ -664,7 +666,7 @@ export default function HouseTable() {
                 photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
                 materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
                 hiddenMaterials,
-                ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+                customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
                 updatedAt: new Date().toISOString() } } : h));
           showToast('✓ Entry updated successfully');
         } else {
@@ -686,7 +688,7 @@ export default function HouseTable() {
             materialsUsed,
             customMaterials: customMaterials.filter(m => m.label.trim()),
             hiddenMaterials,
-            ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+            customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
             createdAt: new Date().toISOString(),
           };
           setAllHouses(prev => [newEntry, ...prev]);
@@ -1152,7 +1154,7 @@ export default function HouseTable() {
                   {!hiddenCols.includes('rfc')        && <td><StatusBadge val={h.rfc} /></td>}
                   {!hiddenCols.includes('ngStatus')   && <td><StatusBadge val={h.ngStatus} /></td>}
                   {!hiddenCols.includes('gcDate')     && <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{h.gcDate ? new Date(h.gcDate).toLocaleDateString('en-GB') : '—'}</td>}
-                  {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{h[col.key] || '—'}</td>)}
+                  {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{h.customFields?.[col.key] ?? h[col.key] ?? '—'}</td>)}
                   <td style={{ textAlign: 'center', position: 'relative' }}>
                     {/* Photo badge — clickable popover */}
                     {(() => {
@@ -1249,7 +1251,9 @@ export default function HouseTable() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {customCols.map(col => (
                 <Field key={col.key} label={col.label}>
-                  <Input value={form[col.key] || ''} onChange={e => f(col.key, e.target.value)} />
+                  {/* ROOT CAUSE FIX: SlidePanel Input passes raw string to onChange (not event).
+                      Must use `val =>` not `e => e.target.value`. */}
+                  <Input value={form[col.key] || ''} onChange={val => f(col.key, val)} />
                 </Field>
               ))}
             </div>
