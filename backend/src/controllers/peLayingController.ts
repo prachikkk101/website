@@ -9,6 +9,9 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
     const siteId = req.params.siteId as string;
     const { status, raBillNo } = req.query;
 
+    // Admin visibility diagnostic — confirm query is site-scoped only (no createdBy filter)
+    console.log(`\ud83d\udd35 getPELaying — user: ${req.user?.id} role: ${req.user?.role} siteId: ${siteId}`);
+
     const where: any = { siteId };
     if (status) where.status = status as PEStatus;
     if (raBillNo) where.raBillNo = { contains: String(raBillNo), mode: 'insensitive' };
@@ -17,6 +20,8 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
       where,
       orderBy: { layingDate: 'desc' },
     });
+
+    console.log(`\ud83d\udfe2 getPELaying — returned ${records.length} records for site ${siteId} (no user filter applied)`);
 
     // Compute cumulative totals
     const totals = records.reduce(
@@ -37,6 +42,7 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
     next(error);
   }
 };
+
 
 export const createPELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   console.log('🔵 PE Laying create — full request body:', JSON.stringify(req.body, null, 2));

@@ -301,6 +301,9 @@ export default function PELaying() {
       d125b:      row.d125b  != null && row.d125b  !== 0 ? row.d125b  : '',
       d125hdd:    row.d125hdd != null && row.d125hdd !== 0 ? row.d125hdd : '',
       workStatus: row.workStatus || 'Laying',
+      // BUG FIX: restore existing DPR photo URL so it isn't erased on edit
+      dprPhotoUrl:      row.dprPhotoUrl      || '',
+      dprPhotoUploading: false,
     };
     customCols.forEach(c => { initForm[c.key] = row[c.key] || ''; });
     setForm(initForm);
@@ -674,22 +677,33 @@ export default function PELaying() {
                   disabled={form.dprPhotoUploading}
                   onChange={async e => {
                     const file = e.target.files?.[0];
-                    if (!file) return;
+                    if (!file) {
+                      console.warn('⚠️ DPR Photo: no file selected');
+                      return;
+                    }
+                    console.log('🔵 DPR Photo upload starting:', file.name, file.size, 'bytes', file.type);
                     const reader = new FileReader();
                     reader.onload = async () => {
+                      f('dprPhotoUploading', true);
                       try {
-                        f('dprPhotoUploading', true);
                         const url = await uploadAPI.uploadPhoto(reader.result, 'dpr_pe_' + (form.layDate || 'entry'));
+                        console.log('🟢 DPR Photo uploaded successfully:', url);
                         f('dprPhotoUrl', url);
                         showToast('✓ DPR photo uploaded');
                       } catch (err) {
-                        console.error('❌ DPR photo upload failed:', err);
-                        showToast('✗ Photo upload failed — check R2 config', 'error');
+                        console.error('❌ DPR Photo upload FAILED:', err?.message, err?.response?.status, err?.response?.data, err);
+                        showToast(`✗ DPR photo upload failed: ${err?.response?.data?.error || err?.message || 'Unknown error'}`, 'error');
                       } finally {
                         f('dprPhotoUploading', false);
                       }
                     };
+                    reader.onerror = (err) => {
+                      console.error('❌ DPR Photo FileReader error:', err);
+                      showToast('✗ Could not read photo file', 'error');
+                    };
                     reader.readAsDataURL(file);
+                    // Reset input value so the same file can be re-selected
+                    e.target.value = '';
                   }}
                 />
                 {form.dprPhotoUrl && (

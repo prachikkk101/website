@@ -57,7 +57,13 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
 
 
 export const createPNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
-  // ── DIAGNOSTIC LOGGING — captures exact incoming body BEFORE Zod strips unknown fields
+  // Diagnostic log — handles both R2 URL strings and legacy base64 blobs
+  const photoDesc = (v: any) => {
+    if (!v) return null;
+    if (typeof v === 'string' && v.startsWith('http')) return `[R2 URL: ${v.slice(0, 60)}...]`;
+    if (typeof v === 'string' && v.startsWith('data:')) return `[base64 ~${Math.round((v.length * 3/4)/1024)}KB]`;
+    return `[string len=${v.length}]`;
+  };
   console.log('🔵 PNG Create — incoming fields:', {
     meterNo:    req.body.meterNo,
     meterDate:  req.body.meterDate,
@@ -66,8 +72,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     rfcStatus:  req.body.rfcStatus,
     ngStatus:   req.body.ngStatus,
     gcDate:     req.body.gcDate,
-    photo1Data: req.body.photo1Data ? `[base64 ${Math.round((req.body.photo1Data.length * 3 / 4) / 1024)}KB]` : null,
-    photo2Data: req.body.photo2Data ? `[base64 ${Math.round((req.body.photo2Data.length * 3 / 4) / 1024)}KB]` : null,
+    photo1Data: photoDesc(req.body.photo1Data),
+    photo2Data: photoDesc(req.body.photo2Data),
   });
 
   const schema = z.object({
@@ -241,13 +247,23 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
 
 export const updatePNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({
-    status: z.string().nullable().optional(),
-    bpNo: z.string().nullable().optional(),
+    // Core customer/address fields — included so edits to these fields are persisted
+    customerName: z.string().nullable().optional(),
+    mobile:       z.string().nullable().optional(),
+    altMobile:    z.string().nullable().optional(),
+    houseNo:      z.string().nullable().optional(),
+    address1:     z.string().nullable().optional(),
+    city:         z.string().nullable().optional(),
+    society:      z.string().nullable().optional(),
+    accountType:  z.nativeEnum(AccountType).nullable().optional(),
+    appNo:        z.string().nullable().optional(),
+    bpNo:         z.string().nullable().optional(),
+    status:       z.string().nullable().optional(),
     plumbingDate: z.string().nullable().optional(),
-    gcLength: z.number().nonnegative().nullable().optional(),
-    giPipeMtr: z.number().nonnegative().nullable().optional(),
-    tfCount: z.number().int().nonnegative().nullable().optional(),
-    ivCount: z.number().int().nonnegative().nullable().optional(),
+    gcLength:     z.number().nonnegative().nullable().optional(),
+    giPipeMtr:    z.number().nonnegative().nullable().optional(),
+    tfCount:      z.number().int().nonnegative().nullable().optional(),
+    ivCount:      z.number().int().nonnegative().nullable().optional(),
     supervisorId: z.string().uuid().nullable().optional(),
     // Status fields now persisted
     giStatus:  z.string().nullable().optional(),
@@ -262,6 +278,15 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     customFields: z.record(z.string(), z.string()).optional(),
   });
 
+  console.log('🔵 PNG Update — incoming photo fields:', {
+    photo1Data: req.body.photo1Data
+      ? (req.body.photo1Data.startsWith('http') ? `[R2 URL: ${req.body.photo1Data.slice(0,60)}...]` : '[base64]')
+      : null,
+    photo2Data: req.body.photo2Data
+      ? (req.body.photo2Data.startsWith('http') ? `[R2 URL: ${req.body.photo2Data.slice(0,60)}...]` : '[base64]')
+      : null,
+  });
+
   try {
     const connectionId = req.params.connectionId as string;
     const data = schema.parse(req.body);
@@ -274,19 +299,28 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     const updated = await prisma.pNGConnection.update({
       where: { id: connectionId },
       data: {
-        status: data.status || undefined,
-        bpNo: data.bpNo !== undefined ? data.bpNo : undefined,
+        // Core customer/address fields
+        customerName: data.customerName !== undefined ? (data.customerName ?? undefined) : undefined,
+        mobile:       data.mobile       !== undefined ? (data.mobile       ?? undefined) : undefined,
+        altMobile:    data.altMobile    !== undefined ? data.altMobile    : undefined,
+        houseNo:      data.houseNo      !== undefined ? (data.houseNo     ?? undefined) : undefined,
+        address1:     data.address1     !== undefined ? (data.address1    ?? undefined) : undefined,
+        city:         data.city         !== undefined ? (data.city        ?? undefined) : undefined,
+        society:      data.society      !== undefined ? data.society      : undefined,
+        accountType:  data.accountType  !== undefined ? (data.accountType ?? undefined) : undefined,
+        bpNo:         data.bpNo         !== undefined ? data.bpNo         : undefined,
+        status:       data.status                    || undefined,
         plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : (data.plumbingDate === null ? null : undefined),
-        gcLength: data.gcLength !== undefined ? data.gcLength : undefined,
-        giPipeMtr: data.giPipeMtr !== undefined ? data.giPipeMtr : undefined,
-        tfCount: data.tfCount !== undefined ? data.tfCount : undefined,
-        ivCount: data.ivCount !== undefined ? data.ivCount : undefined,
+        gcLength:     data.gcLength     !== undefined ? data.gcLength     : undefined,
+        giPipeMtr:    data.giPipeMtr    !== undefined ? data.giPipeMtr    : undefined,
+        tfCount:      data.tfCount      !== undefined ? data.tfCount      : undefined,
+        ivCount:      data.ivCount      !== undefined ? data.ivCount      : undefined,
         supervisorId: data.supervisorId !== undefined ? data.supervisorId : undefined,
-        giStatus:  data.giStatus  !== undefined ? data.giStatus  : undefined,
-        rfcStatus: data.rfcStatus !== undefined ? data.rfcStatus : undefined,
-        ngStatus:  data.ngStatus  !== undefined ? data.ngStatus  : undefined,
-        meterNo:   data.meterNo   !== undefined ? data.meterNo   : undefined,
-        meterDate: data.meterDate ? new Date(data.meterDate) : (data.meterDate === null ? null : undefined),
+        giStatus:     data.giStatus     !== undefined ? data.giStatus     : undefined,
+        rfcStatus:    data.rfcStatus    !== undefined ? data.rfcStatus    : undefined,
+        ngStatus:     data.ngStatus     !== undefined ? data.ngStatus     : undefined,
+        meterNo:      data.meterNo      !== undefined ? data.meterNo      : undefined,
+        meterDate:    data.meterDate ? new Date(data.meterDate) : (data.meterDate === null ? null : undefined),
         // Photos — only update if explicitly provided (undefined = keep existing)
         photo1Data: data.photo1Data !== undefined ? data.photo1Data : undefined,
         photo2Data: data.photo2Data !== undefined ? data.photo2Data : undefined,
@@ -295,6 +329,8 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         updatedAt: new Date(),
       },
     });
+
+    console.log('🟢 PNG Update saved — photo1Data stored:', data.photo1Data !== undefined ? 'YES' : 'unchanged', '| photo2Data stored:', data.photo2Data !== undefined ? 'YES' : 'unchanged');
 
     res.status(200).json({ success: true, connection: updated });
   } catch (error) {

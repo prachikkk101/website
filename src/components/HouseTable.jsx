@@ -579,13 +579,30 @@ export default function HouseTable() {
     let p1url = null;
     let p2url = null;
     if (photo1) {
-      const p1b64 = await toBase64(photo1);
-      p1url = await uploadAPI.uploadPhoto(p1b64, `png_photo1_${form.appNo || 'house'}`);
+      console.log('🔵 PNG Photo 1 upload starting:', photo1.name, photo1.size, 'bytes', photo1.type);
+      try {
+        const p1b64 = await toBase64(photo1);
+        p1url = await uploadAPI.uploadPhoto(p1b64, `png_photo1_${form.appNo || 'house'}`);
+        console.log('🟢 PNG Photo 1 uploaded:', p1url);
+      } catch (err) {
+        console.error('❌ PNG Photo 1 upload FAILED:', err?.message, err?.response?.status, err?.response?.data, err);
+        showToast(`✗ Photo 1 upload failed: ${err?.response?.data?.error || err?.message || 'Upload error'}`, 'error');
+        return; // abort save — don't save with missing photo
+      }
     }
     if (photo2) {
-      const p2b64 = await toBase64(photo2);
-      p2url = await uploadAPI.uploadPhoto(p2b64, `png_photo2_${form.appNo || 'house'}`);
+      console.log('🔵 PNG Photo 2 upload starting:', photo2.name, photo2.size, 'bytes', photo2.type);
+      try {
+        const p2b64 = await toBase64(photo2);
+        p2url = await uploadAPI.uploadPhoto(p2b64, `png_photo2_${form.appNo || 'house'}`);
+        console.log('🟢 PNG Photo 2 uploaded:', p2url);
+      } catch (err) {
+        console.error('❌ PNG Photo 2 upload FAILED:', err?.message, err?.response?.status, err?.response?.data, err);
+        showToast(`✗ Photo 2 upload failed: ${err?.response?.data?.error || err?.message || 'Upload error'}`, 'error');
+        return;
+      }
     }
+    console.log('🔵 PNG final photo URLs before save — photo1Data:', p1url, '| photo2Data:', p2url);
 
     // Build materialsUsed from fixed matList + category dropdowns
     const materialsUsed = {};
@@ -656,9 +673,10 @@ export default function HouseTable() {
                 plumbingDate: form.plumbingDate, meterNo: form.meterNo,
                 meterDate: form.meterDate, meterMake: form.meterMake,
                 meterReading: form.meterReading, side: form.side,
-                photo1Data: p1b64 || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
-                photo2Data: p2b64 || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
-                photoCount: [p1b64 || h.photo1Data, p2b64 || h.photo2Data].filter(Boolean).length,
+                // BUG FIX: use R2 URLs (p1url/p2url), not base64 (p1b64/p2b64)
+                photo1Data: p1url || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+                photo2Data: p2url || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+                photoCount: [p1url || h.photo1Data, p2url || h.photo2Data].filter(Boolean).length,
                 materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
                 hiddenMaterials,
                 customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
@@ -677,9 +695,10 @@ export default function HouseTable() {
             gcStatus: form.gcStatus, giStatus: form.giStatus,
             rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
             plumbingDate: form.plumbingDate, side: form.side,
-            photo1Data: p1b64, photo1Name: photo1?.name || null,
-            photo2Data: p2b64, photo2Name: photo2?.name || null,
-            photoCount: [p1b64, p2b64].filter(Boolean).length,
+            // BUG FIX: use R2 URLs (p1url/p2url), not the deleted p1b64/p2b64 vars
+            photo1Data: p1url || null, photo1Name: photo1?.name || null,
+            photo2Data: p2url || null, photo2Name: photo2?.name || null,
+            photoCount: [p1url, p2url].filter(Boolean).length,
             materialsUsed,
             customMaterials: customMaterials.filter(m => m.label.trim()),
             hiddenMaterials,
@@ -689,6 +708,7 @@ export default function HouseTable() {
           setAllHouses(prev => [newEntry, ...prev]);
           showToast('✓ Entry saved successfully');
         }
+
         setPanelOpen(false); setForm(EMPTY_FORM); setErrors({});
         setPhoto1(null); setPhoto1Preview(null); setPhoto2(null); setPhoto2Preview(null);
         setCustomMaterials([]);
