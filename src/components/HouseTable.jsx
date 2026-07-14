@@ -8,6 +8,7 @@ import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
 import { pngAPI, dataAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
+import PhotoViewer from './PhotoViewer';
 
 
 /* ── Helpers ── */
@@ -1149,44 +1150,20 @@ export default function HouseTable() {
                   {!hiddenCols.includes('ngStatus')   && <td><StatusBadge val={h.ngStatus} /></td>}
                   {!hiddenCols.includes('gcDate')     && <td style={{ whiteSpace: 'nowrap', fontSize: 11 }}>{h.gcDate ? new Date(h.gcDate).toLocaleDateString('en-GB') : '—'}</td>}
                   {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{h.customFields?.[col.key] ?? h[col.key] ?? '—'}</td>)}
-                  <td style={{ textAlign: 'center', position: 'relative' }}>
-                    {/* Photo badge — clickable popover */}
+                  <td style={{ textAlign: 'center' }}>
                     {(() => {
-                      const cnt = h.photoCount ?? (h.meterPhoto ? 1 : 0);
-                      const label = cnt === 2 ? '2 Photos' : cnt === 1 ? '1 Photo' : 'None';
-                      const color = cnt > 0 ? '#16a34a' : '#94a3b8';
-                      const bg    = cnt > 0 ? '#dcfce7' : '#f1f5f9';
+                      const photos = [
+                        { url: h.photo1Data, label: 'Photo 1 — Meter' },
+                        { url: h.photo2Data, label: 'Photo 2 — Site' },
+                      ].filter(p => p.url);
+                      if (photos.length === 0) {
+                        return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#94a3b8' }}>None</span>;
+                      }
                       return (
-                        <div style={{ position: 'relative', display: 'inline-block' }}>
-                          <span
-                            onClick={cnt > 0 ? e => { e.stopPropagation(); setPhotoPopover(photoPopover === h.id ? null : h.id); } : undefined}
-                            style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: bg, color, cursor: cnt > 0 ? 'pointer' : 'default', userSelect: 'none' }}
-                          >
-                            {label}
-                          </span>
-                          {photoPopover === h.id && cnt > 0 && (
-                            <div
-                              onClick={e => e.stopPropagation()}
-                              style={{ position: 'absolute', zIndex: 200, top: '100%', left: '50%', transform: 'translateX(-50%)', marginTop: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,0.15)', padding: '10px 12px', minWidth: 200, textAlign: 'left' }}
-                            >
-                              {[{ data: h.photo1Data, name: h.photo1Name, label: 'Photo 1 — Meter' }, { data: h.photo2Data, name: h.photo2Name, label: 'Photo 2 — Site' }]
-                                .filter(p => p.data)
-                                .map((p, i) => (
-                                  <div key={i} style={{ marginBottom: i === 0 && h.photo2Data ? 10 : 0 }}>
-                                    <div style={{ fontSize: 11, fontWeight: 600, color: '#374151', marginBottom: 5 }}>📷 {p.label}</div>
-                                    <div style={{ display: 'flex', gap: 6 }}>
-                                      <button onClick={() => viewPhoto(p.data)}
-                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #d1d5db', borderRadius: 4, background: '#f8fafc', cursor: 'pointer', color: '#374151' }}>👁 View</button>
-                                      <button onClick={() => downloadPhoto(p.data, p.name)}
-                                        style={{ flex: 1, fontSize: 11, padding: '4px 8px', border: '1px solid #2d6a27', borderRadius: 4, background: '#f0fdf4', cursor: 'pointer', color: '#15803d' }}>⬇ Download</button>
-                                    </div>
-                                  </div>
-                                ))
-                              }
-                              <button onClick={() => setPhotoPopover(null)}
-                                style={{ marginTop: 8, width: '100%', fontSize: 10, color: '#94a3b8', background: 'none', border: 'none', cursor: 'pointer' }}>Close</button>
-                            </div>
-                          )}
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+                          {photos.map((p, i) => (
+                            <PhotoViewer key={i} photoUrl={p.url} label={p.label} />
+                          ))}
                         </div>
                       );
                     })()}

@@ -6,6 +6,7 @@ import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { peLayingAPI, columnConfigAPI, uploadAPI } from '../utils/api';
+import PhotoViewer from '../components/PhotoViewer';
 
 function initStore(key, defaults) {
   try {
@@ -22,11 +23,11 @@ const WK_STATUSES = ['Laying', 'Testing & Flushing', 'Commissioning'];
 const CONN_TYPES  = ['Domestic', 'Commercial', 'Industrial'];
 
 const DEFAULT_COLS = [
-  { key: 'layDate',    label: 'Laying Date' },
-  { key: 'area',       label: 'Area' },
-  // 'coil' column REMOVED per Issue #3 (Coil/Batch No. column removed from table)
-  { key: 'dprPhoto',   label: 'DPR Photo' },
-  { key: 'd32oc',      label: 'Ø32 OC (Open Cut)' },
+  { key: 'layDate',      label: 'Laying Date' },
+  { key: 'area',         label: 'Area' },
+  { key: 'customerName', label: 'Customer Name' }, // stored as coilNo in DB, re-labelled
+  { key: 'dprPhoto',     label: 'DPR Photo' },
+  { key: 'd32oc',        label: 'Ø32 OC (Open Cut)' },
   { key: 'd32b',       label: 'Ø32 Boring' },
   { key: 'd32hdd',     label: 'Ø32 HDD' },
   { key: 'd63oc',      label: 'Ø63 OC (Open Cut)' },
@@ -519,7 +520,8 @@ export default function PELaying() {
                 <th style={{ width: 40 }}>Sr.</th>
                 {!hiddenCols.includes('layDate') && <th>Laying Date</th>}
                 {!hiddenCols.includes('area') && <th>Area</th>}
-                {/* coil column REMOVED per Issue #3 */}
+                {/* Item 1: Customer Name column (stored as coilNo in DB) */}
+                {!hiddenCols.includes('customerName') && <th>Customer Name</th>}
                 {!hiddenCols.includes('dprPhoto') && <th style={{ textAlign: 'center' }}>DPR Photo</th>}
                 {!hiddenCols.includes('d32oc')   && <th style={{ textAlign: 'right' }}>Ø32 OC (Open Cut)</th>}
                 {!hiddenCols.includes('d32b')     && <th style={{ textAlign: 'right' }}>Ø32 Boring</th>}
@@ -551,15 +553,14 @@ export default function PELaying() {
                     <td style={{ textAlign: 'center', color: '#94a3b8' }}>{idx + 1}</td>
                     {!hiddenCols.includes('layDate') && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>}
                     {!hiddenCols.includes('area') && <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>}
-                    {/* coil column REMOVED */}
+                    {/* Item 1: Customer Name cell */}
+                    {!hiddenCols.includes('customerName') && (
+                      <td style={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{r.coil || '—'}</td>
+                    )}
+                    {/* Item 2: DPR Photo — PhotoViewer component */}
                     {!hiddenCols.includes('dprPhoto') && (
                       <td style={{ textAlign: 'center' }}>
-                        {r.dprPhotoUrl ? (
-                          <a href={r.dprPhotoUrl} target="_blank" rel="noreferrer"
-                            title="View DPR Photo"
-                            style={{ textDecoration: 'none', fontSize: 18 }}
-                          >📸</a>
-                        ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                        <PhotoViewer photoUrl={r.dprPhotoUrl} label="DPR Photo" />
                       </td>
                     )}
                     {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>}
@@ -595,7 +596,7 @@ export default function PELaying() {
               {/* Totals row */}
               {filtered.length > 0 && (
                 <tr style={{ background: '#f0f7ee' }}>
-                  <td colSpan={1 + (!hiddenCols.includes('layDate')?1:0) + (!hiddenCols.includes('area')?1:0) + (!hiddenCols.includes('dprPhoto')?1:0)} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
+                  <td colSpan={1 + (!hiddenCols.includes('layDate')?1:0) + (!hiddenCols.includes('area')?1:0) + (!hiddenCols.includes('customerName')?1:0) + (!hiddenCols.includes('dprPhoto')?1:0)} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
                   {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>}
                   {!hiddenCols.includes('d32b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>}
                   {!hiddenCols.includes('d32hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32hdd}</td>}
@@ -640,14 +641,14 @@ export default function PELaying() {
               </Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              {/* Coil/Batch kept in form for data entry but hidden from table */}
+              {/* Item 1: Field renamed to 'Customer Name' */}
               <Field label="Work Status">
                 <Select value={form.workStatus} onChange={val => f('workStatus', val)}>
                   {WK_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </Select>
               </Field>
-              <Field label="Coil / Batch No. (internal)">
-                <Input value={form.coil || ''} onChange={val => f('coil', val)} placeholder="Optional" />
+              <Field label="Customer Name">
+                <Input value={form.coil || ''} onChange={val => f('coil', val)} placeholder="Customer name for this entry" />
               </Field>
             </div>
 

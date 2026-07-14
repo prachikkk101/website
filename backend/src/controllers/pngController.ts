@@ -13,6 +13,9 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
     const siteId = req.params.siteId as string;
     const { accountType, area, bpNo, houseNo, status, page = '1', limit = '50' } = req.query;
 
+    // Item 4 diagnostic log — confirm site-scoped (not user-scoped) query
+    console.log('🔵 getPNGConnections — user:', req.user?.id, 'role:', req.user?.role, 'siteId:', siteId);
+
     const where: any = { siteId };
     if (accountType) where.accountType = accountType as AccountType;
     if (bpNo) where.bpNo = { contains: String(bpNo), mode: 'insensitive' };
@@ -38,6 +41,8 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
       prisma.pNGConnection.count({ where }),
     ]);
 
+    console.log('🟢 getPNGConnections — returned', connections.length, 'of', total, 'total for site', siteId);
+
     res.status(200).json({
       success: true,
       total,
@@ -49,6 +54,7 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
     next(error);
   }
 };
+
 
 export const createPNGConnection = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   // ── DIAGNOSTIC LOGGING — captures exact incoming body BEFORE Zod strips unknown fields

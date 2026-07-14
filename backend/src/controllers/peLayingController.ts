@@ -116,12 +116,25 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
 
 export const updatePELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  // Full schema — workers can update all fields of their PE laying entries
   const schema = z.object({
+    layingDate: z.string().nullable().optional(),
     testingDate: z.string().nullable().optional(),
     chargingDate: z.string().nullable().optional(),
     raBillNo: z.string().nullable().optional(),
     reportNo: z.string().nullable().optional(),
     status: z.nativeEnum(PEStatus).nullable().optional(),
+    connType: z.string().nullable().optional(),
+    area: z.string().nullable().optional(),
+    // coilNo field is re-labelled "Customer Name" in the UI but stored as coilNo in DB
+    coilNo: z.string().nullable().optional(),
+    d32oc: z.number().nonnegative().nullable().optional(),
+    d32b: z.number().nonnegative().nullable().optional(),
+    d63oc: z.number().nonnegative().nullable().optional(),
+    d63b: z.number().nonnegative().nullable().optional(),
+    d63hdd: z.number().nonnegative().nullable().optional(),
+    d90tot: z.number().nonnegative().nullable().optional(),
+    d125tot: z.number().nonnegative().nullable().optional(),
     // DPR photo URL update
     dprPhotoUrl: z.string().url().nullable().optional(),
   });
@@ -133,11 +146,22 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     const updated = await prisma.pELaying.update({
       where: { id: recordId },
       data: {
+        ...(data.layingDate ? { layingDate: new Date(data.layingDate) } : {}),
         testingDate: data.testingDate ? new Date(data.testingDate) : (data.testingDate === null ? null : undefined),
         chargingDate: data.chargingDate ? new Date(data.chargingDate) : (data.chargingDate === null ? null : undefined),
         raBillNo: data.raBillNo !== undefined ? data.raBillNo : undefined,
         reportNo: data.reportNo !== undefined ? data.reportNo : undefined,
         status: data.status !== undefined && data.status !== null ? data.status : undefined,
+        connType: data.connType !== undefined ? (data.connType ?? undefined) : undefined,
+        area: data.area !== undefined ? (data.area ?? undefined) : undefined,
+        coilNo: data.coilNo !== undefined ? (data.coilNo ?? '') : undefined,
+        d32oc: data.d32oc !== undefined ? (data.d32oc ?? 0) : undefined,
+        d32b: data.d32b !== undefined ? (data.d32b ?? 0) : undefined,
+        d63oc: data.d63oc !== undefined ? (data.d63oc ?? 0) : undefined,
+        d63b: data.d63b !== undefined ? (data.d63b ?? 0) : undefined,
+        d63hdd: data.d63hdd !== undefined ? (data.d63hdd ?? 0) : undefined,
+        d90tot: data.d90tot !== undefined ? (data.d90tot ?? 0) : undefined,
+        d125tot: data.d125tot !== undefined ? (data.d125tot ?? 0) : undefined,
         dprPhotoUrl: data.dprPhotoUrl !== undefined ? data.dprPhotoUrl : undefined,
         updatedAt: new Date(),
       },
@@ -148,6 +172,7 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     next(error);
   }
 };
+
 
 export const deletePELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {

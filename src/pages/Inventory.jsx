@@ -5,6 +5,7 @@ import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
 import { stockAPI, dataAPI, uploadAPI } from '../utils/api';
+import PhotoViewer from '../components/PhotoViewer';
 import { DEFAULT_MATERIALS_BY_CATEGORY, buildAccordionCategories } from '../utils/stockCategories';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -236,31 +237,35 @@ export default function Inventory() {
 
   const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
 
-  // ── Issue #1: City+Area selection (required for Inventory) ──
+  // ── Item #3: GA Location + City selection (required for Inventory) ──
+  const [invGA,   setInvGA]   = useState('');
   const [invCity, setInvCity] = useState('');
-  const [invArea, setInvArea] = useState('');
 
-  const invCityOptions = useMemo(() => mergedGAs.flatMap(g => g.cities || []), [mergedGAs]);
-  const invAreaOptions = useMemo(() => {
-    if (!invCity) return [];
-    for (const ga of mergedGAs) {
-      const city = (ga.cities || []).find(c => c.id === invCity);
-      if (city) return city.areas || [];
-    }
-    return [];
-  }, [invCity, mergedGAs]);
+  const invGAOptions   = useMemo(() => mergedGAs, [mergedGAs]);
+  const invCityOptions = useMemo(() => {
+    if (!invGA) return [];
+    const ga = mergedGAs.find(g => g.id === invGA);
+    return ga ? (ga.cities || []) : [];
+  }, [invGA, mergedGAs]);
 
-  // Derive siteId from the selected area string. Sites represent physical areas;
-  // fall back to selectedSiteId if no name match (ensures non-admin always has a valid siteId).
+  // Derive siteId from the GA + City selection.
+  // Match site whose gaName matches selected GA and whose name contains the city label.
+  // Falls back to selectedSiteId so non-admins always have a valid site.
   const invSiteId = useMemo(() => {
-    if (!invArea) return null;
-    const lcArea = invArea.toLowerCase();
-    const matched = siteList.find(
-      s => (s.name || '').toLowerCase().includes(lcArea) ||
-           lcArea.includes((s.name || '').toLowerCase().replace(/\s*[-—]\s*\w+$/, '').trim())
-    );
+    if (!invGA || !invCity) return null;
+    const cityObj = invCityOptions.find(c => c.id === invCity);
+    const cityLabel = (cityObj?.label || cityObj?.name || '').toLowerCase();
+    const gaObj = mergedGAs.find(g => g.id === invGA);
+    const gaLabel = (gaObj?.label || gaObj?.name || '').toLowerCase();
+    // Try city-name match within GA first
+    const matched = siteList.find(s => {
+      const sName = (s.name || '').toLowerCase();
+      const sGA = (s.gaName || '').toLowerCase();
+      return (sGA === gaLabel || sGA.includes(gaLabel) || gaLabel.includes(sGA)) &&
+             (sName.includes(cityLabel) || cityLabel.includes(sName));
+    });
     return matched?.id || selectedSiteId;
-  }, [invArea, siteList, selectedSiteId]);
+  }, [invGA, invCity, invCityOptions, mergedGAs, siteList, selectedSiteId]);
 
   // Keep currentSiteId pointing to the effective siteId for this page
   const currentSiteId = invSiteId;
@@ -378,13 +383,13 @@ export default function Inventory() {
 
   useEffect(() => {
     async function load() {
-      // Issue #1: Inventory is gated on city+area selection
-      if (!invArea) {
+      // Item 3: Inventory gated on GA + City selection
+      if (!invGA || !invCity) {
         setLoading(false);
         setStockData([]);
         return;
       }
-      // Guard: if sites haven't finished loading yet, wait — don't treat null siteId as "no access"
+      // Guard: if sites haven't finished loading yet, wait
       if (!invSiteId) {
         if (!siteLoading) {
           setLoading(false);
@@ -405,7 +410,7 @@ export default function Inventory() {
       }
     }
     load();
-  }, [invSiteId, invArea, siteLoading]);
+  }, [invSiteId, invGA, invCity, siteLoading]);
 
   useEffect(() => {
     if (panelOpen) {
@@ -675,41 +680,43 @@ export default function Inventory() {
 
   return (
     <div>
-      {/* ── Issue #1: City + Area selector (required for Inventory) ── */}
+      {/* ── Item 3: GA Location + City selector (required for Inventory) ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap',
           background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
           border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
+        {/* GA Location dropdown */}
+        <select
+          id="inv-ga-filter"
+          value={invGA}
+          onChange={e => { setInvGA(e.target.value); setInvCity(''); }}
+          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+              fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+        >
+          <option value="">— Select GA Location —</option>
+          {invGAOptions.map(g => <option key={g.id} value={g.id}>{g.label || g.name}</option>)}
+        </select>
+        {/* City dropdown (cascades from GA) */}
         <select
           id="inv-city-filter"
           value={invCity}
-          onChange={e => { setInvCity(e.target.value); setInvArea(''); }}
+          onChange={e => setInvCity(e.target.value)}
+          disabled={!invGA}
           style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-              fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+              fontSize: 12, background: invGA ? '#fff' : '#f8faf7', color: '#1f4e1a',
+              cursor: invGA ? 'pointer' : 'not-allowed', opacity: invGA ? 1 : 0.6 }}
         >
           <option value="">— Select City —</option>
           {invCityOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}</option>)}
         </select>
-        <select
-          id="inv-area-filter"
-          value={invArea}
-          onChange={e => setInvArea(e.target.value)}
-          disabled={!invCity}
-          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-              fontSize: 12, background: invCity ? '#fff' : '#f8faf7', color: '#1f4e1a',
-              cursor: invCity ? 'pointer' : 'not-allowed', opacity: invCity ? 1 : 0.6 }}
-        >
-          <option value="">— Select Area —</option>
-          {invAreaOptions.map(a => <option key={a} value={a}>{a}</option>)}
-        </select>
-        {invArea && (
+        {invGA && invCity && (
           <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
-            ✔ Viewing: {invArea}
+            ✔ Viewing: {invCityOptions.find(c => c.id === invCity)?.label || invCity}
           </span>
         )}
-        {!invArea && (
+        {(!invGA || !invCity) && (
           <span style={{ fontSize: 11, color: '#d97706', fontStyle: 'italic' }}>
-            Select city and area to view inventory
+            Select GA Location and City to view inventory
           </span>
         )}
       </div>
@@ -815,13 +822,13 @@ export default function Inventory() {
         </div>
       )}
 
-      {/* ── Issue #1: Gate — show prompt if no area selected ── */}
-      {!invArea && (
+      {/* ── Item 3: Gate — show prompt if no GA+City selected ── */}
+      {(!invGA || !invCity) && (
         <div style={{ textAlign: 'center', padding: '48px 24px', background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
             borderRadius: 12, border: '1px dashed #c6e0c0', marginBottom: 16 }}>
           <div style={{ fontSize: 40, marginBottom: 12 }}>📍</div>
           <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1f4e1a', margin: '0 0 8px' }}>
-            Select a City and Area to view stock
+            Select a GA Location and City to view stock
           </h2>
           <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
             Use the selectors above to filter inventory by location.
@@ -829,7 +836,7 @@ export default function Inventory() {
         </div>
       )}
 
-      {!loading && !error && invArea && (
+      {!loading && !error && invGA && invCity && (
         <>
           <div style={{ marginBottom: 16 }}>
             <h3 style={{
@@ -960,17 +967,11 @@ export default function Inventory() {
                               {/* Material */}
                               <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
                                 {r.mat}
-                                {/* ── Issue #4: Challan photo icon ── */}
+                                {/* Item 2: Challan photo — PhotoViewer (preview + download) */}
                                 {r.challanPhotoUrl && (
-                                  <a
-                                    href={r.challanPhotoUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title="View challan/DC photo"
-                                    style={{ marginLeft: 6, fontSize: 13, textDecoration: 'none' }}
-                                  >
-                                    📸
-                                  </a>
+                                  <span style={{ marginLeft: 6, display: 'inline-flex', verticalAlign: 'middle' }}>
+                                    <PhotoViewer photoUrl={r.challanPhotoUrl} label="DC / Challan Photo" />
+                                  </span>
                                 )}
                               </td>
 
