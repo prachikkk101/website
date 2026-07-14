@@ -132,8 +132,8 @@ export const stockAPI = {
   getAll: (siteId) =>
     api.get(`/sites/${siteId}/inventory`).then(r => r.data.items || []),
 
-  receiveStock: (siteId, items) =>
-    api.post(`/sites/${siteId}/inventory/receive`, { items }).then(r => r.data.items || []),
+  receiveStock: (siteId, items, challanPhotoUrl) =>
+    api.post(`/sites/${siteId}/inventory/receive`, { items, ...(challanPhotoUrl ? { challanPhotoUrl } : {}) }).then(r => r.data.items || []),
 
   returnStock: (siteId, items) =>
     api.post(`/sites/${siteId}/inventory/return`, { items }).then(r => r.data.items || []),
@@ -147,6 +147,36 @@ export const stockAPI = {
   getHistory: (siteId, date) => {
     const params = date ? { date } : {};
     return api.get(`/sites/${siteId}/inventory/history`, { params }).then(r => r.data);
+  },
+};
+
+/* ─────────────────────────────────────────────────────────────
+   UPLOAD  — /api/uploads
+   Uploads a base64 data URL to Cloudflare R2 and returns the public URL.
+   Used for: PNG Connection photos, PE Laying DPR photos, Inventory challan photos.
+──────────────────────────────────────────────────────────── */
+export const uploadAPI = {
+  /**
+   * Upload a photo to Cloudflare R2.
+   * @param {string} dataUrl  - base64 data URL from FileReader.readAsDataURL()
+   * @param {string} filename - short descriptive name (no extension needed; added automatically)
+   * @returns {Promise<string>} - public HTTPS URL of the uploaded photo
+   */
+  uploadPhoto: async (dataUrl, filename = 'photo') => {
+    try {
+      const r = await api.post('/uploads/photo', { data: dataUrl, filename }, { timeout: 30000 });
+      if (!r.data?.url) throw new Error('Upload response missing URL');
+      console.log('🟢 Photo uploaded to R2:', r.data.url);
+      return r.data.url;
+    } catch (err) {
+      console.error('❌ Photo upload to R2 FAILED:', {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+        fullError: err,
+      });
+      throw err;
+    }
   },
 };
 

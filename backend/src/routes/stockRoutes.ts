@@ -75,8 +75,9 @@ router.post(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const siteId = req.params.siteId as string;
-      const { items } = req.body as {
+      const { items, challanPhotoUrl } = req.body as {
         items: { material: string; qty: number; unit?: string; category?: string }[];
+        challanPhotoUrl?: string;
       };
 
       if (!Array.isArray(items) || items.length === 0) {
@@ -96,6 +97,8 @@ router.post(
           update: {
             received: { increment: qty },
             inStore:  { increment: qty },
+            // Only update challanPhotoUrl if a new photo was provided for this receipt
+            ...(challanPhotoUrl ? { challanPhotoUrl } : {}),
             updatedAt: new Date(),
           },
           create: {
@@ -107,6 +110,7 @@ router.post(
             inStore: qty,
             issued: 0,
             returned: 0,
+            ...(challanPhotoUrl ? { challanPhotoUrl } : {}),
           },
         });
         results.push(upserted);

@@ -58,6 +58,8 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
     d63hdd: z.number().nonnegative().nullable().optional(),
     d90tot: z.number().nonnegative().nullable().optional(),
     d125tot: z.number().nonnegative().nullable().optional(),
+    // DPR photo — Cloudflare R2 URL uploaded by frontend before save
+    dprPhotoUrl: z.string().url().nullable().optional(),
   });
 
   try {
@@ -96,6 +98,8 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
           d63hdd: data.d63hdd ?? 0,
           d90tot: data.d90tot ?? 0,
           d125tot: data.d125tot ?? 0,
+          // DPR photo URL (null if none uploaded)
+          dprPhotoUrl: data.dprPhotoUrl || null,
         },
       });
 
@@ -118,6 +122,8 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     raBillNo: z.string().nullable().optional(),
     reportNo: z.string().nullable().optional(),
     status: z.nativeEnum(PEStatus).nullable().optional(),
+    // DPR photo URL update
+    dprPhotoUrl: z.string().url().nullable().optional(),
   });
 
   try {
@@ -132,6 +138,7 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
         raBillNo: data.raBillNo !== undefined ? data.raBillNo : undefined,
         reportNo: data.reportNo !== undefined ? data.reportNo : undefined,
         status: data.status !== undefined && data.status !== null ? data.status : undefined,
+        dprPhotoUrl: data.dprPhotoUrl !== undefined ? data.dprPhotoUrl : undefined,
         updatedAt: new Date(),
       },
     });

@@ -11,6 +11,7 @@ import icLmcRoutes from './routes/icLmcRoutes';
 import meterRoutes from './routes/meterRoutes';
 import reportRoutes from './routes/reportRoutes';
 import adminRoutes from './routes/adminRoutes';
+import uploadRoutes from './routes/uploadRoutes';
 import { errorHandler } from './middlewares/error';
 
 dotenv.config();
@@ -69,6 +70,9 @@ app.get('/api/stock-categories', authenticate, getStockCategories);
 app.get('/api/daily-reports', authenticate, getDailyReports);
 app.post('/api/daily-reports', authenticate, createDailyReport);
 app.delete('/api/daily-reports/:id', authenticate, deleteDailyReport);
+
+// Photo uploads — POST /api/uploads/photo → uploads to Cloudflare R2
+app.use('/api/uploads', uploadRoutes);
 
 // Site-scoped sub-routes (use :siteId as param prefix)
 app.use('/api/sites/:siteId/png-connections', pngRoutes);

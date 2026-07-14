@@ -272,6 +272,7 @@ model PELaying {
   connType     String                 @default("Domestic")
   area         String
   coilNo       String
+  dprPhotoUrl  String?                // Cloudflare R2 URL for Daily Progress Report photo
   d32oc        Decimal                @db.Decimal(10, 3) @default(0)
   d32b         Decimal                @db.Decimal(10, 3) @default(0)
   d63oc        Decimal                @db.Decimal(10, 3) @default(0)
@@ -395,6 +396,7 @@ model InventoryItem {
   issued    Int      @default(0)
   returned  Int      @default(0)
   inStore   Int      @default(0)
+  challanPhotoUrl String?             // Cloudflare R2 URL of the last challan/DC photo
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

@@ -6,7 +6,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
-import { pngAPI, dataAPI, columnConfigAPI } from '../utils/api';
+import { pngAPI, dataAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
 
 
@@ -570,24 +570,20 @@ export default function HouseTable() {
     setPanelOpen(true);
   }
 
-  /* ── Save (add or update) — async for base64 photos ── */
+  /* ── Save (add or update) — uploads photos to R2 before save ── */
   async function handleSave() {
     if (!validateForm()) return;
 
-    // Validate photo sizes before converting
-    if (photo1 && photo1.size > 4000000) { alert('Photo 1 is too large (>4MB). Please use a smaller image.'); return; }
-    if (photo2 && photo2.size > 4000000) { alert('Photo 2 is too large (>4MB). Please use a smaller image.'); return; }
-
-    // Convert to base64 for localStorage storage
-    const p1b64 = photo1 ? await toBase64(photo1) : null;
-    const p2b64 = photo2 ? await toBase64(photo2) : null;
-
-    // Check base64 size after conversion (~2MB compressed limit)
-    if (p1b64 && p1b64.length > 2000000) {
-      alert('Photo 1 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    // Upload photos to Cloudflare R2 if new files selected
+    let p1url = null;
+    let p2url = null;
+    if (photo1) {
+      const p1b64 = await toBase64(photo1);
+      p1url = await uploadAPI.uploadPhoto(p1b64, `png_photo1_${form.appNo || 'house'}`);
     }
-    if (p2b64 && p2b64.length > 2000000) {
-      alert('Photo 2 is too large. Please use a smaller image or take a photo at lower quality.'); return;
+    if (photo2) {
+      const p2b64 = await toBase64(photo2);
+      p2url = await uploadAPI.uploadPhoto(p2b64, `png_photo2_${form.appNo || 'house'}`);
     }
 
     // Build materialsUsed from fixed matList + category dropdowns
@@ -639,11 +635,9 @@ export default function HouseTable() {
           // Quick meter recording
           meterNo:   form.meterNo   || null,
           meterDate: form.meterDate || null,
-          // Photos — send as base64 if a new file was selected; undefined = keep existing in DB
-          // JSON.stringify strips 'undefined' so if no new photo is chosen, field is absent
-          // from the request body, and the backend leaves the existing photo untouched.
-          photo1Data: p1b64 || undefined,
-          photo2Data: p2b64 || undefined,
+          // Photos — send R2 URL if a new file was selected; undefined = keep existing in DB
+          photo1Data: p1url || undefined,
+          photo2Data: p2url || undefined,
           // Sent on CREATE only — triggers stock deduction in backend $transaction
           materialsUsed: materialsUsedPayload,
           // Custom column values grouped into one JSON field

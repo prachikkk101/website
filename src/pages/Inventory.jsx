@@ -4,7 +4,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
-import { stockAPI, dataAPI } from '../utils/api';
+import { stockAPI, dataAPI, uploadAPI } from '../utils/api';
 import { DEFAULT_MATERIALS_BY_CATEGORY, buildAccordionCategories } from '../utils/stockCategories';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
@@ -236,12 +236,59 @@ export default function Inventory() {
 
   const sites = useMemo(() => siteList.map(s => s.name), [siteList]);
 
-  // Use the active selected site ID from context, which is populated from backend sites or session
-  const currentSiteId = selectedSiteId;
+  // ── Issue #1: City+Area selection (required for Inventory) ──
+  const [invCity, setInvCity] = useState('');
+  const [invArea, setInvArea] = useState('');
+
+  const invCityOptions = useMemo(() => mergedGAs.flatMap(g => g.cities || []), [mergedGAs]);
+  const invAreaOptions = useMemo(() => {
+    if (!invCity) return [];
+    for (const ga of mergedGAs) {
+      const city = (ga.cities || []).find(c => c.id === invCity);
+      if (city) return city.areas || [];
+    }
+    return [];
+  }, [invCity, mergedGAs]);
+
+  // Derive siteId from the selected area string. Sites represent physical areas;
+  // fall back to selectedSiteId if no name match (ensures non-admin always has a valid siteId).
+  const invSiteId = useMemo(() => {
+    if (!invArea) return null;
+    const lcArea = invArea.toLowerCase();
+    const matched = siteList.find(
+      s => (s.name || '').toLowerCase().includes(lcArea) ||
+           lcArea.includes((s.name || '').toLowerCase().replace(/\s*[-—]\s*\w+$/, '').trim())
+    );
+    return matched?.id || selectedSiteId;
+  }, [invArea, siteList, selectedSiteId]);
+
+  // Keep currentSiteId pointing to the effective siteId for this page
+  const currentSiteId = invSiteId;
 
   const [stockData, setStockData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // ── Issue #2: Stock Statement toggle (hidden by default) ──
+  const [showStockStatement, setShowStockStatement] = useState(false);
+
+  // ── Issue #4: Challan/DC photo state ──
+  const [challanPhotoUrl, setChallanPhotoUrl] = useState('');
+  const [challanPhotoUploading, setChallanPhotoUploading] = useState(false);
+
+  // ── Issue #5: Custom column cell values, persisted to localStorage ──
+  const [customCellValues, setCustomCellValues] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('gppms_inv_custom_cells') || '{}'); }
+    catch { return {}; }
+  });
+
+  function updateCustomCell(material, colKey, value) {
+    setCustomCellValues(prev => {
+      const next = { ...prev, [material]: { ...(prev[material] || {}), [colKey]: value } };
+      localStorage.setItem('gppms_inv_custom_cells', JSON.stringify(next));
+      return next;
+    });
+  }
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
 
@@ -320,7 +367,8 @@ export default function Inventory() {
       onSite: (item.received || 0) - (item.issued || 0) - (item.returned || 0),
       inStore: item.inStore || 0,
       available: item.inStore || 0,
-      req: 0
+      req: 0,
+      challanPhotoUrl: item.challanPhotoUrl || null,
     }));
   };
 
@@ -330,19 +378,23 @@ export default function Inventory() {
 
   useEffect(() => {
     async function load() {
+      // Issue #1: Inventory is gated on city+area selection
+      if (!invArea) {
+        setLoading(false);
+        setStockData([]);
+        return;
+      }
       // Guard: if sites haven't finished loading yet, wait — don't treat null siteId as "no access"
-      if (!currentSiteId) {
+      if (!invSiteId) {
         if (!siteLoading) {
-          // Sites loaded but still no site — user has no assigned site
           setLoading(false);
           setStockData([]);
         }
-        // If siteLoading is still true, stay in loading state (will re-run when siteId is set)
         return;
       }
       try {
         setLoading(true);
-        const items = await stockAPI.getAll(currentSiteId);
+        const items = await stockAPI.getAll(invSiteId);
         setStockData(mapStockData(items));
         setError(null);
       } catch (e) {
@@ -353,7 +405,7 @@ export default function Inventory() {
       }
     }
     load();
-  }, [currentSiteId, siteLoading]);
+  }, [invSiteId, invArea, siteLoading]);
 
   useEffect(() => {
     if (panelOpen) {
@@ -510,16 +562,21 @@ export default function Inventory() {
     }
 
     try {
+      // Issue #4: Upload challan photo to R2 first if one was selected
+      let uploadedChallanUrl = challanPhotoUrl || null;
+      // challanPhotoUrl is already the R2 URL (set by the file input handler)
+
       const itemsToSend = receivedItems.map(item => ({
         material: item.name,
         qty: item.qty,
         unit: 'pcs',
         category: item.category,
       }));
-      await stockAPI.receiveStock(currentSiteId, itemsToSend);
+      await stockAPI.receiveStock(currentSiteId, itemsToSend, uploadedChallanUrl);
       const refreshed = await stockAPI.getAll(currentSiteId);
       setStockData(mapStockData(refreshed));
       showToast('✓ Stock received');
+      setChallanPhotoUrl('');
       setPanelOpen(false);
     } catch (err) {
       showToast('✗ Failed to save', 'error');
@@ -618,6 +675,46 @@ export default function Inventory() {
 
   return (
     <div>
+      {/* ── Issue #1: City + Area selector (required for Inventory) ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap',
+          background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
+          border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
+        <select
+          id="inv-city-filter"
+          value={invCity}
+          onChange={e => { setInvCity(e.target.value); setInvArea(''); }}
+          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+              fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+        >
+          <option value="">— Select City —</option>
+          {invCityOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}</option>)}
+        </select>
+        <select
+          id="inv-area-filter"
+          value={invArea}
+          onChange={e => setInvArea(e.target.value)}
+          disabled={!invCity}
+          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+              fontSize: 12, background: invCity ? '#fff' : '#f8faf7', color: '#1f4e1a',
+              cursor: invCity ? 'pointer' : 'not-allowed', opacity: invCity ? 1 : 0.6 }}
+        >
+          <option value="">— Select Area —</option>
+          {invAreaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        {invArea && (
+          <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
+            ✔ Viewing: {invArea}
+          </span>
+        )}
+        {!invArea && (
+          <span style={{ fontSize: 11, color: '#d97706', fontStyle: 'italic' }}>
+            Select city and area to view inventory
+          </span>
+        )}
+      </div>
+
+      {/* ── Main header row ── */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f4e1a', margin: 0 }}>Stock Statement</h1>
@@ -718,7 +815,21 @@ export default function Inventory() {
         </div>
       )}
 
-      {!loading && !error && (
+      {/* ── Issue #1: Gate — show prompt if no area selected ── */}
+      {!invArea && (
+        <div style={{ textAlign: 'center', padding: '48px 24px', background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
+            borderRadius: 12, border: '1px dashed #c6e0c0', marginBottom: 16 }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📍</div>
+          <h2 style={{ fontSize: 18, fontWeight: 700, color: '#1f4e1a', margin: '0 0 8px' }}>
+            Select a City and Area to view stock
+          </h2>
+          <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+            Use the selectors above to filter inventory by location.
+          </p>
+        </div>
+      )}
+
+      {!loading && !error && invArea && (
         <>
           <div style={{ marginBottom: 16 }}>
             <h3 style={{
@@ -741,8 +852,27 @@ export default function Inventory() {
             />
           </div>
 
+          {/* ── Issue #2: Stock Statement toggle ── */}
+          {rows.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <button
+                onClick={() => setShowStockStatement(s => !s)}
+                style={{
+                  height: 32, background: showStockStatement ? '#1f4e1a' : '#f0f7ee',
+                  color: showStockStatement ? '#fff' : '#2d6a27',
+                  border: '1px solid #2d6a27', borderRadius: 4,
+                  padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 6,
+                }}
+              >
+                📊 {showStockStatement ? 'Hide Stock Statement' : 'Show Stock Statement'}
+                <span style={{ fontSize: 10 }}>{showStockStatement ? '▲' : '▼'}</span>
+              </button>
+            </div>
+          )}
+
           {/* ── Stock Statement Table ── */}
-          {rows.length > 0 && (() => {
+          {showStockStatement && rows.length > 0 && (() => {
             // Status helper
             const getStockStatus = (available, received) => {
               if (received === 0) return { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' };
@@ -794,6 +924,15 @@ export default function Inventory() {
                               ...col.style,
                             }}>{col.label}</th>
                           ))}
+                          {/* ── Issue #5: Custom column headers ── */}
+                          {customCols.filter(c => !hiddenCols.includes(c.key)).map(c => (
+                            <th key={c.key} style={{
+                              padding: '14px 16px', textAlign: 'center',
+                              fontWeight: 700, fontSize: 11, letterSpacing: '0.05em',
+                              textTransform: 'uppercase', whiteSpace: 'nowrap',
+                              background: 'rgba(255,255,255,0.15)',
+                            }}>{c.label}</th>
+                          ))}
                         </tr>
                       </thead>
 
@@ -821,6 +960,18 @@ export default function Inventory() {
                               {/* Material */}
                               <td style={{ padding: '14px 16px', fontWeight: 600, color: '#1e293b', whiteSpace: 'nowrap' }}>
                                 {r.mat}
+                                {/* ── Issue #4: Challan photo icon ── */}
+                                {r.challanPhotoUrl && (
+                                  <a
+                                    href={r.challanPhotoUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="View challan/DC photo"
+                                    style={{ marginLeft: 6, fontSize: 13, textDecoration: 'none' }}
+                                  >
+                                    📸
+                                  </a>
+                                )}
                               </td>
 
                               {/* Unit */}
@@ -892,6 +1043,32 @@ export default function Inventory() {
                                   </button>
                                 </td>
                               )}
+
+                              {/* ── Issue #5: Custom column editable cells ── */}
+                              {customCols.filter(c => !hiddenCols.includes(c.key)).map(c => {
+                                const cellVal = (customCellValues[r.mat] || {})[c.key] || '';
+                                return (
+                                  <td
+                                    key={c.key}
+                                    style={{ padding: '8px 12px', textAlign: 'center', minWidth: 100 }}
+                                  >
+                                    <input
+                                      type="text"
+                                      value={cellVal}
+                                      placeholder="—"
+                                      onChange={e => updateCustomCell(r.mat, c.key, e.target.value)}
+                                      style={{
+                                        width: '100%', border: '1px solid #e2e8f0',
+                                        borderRadius: 4, padding: '4px 6px',
+                                        fontSize: 12, textAlign: 'center',
+                                        background: '#fafafa', outline: 'none',
+                                      }}
+                                      onFocus={e => e.target.style.borderColor = '#2d6a27'}
+                                      onBlur={e => e.target.style.borderColor = '#e2e8f0'}
+                                    />
+                                  </td>
+                                );
+                              })}
                             </tr>
                           );
                         })}
@@ -916,6 +1093,8 @@ export default function Inventory() {
                           </td>
                           <td />
                           {canWrite && <td />}
+                          {/* Empty cells for custom cols in footer */}
+                          {customCols.filter(c => !hiddenCols.includes(c.key)).map(c => <td key={c.key} />)}
                         </tr>
                       </tfoot>
                     </table>
@@ -946,6 +1125,62 @@ export default function Inventory() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Field label="Challan / DC Number (optional)">
               <Input value={challan} onChange={val => setChallan(val)} placeholder="e.g. DC-2026-001" />
+            </Field>
+
+            {/* ── Issue #4: Challan / DC photo upload ── */}
+            <Field label="Challan / DC Photo (optional)">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <label
+                  htmlFor="challan-photo-input"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    height: 32, padding: '0 12px', background: '#f0f7ee',
+                    border: '1px solid #a7c4a3', borderRadius: 4,
+                    fontSize: 12, fontWeight: 600, color: '#2d6a27', cursor: 'pointer',
+                  }}
+                >
+                  {challanPhotoUploading ? '⏳ Uploading...' : '📷 Attach Photo'}
+                </label>
+                <input
+                  id="challan-photo-input"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  disabled={challanPhotoUploading}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      try {
+                        setChallanPhotoUploading(true);
+                        const url = await uploadAPI.uploadPhoto(reader.result, 'challan_' + challan);
+                        setChallanPhotoUrl(url);
+                      } catch (err) {
+                        console.error('❌ Challan photo upload failed:', err);
+                        showToast('✗ Photo upload failed — check R2 config', 'error');
+                      } finally {
+                        setChallanPhotoUploading(false);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+                {challanPhotoUrl && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <img
+                      src={challanPhotoUrl}
+                      alt="Challan"
+                      style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0' }}
+                    />
+                    <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>✔ Uploaded</span>
+                    <button
+                      onClick={() => setChallanPhotoUrl('')}
+                      style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
+                    >✕</button>
+                  </div>
+                )}
+              </div>
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               <Field label="Date Received" required error={formErr.dateRcv}>

@@ -5,7 +5,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
-import { peLayingAPI, columnConfigAPI } from '../utils/api';
+import { peLayingAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 
 function initStore(key, defaults) {
   try {
@@ -24,7 +24,8 @@ const CONN_TYPES  = ['Domestic', 'Commercial', 'Industrial'];
 const DEFAULT_COLS = [
   { key: 'layDate',    label: 'Laying Date' },
   { key: 'area',       label: 'Area' },
-  { key: 'coil',       label: 'Coil/Batch No.' },
+  // 'coil' column REMOVED per Issue #3 (Coil/Batch No. column removed from table)
+  { key: 'dprPhoto',   label: 'DPR Photo' },
   { key: 'd32oc',      label: 'Ø32 OC (Open Cut)' },
   { key: 'd32b',       label: 'Ø32 Boring' },
   { key: 'd32hdd',     label: 'Ø32 HDD' },
@@ -41,7 +42,9 @@ const DEFAULT_COLS = [
 ];
 
 const EMPTY_ENTRY = {
-  layDate: '', connType: 'Domestic', area: '', coil: '',
+  layDate: '', connType: 'Domestic', area: '',
+  dprPhotoUrl: '',   // DPR photo — Cloudflare R2 URL
+  dprPhotoUploading: false,
   d32oc: '', d32b: '', d32hdd: '',
   d63oc: '', d63b: '', d63hdd: '',
   d90oc: '', d90b: '', d90hdd: '',
@@ -126,6 +129,7 @@ export default function PELaying() {
             connType:   r.connType   || 'Domestic',
             area:       r.area       || '',
             coil:       r.coilNo     || '',
+            dprPhotoUrl: r.dprPhotoUrl || null,
             d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
             d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
             d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
@@ -331,7 +335,7 @@ export default function PELaying() {
     // Backend-mode: POST / PATCH
     try {
       const payload = {
-        area:       entryBase.area,
+              area:       entryBase.area,
         coilNo:     entryBase.coil,
         layingDate: entryBase.layDate,
         // Map display label → valid PEStatus enum value
@@ -342,6 +346,8 @@ export default function PELaying() {
         d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
         d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
         d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
+        // Issue #3: DPR photo URL (R2)
+        dprPhotoUrl: entryBase.dprPhotoUrl || null,
       };
       if (editingId) {
         const updated = await peLayingAPI.update(siteId, editingId, payload);
@@ -513,7 +519,8 @@ export default function PELaying() {
                 <th style={{ width: 40 }}>Sr.</th>
                 {!hiddenCols.includes('layDate') && <th>Laying Date</th>}
                 {!hiddenCols.includes('area') && <th>Area</th>}
-                {!hiddenCols.includes('coil') && <th>Coil/Batch No.</th>}
+                {/* coil column REMOVED per Issue #3 */}
+                {!hiddenCols.includes('dprPhoto') && <th style={{ textAlign: 'center' }}>DPR Photo</th>}
                 {!hiddenCols.includes('d32oc')   && <th style={{ textAlign: 'right' }}>Ø32 OC (Open Cut)</th>}
                 {!hiddenCols.includes('d32b')     && <th style={{ textAlign: 'right' }}>Ø32 Boring</th>}
                 {!hiddenCols.includes('d32hdd')   && <th style={{ textAlign: 'right' }}>Ø32 HDD</th>}
@@ -544,7 +551,17 @@ export default function PELaying() {
                     <td style={{ textAlign: 'center', color: '#94a3b8' }}>{idx + 1}</td>
                     {!hiddenCols.includes('layDate') && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.layDate}</td>}
                     {!hiddenCols.includes('area') && <td style={{ whiteSpace: 'nowrap' }}>{r.area}</td>}
-                    {!hiddenCols.includes('coil') && <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{r.coil || '—'}</td>}
+                    {/* coil column REMOVED */}
+                    {!hiddenCols.includes('dprPhoto') && (
+                      <td style={{ textAlign: 'center' }}>
+                        {r.dprPhotoUrl ? (
+                          <a href={r.dprPhotoUrl} target="_blank" rel="noreferrer"
+                            title="View DPR Photo"
+                            style={{ textDecoration: 'none', fontSize: 18 }}
+                          >📸</a>
+                        ) : <span style={{ color: '#cbd5e1' }}>—</span>}
+                      </td>
+                    )}
                     {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32oc)}</td>}
                     {!hiddenCols.includes('d32b') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32b)}</td>}
                     {!hiddenCols.includes('d32hdd') && <td style={{ textAlign: 'right', fontFamily: 'monospace' }}>{num(r.d32hdd)}</td>}
@@ -578,7 +595,7 @@ export default function PELaying() {
               {/* Totals row */}
               {filtered.length > 0 && (
                 <tr style={{ background: '#f0f7ee' }}>
-                  <td colSpan={1 + (!hiddenCols.includes('layDate')?1:0) + (!hiddenCols.includes('area')?1:0) + (!hiddenCols.includes('coil')?1:0)} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
+                  <td colSpan={1 + (!hiddenCols.includes('layDate')?1:0) + (!hiddenCols.includes('area')?1:0) + (!hiddenCols.includes('dprPhoto')?1:0)} style={{ fontWeight: 700, color: '#1f4e1a', textAlign: 'right', fontSize: 12 }}>TOTAL</td>
                   {!hiddenCols.includes('d32oc') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32oc}</td>}
                   {!hiddenCols.includes('d32b') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32b}</td>}
                   {!hiddenCols.includes('d32hdd') && <td style={{ textAlign: 'right', fontWeight: 700, fontFamily: 'monospace' }}>{totals.d32hdd}</td>}
@@ -623,15 +640,75 @@ export default function PELaying() {
               </Field>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="Coil / Batch No.">
-                <Input value={form.coil} onChange={val => f('coil', val)} />
-              </Field>
+              {/* Coil/Batch kept in form for data entry but hidden from table */}
               <Field label="Work Status">
                 <Select value={form.workStatus} onChange={val => f('workStatus', val)}>
                   {WK_STATUSES.map(s => <option key={s}>{s}</option>)}
                 </Select>
               </Field>
+              <Field label="Coil / Batch No. (internal)">
+                <Input value={form.coil || ''} onChange={val => f('coil', val)} placeholder="Optional" />
+              </Field>
             </div>
+
+            {/* ── Issue #3: DPR Photo upload ── */}
+            <Field label="DPR Photo (Daily Progress Report)">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <label
+                  htmlFor="pe-dpr-photo-input"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    height: 32, padding: '0 12px', background: '#f0f7ee',
+                    border: '1px solid #a7c4a3', borderRadius: 4,
+                    fontSize: 12, fontWeight: 600, color: '#2d6a27', cursor: 'pointer',
+                  }}
+                >
+                  {form.dprPhotoUploading ? '⏳ Uploading...' : '📷 Attach DPR Photo'}
+                </label>
+                <input
+                  id="pe-dpr-photo-input"
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  disabled={form.dprPhotoUploading}
+                  onChange={async e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async () => {
+                      try {
+                        f('dprPhotoUploading', true);
+                        const url = await uploadAPI.uploadPhoto(reader.result, 'dpr_pe_' + (form.layDate || 'entry'));
+                        f('dprPhotoUrl', url);
+                        showToast('✓ DPR photo uploaded');
+                      } catch (err) {
+                        console.error('❌ DPR photo upload failed:', err);
+                        showToast('✗ Photo upload failed — check R2 config', 'error');
+                      } finally {
+                        f('dprPhotoUploading', false);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }}
+                />
+                {form.dprPhotoUrl && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <img
+                      src={form.dprPhotoUrl}
+                      alt="DPR"
+                      style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #e2e8f0', cursor: 'pointer' }}
+                      onClick={() => window.open(form.dprPhotoUrl, '_blank')}
+                    />
+                    <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>✔ Photo ready</span>
+                    <button
+                      type="button"
+                      onClick={() => f('dprPhotoUrl', '')}
+                      style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 12 }}
+                    >✕</button>
+                  </div>
+                )}
+              </div>
+            </Field>
             <Field label="GA Location" required error={errors.ga}>
               <Select
                 value={formGA}
