@@ -110,6 +110,46 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
       });
 
       console.log('🟢 PE Laying created successfully. ID:', record.id);
+
+      // ── PE Laying Inventory Deduction (fire-and-forget) ──────────────────────
+      // Mirrors the PNG Connection deduction pattern: runs AFTER the HTTP response,
+      // never blocks or fails the save. Logs all outcomes for traceability.
+      // Maps pipe sizes to InventoryItem.material names used in the Inventory page.
+      const pipeUsage = [
+        { material: '32mm PE Pipe', qty: Math.round((data.d32oc ?? 0) + (data.d32b ?? 0)) },
+        { material: '63mm PE Pipe', qty: Math.round((data.d63oc ?? 0) + (data.d63b ?? 0) + (data.d63hdd ?? 0)) },
+        { material: '90mm PE Pipe', qty: Math.round(data.d90tot ?? 0) },
+        { material: '125mm PE Pipe', qty: Math.round(data.d125tot ?? 0) },
+      ].filter(p => p.qty > 0);
+
+      if (pipeUsage.length > 0) {
+        const siteIdSnapshot = siteId;
+        setImmediate(async () => {
+          console.log(`[PE create] 🟡 Background stock deduction starting for ${pipeUsage.length} pipe size(s)...`);
+          for (const pipe of pipeUsage) {
+            try {
+              const invItem = await prisma.inventoryItem.findUnique({
+                where: { siteId_material: { siteId: siteIdSnapshot, material: pipe.material } },
+              });
+              if (!invItem) {
+                console.warn(`[PE create] ⚠ Material NOT FOUND in inventory: "${pipe.material}" — skipping`);
+                continue;
+              }
+              const newIssued  = invItem.issued + pipe.qty;
+              const newInStore = Math.max(0, invItem.received - newIssued + invItem.returned);
+              await prisma.inventoryItem.update({
+                where: { siteId_material: { siteId: siteIdSnapshot, material: pipe.material } },
+                data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+              });
+              console.log(`[PE create] ✅ Deducted ${pipe.qty}m from "${pipe.material}" → issued now ${newIssued}, inStore now ${newInStore}`);
+            } catch (stockErr: any) {
+              console.error(`[PE create] ❌ Stock deduction failed for "${pipe.material}":`, stockErr.message);
+            }
+          }
+          console.log('[PE create] 🟢 Background stock deduction complete.');
+        });
+      }
+
       res.status(201).json({ success: true, record });
     } catch (prismaErr: any) {
       console.error('❌ PE Laying Prisma create FAILED:', prismaErr.message, prismaErr);

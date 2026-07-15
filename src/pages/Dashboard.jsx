@@ -1,6 +1,7 @@
 // src/pages/Dashboard.jsx
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useContext } from 'react';
 import { useSite } from '../context/SiteContext';
+import { AuthContext } from '../context/AuthContext';
 import { adminService } from '../api/adminService';
 import api from '../utils/api';
 
@@ -151,7 +152,10 @@ function WorkerCard({ worker }) {
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('Domestic');
   const [dateRange, setDateRange] = useState('Last 90 Days');
-  const { selectedSiteId } = useSite();
+  // Dashboard is a GA-wide overview — we use siteList for context but never
+  // filter dashboard data by selectedSiteId (that would hide other sites from admin)
+  const { siteList } = useSite();
+  const { user } = useContext(AuthContext);
 
   const [dashboardData, setDashboardData] = useState(null);
   const [activeWorkers, setActiveWorkers] = useState([]);
@@ -192,7 +196,9 @@ export default function Dashboard() {
       .catch(err => {
         console.error('Failed to load users for dashboard workers list:', err);
       });
-  }, [selectedSiteId]);
+  // Re-fetch when user logs in/out — NOT when selectedSiteId changes
+  // (dashboard always shows ALL sites, not just the selected one)
+  }, [user]);
 
   const aggregatedKpis = useMemo(() => {
     if (!dashboardData) return { domestic: {}, commercial: {}, industrial: {} };
@@ -255,10 +261,9 @@ export default function Dashboard() {
     }));
   }, [dashboardData]);
 
-  const filteredSites = useMemo(() => {
-    if (!selectedSiteId) return sitesData;
-    return sitesData.filter(s => s.id === selectedSiteId);
-  }, [selectedSiteId, sitesData]);
+  // Admin dashboard always shows ALL sites — no selectedSiteId filter here.
+  // filteredSites = sitesData (all sites from backend, unfiltered).
+  const filteredSites = sitesData;
 
   const housesDoneThisMonth = useMemo(() => {
     if (!dashboardData?.sites) return [];

@@ -71,8 +71,36 @@ app.get('/api/daily-reports', authenticate, getDailyReports);
 app.post('/api/daily-reports', authenticate, createDailyReport);
 app.delete('/api/daily-reports/:id', authenticate, deleteDailyReport);
 
-// Photo uploads — POST /api/uploads/photo → uploads to Cloudflare R2
+// Photo uploads — POST /api/uploads/photo (base64 JSON) → uploads to Cloudflare R2
 app.use('/api/uploads', uploadRoutes);
+
+// POST /api/upload — multipart/form-data alias (file field + optional folder field)
+// Used as an alternative to the base64 JSON upload — accepts actual file binary.
+import multer from 'multer';
+import { uploadToR2 } from './utils/r2Upload';
+import crypto from 'crypto';
+const _multerUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+app.post(
+  '/api/upload',
+  authenticate,
+  _multerUpload.single('file'),
+  async (req: any, res: import('express').Response, next: import('express').NextFunction) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ success: false, error: 'No file provided' });
+      }
+      const folder = (req.body?.folder as string) || 'uploads';
+      const ext = req.file.mimetype.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
+      const key = `${folder}/${crypto.randomUUID()}.${ext}`;
+      console.log('🔵 Multipart upload:', { key, mime: req.file.mimetype, sizeKB: Math.round(req.file.size / 1024) });
+      const url = await uploadToR2(req.file.buffer, key);
+      return res.status(201).json({ success: true, url });
+    } catch (err: any) {
+      console.error('❌ Multipart upload handler error:', err.message);
+      next(err);
+    }
+  }
+);
 
 // Site-scoped sub-routes (use :siteId as param prefix)
 app.use('/api/sites/:siteId/png-connections', pngRoutes);
