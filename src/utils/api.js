@@ -163,22 +163,24 @@ export const uploadAPI = {
    * @returns {Promise<string>} - public HTTPS URL of the uploaded photo
    */
   uploadPhoto: async (dataUrl, filename = 'photo') => {
+    console.log('🔵 [uploadAPI] uploadPhoto called —', filename, '| dataUrl type:', typeof dataUrl, '| length:', typeof dataUrl === 'string' ? dataUrl.length : 'N/A');
+    console.log('🔵 [uploadAPI] dataUrl prefix:', typeof dataUrl === 'string' ? dataUrl.slice(0, 50) : '(not a string)');
     try {
-      const r = await api.post('/uploads/photo', { data: dataUrl, filename }, { timeout: 30000 });
-      if (!r.data?.url) throw new Error('Upload response missing URL');
-      console.log('🟢 Photo uploaded to R2:', r.data.url);
-      return r.data.url;
+      const response = await api.post('/uploads/photo', { data: dataUrl, filename }, { timeout: 30000 });
+      console.log('🟢 [uploadAPI] Upload success:', response.data);
+      if (!response.data?.url) throw new Error('Upload response missing URL');
+      return response.data.url;
     } catch (err) {
-      console.error('❌ Photo upload to R2 FAILED:', {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-        fullError: err,
-      });
+      // Step 1 diagnostic logging — exact fields requested
+      console.error('❌ [uploadAPI] Upload FAILED — Status:', err.response?.status);
+      console.error('❌ [uploadAPI] Upload FAILED — Data:', err.response?.data);
+      console.error('❌ [uploadAPI] Upload FAILED — Message:', err.message);
+      console.error('❌ [uploadAPI] Upload FAILED — Full error:', err);
       throw err;
     }
   },
 };
+
 
 /* ─────────────────────────────────────────────────────────────
    PNG CONNECTIONS  — /api/sites/:siteId/png-connections
