@@ -133,13 +133,13 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       return res.status(400).json({ success: false, error: 'Validation failed', details: zodErr.errors });
     }
 
-    const appNo = (data.appNo && data.appNo.trim())
-      ? data.appNo.trim()
-      : `APP-GEN-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+    const appNo = (data.appNo && data.appNo.trim()) ? data.appNo.trim() : null;
 
-    const existing = await prisma.pNGConnection.findUnique({ where: { appNo } });
-    if (existing) {
-      return res.status(400).json({ success: false, error: 'Application number already exists' });
+    if (appNo) {
+      const existing = await prisma.pNGConnection.findUnique({ where: { appNo } });
+      if (existing) {
+        return res.status(400).json({ success: false, error: 'Application number already exists' });
+      }
     }
 
     // ── STEP 1: Create the PNG connection record (committed independently) ──

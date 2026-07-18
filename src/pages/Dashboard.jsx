@@ -260,8 +260,10 @@ export default function Dashboard() {
       id: s.siteId,
       name: s.siteName,
       subtitle: s.status === 'Active' ? 'Construction Active' : 'Suspended',
-      done: s.doneConns,
-      total: s.totalConns || 1,
+      // Use totalConns (all entries) for the progress bar so any new entry
+      // (even Pending) shows as progress, not just status='Done' entries.
+      done: s.totalConns,
+      total: s.targetConns || s.totalConns || 1,
       status: s.lowStockAlerts?.length > 0 ? 'Low Stock' : 'On Track'
     }));
   }, [dashboardData]);

@@ -198,7 +198,7 @@ model InventoryTransaction {
 model PNGConnection {
   id                String                 @id @default(uuid())
   siteId            String
-  appNo             String                 @unique
+  appNo             String?                @unique
   bpNo              String?                @unique
   accountType       AccountType            @default(DOMESTIC)
   customerName      String
