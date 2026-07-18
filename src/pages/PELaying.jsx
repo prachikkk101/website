@@ -56,7 +56,7 @@ const EMPTY_ENTRY = {
 export default function PELaying() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { selectedSiteId, siteList, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
+  const { selectedSiteId, siteList, siteLoading, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
   const siteId        = selectedSiteId || null;
   const [allData,  setAllData]  = useState([]);
   const [loading,  setLoading]  = useState(false);
@@ -118,6 +118,37 @@ export default function PELaying() {
 
   useEffect(() => {
     document.title = 'GP-PMS — PE Laying';
+
+    const isAdmin = user?.role === 'ADMIN';
+
+    // ADMIN with no specific site selected — fetch ALL sites in parallel
+    if (isAdmin && !siteId) {
+      if (siteLoading || siteList.length === 0) return; // wait for siteList to load
+      setLoading(true);
+      Promise.all(siteList.map(s => peLayingAPI.getAll(s.id)))
+        .then(resultsPerSite => {
+          const merged = resultsPerSite.flat();
+          const mapped = merged.map(r => ({
+            id: r.id, sr: r.id,
+            layDate:    r.layingDate ? r.layingDate.split('T')[0] : '',
+            connType:   r.connType   || 'Domestic',
+            area:       r.area       || '',
+            coil:       r.coilNo     || '',
+            dprPhotoUrl: r.dprPhotoUrl || null,
+            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
+            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
+            d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
+            d125oc: 0, d125b: 0, d125hdd: 0, d125tot: Number(r.d125tot) || 0,
+            workStatus: capitaliseStatus(r.status) || 'Laying',
+          }));
+          setAllData(mapped);
+        })
+        .catch(err => { console.error('[PELaying] admin-all-sites fetch failed:', err); setAllData([]); })
+        .finally(() => setLoading(false));
+      return;
+    }
+
+    // Non-admin (or admin with explicit site selected) — fetch single site
     if (siteId) {
       setLoading(true);
       peLayingAPI.getAll(siteId)
@@ -148,7 +179,7 @@ export default function PELaying() {
     } else {
       setAllData([]);
     }
-  }, [siteId]);
+  }, [siteId, siteList, siteLoading, user?.role]);
 
   function capitaliseStatus(s) {
     if (!s) return 'Laying';
