@@ -278,6 +278,14 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     photo2Data: z.string().nullable().optional(),
     // Custom column values
     customFields: z.record(z.string(), z.string()).optional(),
+    // Materials used — included so UPDATE can adjust stock deductions
+    materialsUsed: z.array(
+      z.object({
+        material: z.string(),
+        qty:      z.number().nonnegative(),
+        unit:     z.string().optional(),
+      })
+    ).optional(),
   });
 
   console.log('🔵 PNG Update — incoming photo fields:', {
@@ -333,6 +341,69 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     });
 
     console.log('🟢 PNG Update saved — photo1Data stored:', data.photo1Data !== undefined ? 'YES' : 'unchanged', '| photo2Data stored:', data.photo2Data !== undefined ? 'YES' : 'unchanged');
+
+    // ── Revert old stock, apply new stock, persist materialsUsed ────────
+    // Only runs when materialsUsed is explicitly included in the update payload.
+    if (data.materialsUsed !== undefined) {
+      const oldMaterials = (existing.materialsUsed as { material: string; qty: number }[] | null) ?? [];
+      const newMaterials = data.materialsUsed ?? [];
+      const siteId = existing.siteId;
+
+      // Persist the new materialsUsed immediately (synchronously, before background jobs)
+      await prisma.pNGConnection.update({
+        where: { id: connectionId },
+        data: { materialsUsed: newMaterials.length > 0 ? newMaterials : [] },
+      });
+
+      // Background stock adjustment — revert old, apply new
+      setImmediate(async () => {
+        console.log('[PNG update] 🟡 Stock adjustment: reverting old materials, applying new...');
+        // Step 1: revert old deductions
+        for (const mat of oldMaterials) {
+          try {
+            const qty = Math.round(mat.qty ?? 0);
+            if (qty <= 0) continue;
+            const inv = await prisma.inventoryItem.findUnique({
+              where: { siteId_material: { siteId, material: mat.material } },
+            });
+            if (!inv) continue;
+            const newIssued  = Math.max(0, inv.issued - qty);
+            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
+            await prisma.inventoryItem.update({
+              where: { siteId_material: { siteId, material: mat.material } },
+              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+            });
+            console.log(`[PNG update] ↩️  Reverted "${mat.material}" -${qty}`);
+          } catch (e: any) {
+            console.error(`[PNG update] ❌ Revert failed for "${mat.material}":`, e.message);
+          }
+        }
+        // Step 2: apply new deductions
+        for (const mat of newMaterials) {
+          try {
+            const qty = Math.round(mat.qty ?? 0);
+            if (qty <= 0) continue;
+            const inv = await prisma.inventoryItem.findUnique({
+              where: { siteId_material: { siteId, material: mat.material } },
+            });
+            if (!inv) {
+              console.warn(`[PNG update] ⚠️ Material "${mat.material}" not in inventory — skipping`);
+              continue;
+            }
+            const newIssued  = inv.issued + qty;
+            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
+            await prisma.inventoryItem.update({
+              where: { siteId_material: { siteId, material: mat.material } },
+              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+            });
+            console.log(`[PNG update] ✅ Applied "${mat.material}" +${qty}`);
+          } catch (e: any) {
+            console.error(`[PNG update] ❌ Apply failed for "${mat.material}":`, e.message);
+          }
+        }
+        console.log('[PNG update] 🟢 Stock adjustment complete.');
+      });
+    }
 
     res.status(200).json({ success: true, connection: updated });
   } catch (error) {

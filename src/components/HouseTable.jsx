@@ -623,10 +623,19 @@ export default function HouseTable() {
       meterMake: h.meterMake && h.meterMake !== 'Select' ? h.meterMake : '', meterReading: h.meterReading != null && h.meterReading !== 0 ? h.meterReading : '',
       side: h.side || 'LHS',
     };
+    // materialsUsed from backend is an array [{material, qty, unit}].
+    // Convert to a label→qty map so matList.forEach can look up by name.
+    const savedMatsMap = {};
+    if (Array.isArray(h.materialsUsed)) {
+      h.materialsUsed.forEach(m => { if (m.material) savedMatsMap[m.material] = m.qty; });
+    } else if (h.materialsUsed && typeof h.materialsUsed === 'object') {
+      // legacy object shape {label: {qty, unit}} — keep backward compat
+      Object.entries(h.materialsUsed).forEach(([k, v]) => { savedMatsMap[k] = v?.qty ?? v; });
+    }
     // Restore material quantities from saved entry
     matList.forEach(m => {
-      const saved = h.materialsUsed?.[m.label];
-      initForm[m.key] = saved && saved.qty !== 0 ? saved.qty : '';
+      const qty = savedMatsMap[m.label];
+      initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
     });
 
     customCols.forEach(c => { initForm[c.key] = h.customFields?.[c.key] ?? h[c.key] ?? ''; });
