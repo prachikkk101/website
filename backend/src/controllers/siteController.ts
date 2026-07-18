@@ -229,20 +229,18 @@ export const receiveStock = async (req: AuthenticatedRequest, res: Response, nex
         },
       });
 
-      // 2. Update Received and Store quantities in site_stock
-      const stock = await tx.siteStock.findUnique({
+      // 2. Upsert Received and Store quantities in site_stock
+      const updatedStock = await tx.siteStock.upsert({
         where: { siteId_materialId: { siteId, materialId: data.materialId } },
-      });
-
-      if (!stock) {
-        throw new Error('Stock entry not initialized for this material on the site');
-      }
-
-      const updatedStock = await tx.siteStock.update({
-        where: { siteId_materialId: { siteId, materialId: data.materialId } },
-        data: {
-          receivedQty: stock.receivedQty.toNumber() + data.qty,
-          inStoreQty: stock.inStoreQty.toNumber() + data.qty,
+        create: {
+          siteId,
+          materialId: data.materialId,
+          receivedQty: data.qty,
+          inStoreQty: data.qty,
+        },
+        update: {
+          receivedQty: { increment: data.qty },
+          inStoreQty: { increment: data.qty },
         },
       });
 

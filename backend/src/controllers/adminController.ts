@@ -77,6 +77,9 @@ export const getAdminDashboard = async (req: AuthenticatedRequest, res: Response
       _sum: { d32oc: true, d32b: true, d63oc: true, d63b: true, d63hdd: true, d90tot: true, d125tot: true },
     });
 
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
     res.status(200).json({
       success: true,
       sites: dashboardData,

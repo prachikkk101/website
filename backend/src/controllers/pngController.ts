@@ -318,6 +318,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         city:         data.city         !== undefined ? (data.city        ?? undefined) : undefined,
         society:      data.society      !== undefined ? data.society      : undefined,
         accountType:  data.accountType  !== undefined ? (data.accountType ?? undefined) : undefined,
+        appNo:        data.appNo        !== undefined ? (data.appNo?.trim() || null) : undefined,
         bpNo:         data.bpNo         !== undefined ? data.bpNo         : undefined,
         status:       data.status                    || undefined,
         plumbingDate: data.plumbingDate ? new Date(data.plumbingDate) : (data.plumbingDate === null ? null : undefined),
