@@ -178,6 +178,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
         photo2Data: data.photo2Data || null,
         // Custom column values — stored as a JSON object { columnKey: value }
         customFields: data.customFields ?? {},
+        // Persist materialsUsed so delete can reverse the stock deduction
+        materialsUsed: data.materialsUsed.length > 0 ? data.materialsUsed : undefined,
       },
     });
 
@@ -421,12 +423,41 @@ export const deletePNGConnection = async (req: AuthenticatedRequest, res: Respon
     // Verify the connection exists before attempting delete
     const existing = await prisma.pNGConnection.findUnique({
       where: { id: connectionId },
-      select: { id: true, customerName: true, appNo: true, siteId: true },
+      select: { id: true, customerName: true, appNo: true, siteId: true, materialsUsed: true },
     });
 
     if (!existing) {
       console.warn('⚠️  PNG Connection not found for delete:', connectionId);
       return res.status(404).json({ success: false, error: 'Connection not found' });
+    }
+
+    // ── Reverse stock deduction before deleting ──────────────────────────────
+    const materials = existing.materialsUsed as { material: string; qty: number }[] | null;
+    if (Array.isArray(materials) && materials.length > 0) {
+      console.log(`[PNG delete] 🟡 Reversing stock deduction for ${materials.length} material(s)...`);
+      for (const mat of materials) {
+        try {
+          const qty = Math.round(mat.qty ?? 0);
+          if (qty <= 0) continue;
+          const invItem = await prisma.inventoryItem.findUnique({
+            where: { siteId_material: { siteId: existing.siteId, material: mat.material } },
+          });
+          if (!invItem) {
+            console.warn(`[PNG delete] ⚠ Material "${mat.material}" not found in inventory — skipping reversal`);
+            continue;
+          }
+          const newIssued  = Math.max(0, invItem.issued - qty);
+          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
+          await prisma.inventoryItem.update({
+            where: { siteId_material: { siteId: existing.siteId, material: mat.material } },
+            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+          });
+          console.log(`[PNG delete] ✅ Reversed "${mat.material}" −${qty} issued → ${newIssued} total issued`);
+        } catch (stockErr: any) {
+          console.error(`[PNG delete] ❌ Stock reversal failed for "${mat.material}":`, stockErr.message);
+        }
+      }
+      console.log('[PNG delete] 🟢 Stock reversal complete.');
     }
 
     // Hard-delete from Neon. Related MeterInstallation cascades if schema has onDelete: Cascade.

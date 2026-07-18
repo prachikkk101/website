@@ -265,12 +265,50 @@ export const deletePELaying = async (req: AuthenticatedRequest, res: Response, n
 
     const existing = await prisma.pELaying.findUnique({
       where: { id: recordId },
-      select: { id: true, siteId: true, area: true, layingDate: true },
+      select: {
+        id: true, siteId: true, area: true, layingDate: true,
+        d32oc: true, d32b: true, d32hdd: true,
+        d63oc: true, d63b: true, d63hdd: true,
+        d90tot: true, d125tot: true,
+      },
     });
 
     if (!existing) {
       console.warn('⚠️  PE Laying record not found for delete:', recordId);
       return res.status(404).json({ success: false, error: 'PE Laying record not found' });
+    }
+
+    // ── Reverse pipe-stock deductions before deleting ────────────────────────
+    const pipeReversal = [
+      { material: '32mm PE Pipe',  qty: Math.round(existing.d32oc.toNumber() + existing.d32b.toNumber() + existing.d32hdd.toNumber()) },
+      { material: '63mm PE Pipe',  qty: Math.round(existing.d63oc.toNumber() + existing.d63b.toNumber() + existing.d63hdd.toNumber()) },
+      { material: '90mm PE Pipe',  qty: Math.round(existing.d90tot.toNumber()) },
+      { material: '125mm PE Pipe', qty: Math.round(existing.d125tot.toNumber()) },
+    ].filter(p => p.qty > 0);
+
+    if (pipeReversal.length > 0) {
+      console.log(`[PE delete] 🟡 Reversing stock deduction for ${pipeReversal.length} pipe size(s)...`);
+      for (const pipe of pipeReversal) {
+        try {
+          const invItem = await prisma.inventoryItem.findUnique({
+            where: { siteId_material: { siteId: existing.siteId, material: pipe.material } },
+          });
+          if (!invItem) {
+            console.warn(`[PE delete] ⚠ Material "${pipe.material}" not found in inventory — skipping reversal`);
+            continue;
+          }
+          const newIssued  = Math.max(0, invItem.issued - pipe.qty);
+          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
+          await prisma.inventoryItem.update({
+            where: { siteId_material: { siteId: existing.siteId, material: pipe.material } },
+            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+          });
+          console.log(`[PE delete] ✅ Reversed "${pipe.material}" −${pipe.qty} issued → ${newIssued} total issued`);
+        } catch (stockErr: any) {
+          console.error(`[PE delete] ❌ Stock reversal failed for "${pipe.material}":`, stockErr.message);
+        }
+      }
+      console.log('[PE delete] 🟢 Stock reversal complete.');
     }
 
     const deleted = await prisma.pELaying.delete({ where: { id: recordId } });

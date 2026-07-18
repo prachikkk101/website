@@ -232,6 +232,8 @@ model PNGConnection {
   photo2Data        String?                // base64 data URL — Photo 2: Additional/Site
   // Arbitrary extra fields added via "Manage Columns" — stored as { columnKey: value }
   customFields      Json?
+  // Materials deducted from stock at create time — stored so delete can reverse the deduction
+  materialsUsed     Json?
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
