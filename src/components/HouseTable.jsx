@@ -638,6 +638,18 @@ export default function HouseTable() {
       initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
     });
 
+    // Restore stock category material quantities
+    const initCatQtys = {};
+    stockCatData.forEach(cat => {
+      cat.items.forEach(item => {
+        const qty = savedMatsMap[item];
+        if (qty !== undefined && qty !== 0) {
+          initCatQtys[`${cat.id}__${item}`] = qty;
+        }
+      });
+    });
+    setCatQtys(initCatQtys);
+
     customCols.forEach(c => { initForm[c.key] = h.customFields?.[c.key] ?? h[c.key] ?? ''; });
     setForm(initForm);
     setErrors({});
