@@ -44,17 +44,25 @@ export function SiteProvider({ children }) {
   const [backendAreas, setBackendAreas] = useState([]);
   const [siteLoading, setSiteLoading] = useState(true); // true until first sites fetch completes
 
-  // Store the active selected site ID (UUID)
+  // Store the active selected site ID (UUID).
+  // ADMIN: always null (means "all sites") unless explicitly chosen.
+  // Non-admin: persisted from session so their assigned site is pre-selected.
   const [selectedSiteId, setSelectedSiteId] = useState(() => {
     try {
       const sess = JSON.parse(localStorage.getItem('gppms_session') || '{}');
+      // Never restore a siteId for ADMINs — they must always start with all-sites view
+      if (sess.role === 'ADMIN') return null;
       return sess.siteId || null;
     } catch { return null; }
   });
 
-  // Sync selectedSiteId immediately if user session changes
+  // Sync selectedSiteId immediately if user session changes.
+  // For ADMIN: always reset to null (all-sites view), never pin to one site.
   useEffect(() => {
-    if (user?.siteId) {
+    if (!user) return;
+    if (user.role === 'ADMIN') {
+      setSelectedSiteId(null); // admin always sees all sites
+    } else if (user?.siteId) {
       setSelectedSiteId(user.siteId);
     }
   }, [user]);
@@ -70,12 +78,15 @@ export function SiteProvider({ children }) {
           const backendSites = res.data.sites;
           setSiteList(backendSites);
 
-          // If selectedSiteId is not set, or is not in the list of fetched sites, set to first site
+          // ADMIN: never auto-set to a specific site — keep null (all-sites mode).
+          // Non-admin: if current siteId is valid keep it, else fall back to first site.
           if (backendSites.length > 0) {
             setSelectedSiteId(currentId => {
-              if (currentId && backendSites.some(s => s.id === currentId)) {
-                return currentId;
-              }
+              // If current user is ADMIN, always stay at null
+              const sess = (() => { try { return JSON.parse(localStorage.getItem('gppms_session') || '{}'); } catch { return {}; } })();
+              if (sess.role === 'ADMIN') return null;
+              // Non-admin: keep valid siteId, or default to first site
+              if (currentId && backendSites.some(s => s.id === currentId)) return currentId;
               return backendSites[0].id;
             });
           }

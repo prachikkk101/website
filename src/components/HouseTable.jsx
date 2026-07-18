@@ -123,7 +123,7 @@ function ConfirmDelete({ onConfirm, onCancel }) {
 export default function HouseTable() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
-  const { selectedSiteId, selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
+  const { selectedSiteId, selGA, selCity, selArea, setSelGA, setSelCity, setSelArea, selectedSite, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext, siteList, siteLoading } = useSite();
   const siteId        = selectedSiteId || null;
   const liveAreas = useSiteAreas(); // dynamic areas for selected GA location
   const [allHouses, setAllHouses] = useState([]);
@@ -155,8 +155,80 @@ export default function HouseTable() {
 
   useEffect(() => {
     document.title = 'GP-PMS — PNG Connections';
+
+    const isAdmin = user?.role === 'ADMIN';
+
+    // ADMIN with no specific site selected — fetch ALL sites in parallel
+    if (isAdmin && !siteId) {
+      // Wait until siteList has loaded (guard against race condition D)
+      if (siteLoading || siteList.length === 0) {
+        console.log('[PNG FETCH]', { trigger: 'admin-all-sites-waiting', siteLoading, siteListLen: siteList.length });
+        return;
+      }
+      setLoadingHouses(true);
+      console.log('[PNG FETCH]', {
+        trigger: 'admin-all-sites',
+        siteCount: siteList.length,
+        sites: siteList.map(s => s.name),
+        isAdmin: true,
+        urls: siteList.map(s => `/sites/${s.id}/png-connections`),
+      });
+      Promise.all(siteList.map(s => pngAPI.getAll(s.id)))
+        .then(resultsPerSite => {
+          const merged = resultsPerSite.flat();
+          console.log('[PNG FETCH] admin-all-sites result:', merged.length, 'total connections across', siteList.length, 'sites');
+          const mapped = merged.map(c => ({
+            id:           c.id,
+            bpNo:         c.bpNo         || '',
+            appNo:        c.appNo        || '',
+            name:         c.customerName || '',
+            mobile:       c.mobile       || '',
+            altMobile:    c.altMobile    || '',
+            acctType:     c.accountType  || 'DOMESTIC',
+            houseNo:      c.houseNo      || '',
+            floor:        'GF',
+            address1:     c.address1     || '',
+            area:         c.society      || '',
+            city:         c.city         || '',
+            gcStatus:     c.status       || '—',
+            giStatus:     c.giStatus     || '—',
+            rfc:          c.rfcStatus    || (c.status === 'RFC' ? 'RFC' : '—'),
+            ngStatus:     c.ngStatus     || '—',
+            gcDate:       c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
+            plumbingDate: c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
+            meterNo:      c.meterNo      || c.meterInstallation?.serialNo || '',
+            meterDate:    c.meterDate
+                            ? c.meterDate.split('T')[0]
+                            : (c.meterInstallation?.installationDate
+                                ? c.meterInstallation.installationDate.split('T')[0] : ''),
+            meterMake:    c.meterInstallation?.meterMake || '',
+            meterReading: c.meterInstallation?.meterReading || '',
+            side:         c.meterInstallation?.lhsRhs || 'LHS',
+            materialsUsed: {},
+            photo1Data:   c.photo1Data   || null,
+            photo2Data:   c.photo2Data   || null,
+            photoCount:   [c.photo1Data, c.photo2Data].filter(Boolean).length,
+            createdAt: c.createdAt,
+          }));
+          setAllHouses(mapped);
+        })
+        .catch(err => {
+          console.error('[PNG FETCH] admin-all-sites fetch failed:', err);
+          setAllHouses([]);
+        })
+        .finally(() => setLoadingHouses(false));
+      return;
+    }
+
+    // Non-admin (or admin with an explicit site selected) — fetch single site
     if (siteId) {
       setLoadingHouses(true);
+      console.log('[PNG FETCH]', {
+        trigger: isAdmin ? 'admin-single-site' : 'worker-site',
+        siteId,
+        isAdmin,
+        url: `/sites/${siteId}/png-connections`,
+      });
       pngAPI.getAll(siteId)
         .then(connections => {
           // map backend PNGConnection shape to the frontend house shape
@@ -179,7 +251,6 @@ export default function HouseTable() {
             ngStatus:     c.ngStatus     || '—',
             gcDate:       c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
             plumbingDate: c.plumbingDate ? c.plumbingDate.split('T')[0] : '',
-            // Prefer direct meterNo/meterDate on the connection; fall back to MeterInstallation
             meterNo:      c.meterNo      || c.meterInstallation?.serialNo || '',
             meterDate:    c.meterDate
                             ? c.meterDate.split('T')[0]
@@ -189,8 +260,6 @@ export default function HouseTable() {
             meterReading: c.meterInstallation?.meterReading || '',
             side:         c.meterInstallation?.lhsRhs || 'LHS',
             materialsUsed: {},
-            // Photos — loaded from DB (base64 data URLs). Previously these were only in
-            // React local state so photos disappeared on every page refresh.
             photo1Data:   c.photo1Data   || null,
             photo2Data:   c.photo2Data   || null,
             photoCount:   [c.photo1Data, c.photo2Data].filter(Boolean).length,
@@ -199,14 +268,14 @@ export default function HouseTable() {
           setAllHouses(mapped);
         })
         .catch(err => {
-          console.error('PNG API fetch failed:', err);
+          console.error('[PNG FETCH] single-site fetch failed:', err);
           setAllHouses([]);
         })
         .finally(() => setLoadingHouses(false));
     } else {
       setAllHouses([]);
     }
-  }, [siteId]);
+  }, [siteId, siteList, siteLoading, user?.role]);
 
   // Sync with global navbar GA selection
   useEffect(() => {
