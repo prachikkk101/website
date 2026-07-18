@@ -135,10 +135,10 @@ export default function PELaying() {
             area:       r.area       || '',
             coil:       r.coilNo     || '',
             dprPhotoUrl: r.dprPhotoUrl || null,
-            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
-            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
-            d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
-            d125oc: 0, d125b: 0, d125hdd: 0, d125tot: Number(r.d125tot) || 0,
+            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd:  Number(r.d32hdd)  || 0,
+            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd:  Number(r.d63hdd)  || 0,
+            d90oc:  Number(r.d90oc)  || 0, d90b:  Number(r.d90b)  || 0, d90hdd:  Number(r.d90hdd)  || 0, d90tot:  Number(r.d90tot)  || 0,
+            d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
             workStatus: capitaliseStatus(r.status) || 'Laying',
           }));
           setAllData(mapped);
@@ -162,10 +162,10 @@ export default function PELaying() {
             area:       r.area       || '',
             coil:       r.coilNo     || '',
             dprPhotoUrl: r.dprPhotoUrl || null,
-            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd: 0,
-            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd: Number(r.d63hdd) || 0,
-            d90oc:  0, d90b: 0, d90hdd: 0, d90tot:  Number(r.d90tot)  || 0,
-            d125oc: 0, d125b: 0, d125hdd: 0, d125tot: Number(r.d125tot) || 0,
+            d32oc:  Number(r.d32oc)  || 0, d32b:  Number(r.d32b)  || 0, d32hdd:  Number(r.d32hdd)  || 0,
+            d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd:  Number(r.d63hdd)  || 0,
+            d90oc:  Number(r.d90oc)  || 0, d90b:  Number(r.d90b)  || 0, d90hdd:  Number(r.d90hdd)  || 0, d90tot:  Number(r.d90tot)  || 0,
+            d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
             // Map DB status enum back to display label for the form
             workStatus: capitaliseStatus(r.status) || 'Laying',
           }));
@@ -384,9 +384,15 @@ export default function PELaying() {
         status:     statusToEnum(entryBase.workStatus),
         // Store connection type (Domestic/Commercial/Industrial) so tabs load correctly
         connType:   entryBase.connType || 'Domestic',
-        d32oc: entryBase.d32oc, d32b: entryBase.d32b,
+        // Ø32 — all three breakdowns
+        d32oc: entryBase.d32oc, d32b: entryBase.d32b, d32hdd: entryBase.d32hdd,
+        // Ø63 — all three breakdowns
         d63oc: entryBase.d63oc, d63b: entryBase.d63b, d63hdd: entryBase.d63hdd,
-        d90tot:  entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
+        // Ø90 — individual fields + derived total
+        d90oc: entryBase.d90oc, d90b: entryBase.d90b, d90hdd: entryBase.d90hdd,
+        d90tot: entryBase.d90oc + entryBase.d90b + entryBase.d90hdd,
+        // Ø125 — individual fields + derived total
+        d125oc: entryBase.d125oc, d125b: entryBase.d125b, d125hdd: entryBase.d125hdd,
         d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
         // Issue #3: DPR photo URL (R2)
         dprPhotoUrl: entryBase.dprPhotoUrl || null,

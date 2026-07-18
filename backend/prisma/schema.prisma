@@ -275,10 +275,17 @@ model PELaying {
   dprPhotoUrl  String?                // Cloudflare R2 URL for Daily Progress Report photo
   d32oc        Decimal                @db.Decimal(10, 3) @default(0)
   d32b         Decimal                @db.Decimal(10, 3) @default(0)
+  d32hdd       Decimal                @db.Decimal(10, 3) @default(0)
   d63oc        Decimal                @db.Decimal(10, 3) @default(0)
   d63b         Decimal                @db.Decimal(10, 3) @default(0)
   d63hdd       Decimal                @db.Decimal(10, 3) @default(0)
+  d90oc        Decimal                @db.Decimal(10, 3) @default(0)
+  d90b         Decimal                @db.Decimal(10, 3) @default(0)
+  d90hdd       Decimal                @db.Decimal(10, 3) @default(0)
   d90tot       Decimal                @db.Decimal(10, 3) @default(0)
+  d125oc       Decimal                @db.Decimal(10, 3) @default(0)
+  d125b        Decimal                @db.Decimal(10, 3) @default(0)
+  d125hdd      Decimal                @db.Decimal(10, 3) @default(0)
   d125tot      Decimal                @db.Decimal(10, 3) @default(0)
   createdAt    DateTime               @default(now())
   updatedAt    DateTime               @updatedAt
