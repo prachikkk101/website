@@ -275,14 +275,14 @@ export default function Dashboard() {
   const housesDoneThisMonth = useMemo(() => {
     if (!dashboardData?.sites) return [];
     return dashboardData.sites.map(s => {
-      // Prefer targetConns as denominator (planned target).
-      // If targetConns is not set yet (=0), fall back to totalConns so real
-      // done-connection progress is visible instead of a misleading 0%.
+      // Use totalConns (all entries, any status) as numerator — same logic as
+      // Active Sites cards. Pending entries still represent work in progress.
       let pct = 0;
+      const numerator = s.totalConns || 0;
       if (s.targetConns > 0) {
-        pct = Math.round((s.doneConns / s.targetConns) * 100);
-      } else if (s.totalConns > 0) {
-        pct = Math.round((s.doneConns / s.totalConns) * 100);
+        pct = Math.round((numerator / s.targetConns) * 100);
+      } else if (numerator > 0) {
+        pct = 100; // all entries done relative to themselves
       }
       return {
         site: s.siteName,
