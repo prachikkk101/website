@@ -696,63 +696,70 @@ export default function HouseTable() {
       .flatMap(g => g.cities || [])
       .find(c => c.id === formCity)?.label || formCity;
 
-      if (!siteId) {
-        showToast('❌ No site selected. Cannot save.', 'error');
-        return;
-      }
+    const targetSite = siteList.find(s => 
+      s.gaName?.toLowerCase() === formGA?.toLowerCase() && 
+      s.location?.toLowerCase() === formCity?.toLowerCase() && 
+      s.chargeArea?.toLowerCase() === formArea?.toLowerCase()
+    );
+    const resolvedSiteId = targetSite ? targetSite.id : siteId;
 
-      try {
-        // Convert materialsUsed { name: {qty, unit} } → array for backend
-        const materialsUsedPayload = Object.entries(materialsUsed)
-          .filter(([, v]) => v.qty > 0)
-          .map(([material, v]) => ({ material, qty: Number(v.qty), unit: v.unit || 'pcs' }));
+    if (!resolvedSiteId) {
+      showToast('❌ No matching site found for selected GA, City, and Area.', 'error');
+      return;
+    }
 
-        const payload = {
-          appNo: form.appNo, bpNo: form.bpNo || null,
-          accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
-          customerName: form.name, mobile: form.mobile, altMobile: form.altMobile || null,
-          houseNo: form.houseNo || '', address1: form.address1 || '',
-          city: finalCityLabel, society: formArea || null,
-          status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
-          plumbingDate: form.gcDate || null,
-          // Status fields — now saved to DB (were frontend-only before)
-          giStatus:  form.giStatus  !== '—' ? form.giStatus  : null,
-          rfcStatus: form.rfc       !== '—' ? form.rfc       : null,
-          ngStatus:  form.ngStatus  !== '—' ? form.ngStatus  : null,
-          // Quick meter recording
-          meterNo:   form.meterNo   || null,
-          meterDate: form.meterDate || null,
-          // Photos — send R2 URL if a new file was selected; undefined = keep existing in DB
-          photo1Data: p1url || undefined,
-          photo2Data: p2url || undefined,
-          // Sent on CREATE only — triggers stock deduction in backend $transaction
-          materialsUsed: materialsUsedPayload,
-          // Custom column values grouped into one JSON field
-          customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
-        };
-        if (editEntry) {
-          await pngAPI.update(siteId, editEntry.id, payload);
-          setAllHouses(prev => prev.map(h => h.id === editEntry.id
-            ? { ...h, ...{ bpNo: form.bpNo, appNo: form.appNo, name: form.name,
-                mobile: form.mobile, altMobile: form.altMobile,
-                acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
-                address1: form.address1, area: formArea, city: finalCityLabel,
-                gcStatus: form.gcStatus, giStatus: form.giStatus,
-                rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
-                plumbingDate: form.plumbingDate, meterNo: form.meterNo,
-                meterDate: form.meterDate, meterMake: form.meterMake,
-                meterReading: form.meterReading, side: form.side,
-                // BUG FIX: use R2 URLs (p1url/p2url), not base64 (p1b64/p2b64)
-                photo1Data: p1url || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
-                photo2Data: p2url || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
-                photoCount: [p1url || h.photo1Data, p2url || h.photo2Data].filter(Boolean).length,
-                materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
-                hiddenMaterials,
-                customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
-                updatedAt: new Date().toISOString() } } : h));
-          showToast('✓ Entry updated successfully');
-        } else {
-          const created = await pngAPI.create(siteId, payload);
+    try {
+      // Convert materialsUsed { name: {qty, unit} } → array for backend
+      const materialsUsedPayload = Object.entries(materialsUsed)
+        .filter(([, v]) => v.qty > 0)
+        .map(([material, v]) => ({ material, qty: Number(v.qty), unit: v.unit || 'pcs' }));
+
+      const payload = {
+        appNo: form.appNo, bpNo: form.bpNo || null,
+        accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
+        customerName: form.name, mobile: form.mobile, altMobile: form.altMobile || null,
+        houseNo: form.houseNo || '', address1: form.address1 || '',
+        city: finalCityLabel, society: formArea || null,
+        status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
+        plumbingDate: form.gcDate || null,
+        // Status fields — now saved to DB (were frontend-only before)
+        giStatus:  form.giStatus  !== '—' ? form.giStatus  : null,
+        rfcStatus: form.rfc       !== '—' ? form.rfc       : null,
+        ngStatus:  form.ngStatus  !== '—' ? form.ngStatus  : null,
+        // Quick meter recording
+        meterNo:   form.meterNo   || null,
+        meterDate: form.meterDate || null,
+        // Photos — send R2 URL if a new file was selected; undefined = keep existing in DB
+        photo1Data: p1url || undefined,
+        photo2Data: p2url || undefined,
+        // Sent on CREATE only — triggers stock deduction in backend $transaction
+        materialsUsed: materialsUsedPayload,
+        // Custom column values grouped into one JSON field
+        customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+      };
+      if (editEntry) {
+        await pngAPI.update(resolvedSiteId, editEntry.id, payload);
+        setAllHouses(prev => prev.map(h => h.id === editEntry.id
+          ? { ...h, ...{ bpNo: form.bpNo, appNo: form.appNo, name: form.name,
+              mobile: form.mobile, altMobile: form.altMobile,
+              acctType: form.acctType, houseNo: form.houseNo, floor: form.floor,
+              address1: form.address1, area: formArea, city: finalCityLabel,
+              gcStatus: form.gcStatus, giStatus: form.giStatus,
+              rfc: form.rfc, ngStatus: form.ngStatus, gcDate: form.gcDate,
+              plumbingDate: form.plumbingDate, meterNo: form.meterNo,
+              meterDate: form.meterDate, meterMake: form.meterMake,
+              meterReading: form.meterReading, side: form.side,
+              // BUG FIX: use R2 URLs (p1url/p2url), not base64 (p1b64/p2b64)
+              photo1Data: p1url || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
+              photo2Data: p2url || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
+              photoCount: [p1url || h.photo1Data, p2url || h.photo2Data].filter(Boolean).length,
+              materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
+              hiddenMaterials,
+              customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
+              updatedAt: new Date().toISOString() } } : h));
+        showToast('✓ Entry updated successfully');
+      } else {
+        const created = await pngAPI.create(resolvedSiteId, payload);
           const newEntry = {
             id: created?.id || Date.now(),
             bpNo: form.bpNo, name: form.name, mobile: form.mobile,

@@ -362,8 +362,15 @@ export default function PELaying() {
       ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
     };
 
-    if (!siteId) {
-      showToast('❌ No site selected. Cannot save.', 'error');
+    const targetSite = siteList.find(s => 
+      s.gaName?.toLowerCase() === formGA?.toLowerCase() && 
+      s.location?.toLowerCase() === formCity?.toLowerCase() && 
+      s.chargeArea?.toLowerCase() === formArea?.toLowerCase()
+    );
+    const resolvedSiteId = targetSite ? targetSite.id : siteId;
+
+    if (!resolvedSiteId) {
+      showToast('❌ No matching site found for selected GA, City, and Area.', 'error');
       return;
     }
 
@@ -385,12 +392,12 @@ export default function PELaying() {
         dprPhotoUrl: entryBase.dprPhotoUrl || null,
       };
       if (editingId) {
-        const updated = await peLayingAPI.update(siteId, editingId, payload);
+        const updated = await peLayingAPI.update(resolvedSiteId, editingId, payload);
         setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
           ? { ...r, ...entryBase, id: updated?.id || r.id } : r));
         showToast('✓ PE Laying entry updated');
       } else {
-        const created = await peLayingAPI.create(siteId, payload);
+        const created = await peLayingAPI.create(resolvedSiteId, payload);
         const newEntry = { ...entryBase, id: created?.id || Date.now(), sr: allData.length + 1 };
         setAllData(prev => [newEntry, ...prev]);
         showToast('✓ PE Laying entry added');
