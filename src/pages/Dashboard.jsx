@@ -186,7 +186,12 @@ export default function Dashboard() {
               id: u.id || `worker_${i}`,
               name: u.name,
               role: u.role === 'SUPERVISOR' ? 'Supervisor' : 'Plumber',
-              site: u.assignedSites && u.assignedSites.length > 0 ? u.assignedSites[0].site.name : 'Unassigned',
+              // Show ALL assigned site names, not just the first one.
+              // A worker assigned to multiple sites (e.g. Hisar—PLA + Hisar—UE-II)
+              // must have all assignments visible, not silently dropped.
+              site: u.assignedSites && u.assignedSites.length > 0
+                ? u.assignedSites.map(a => a.site.name).join(', ')
+                : 'Unassigned',
               initials: u.name ? u.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0,2) : 'W',
               lastSeen: 'Today'
             }));
