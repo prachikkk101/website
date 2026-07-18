@@ -268,7 +268,15 @@ export default function Dashboard() {
   const housesDoneThisMonth = useMemo(() => {
     if (!dashboardData?.sites) return [];
     return dashboardData.sites.map(s => {
-      const pct = s.targetConns > 0 ? Math.round((s.doneConns / s.targetConns) * 100) : 0;
+      // Prefer targetConns as denominator (planned target).
+      // If targetConns is not set yet (=0), fall back to totalConns so real
+      // done-connection progress is visible instead of a misleading 0%.
+      let pct = 0;
+      if (s.targetConns > 0) {
+        pct = Math.round((s.doneConns / s.targetConns) * 100);
+      } else if (s.totalConns > 0) {
+        pct = Math.round((s.doneConns / s.totalConns) * 100);
+      }
       return {
         site: s.siteName,
         pct: Math.min(pct, 100)
