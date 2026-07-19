@@ -155,22 +155,28 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
-    // ── PRE-FLIGHT: Check every material with qty > 0 exists in this site's inventory ──
-    // If any are missing, reject BEFORE saving so the user knows the exact item name.
+    // ── PRE-FLIGHT: Stock sufficiency check before creating ──
+    // Reject if: (a) item doesn't exist in inventory, OR (b) available qty < requested qty.
     if (data.materialsUsed && data.materialsUsed.length > 0) {
       const materialsToCheck = data.materialsUsed.filter(m => Math.round(m.qty) > 0);
-      const missingItems: string[] = [];
+      const insufficientItems: { name: string; requested: number; available: number }[] = [];
       for (const mat of materialsToCheck) {
         const inv = await prisma.inventoryItem.findUnique({
           where: { siteId_material: { siteId, material: mat.material } },
         });
-        if (!inv) missingItems.push(mat.material);
+        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
+        const qty = Math.round(mat.qty);
+        if (!inv || qty > available) {
+          insufficientItems.push({ name: mat.material, requested: qty, available });
+        }
       }
-      if (missingItems.length > 0) {
+      if (insufficientItems.length > 0) {
+        const lines = insufficientItems.map(i => `• ${i.name}: requested ${i.requested}, only ${i.available} available`);
         return res.status(400).json({
           success: false,
-          error: `The following material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
-          missingItems,
+          error: `Insufficient stock for the following material(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
+          insufficientItems,
+          missingItems: insufficientItems.map(i => i.name),
           field: 'materialsUsed',
         });
       }
@@ -419,25 +425,28 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       console.log(`[PNG update] 🔵 oldMap:`, JSON.stringify(oldMap));
       console.log(`[PNG update] 🔵 newMap:`, JSON.stringify(newMap));
 
-      // ── PRE-FLIGHT: Check that every material with a net positive delta exists in inventory ──
-      // Materials decreasing or staying the same are fine (returns/no-ops never need a DB row).
-      // Only block when the user is trying to issue MORE of a material that isn't in stock at all.
+      // ── PRE-FLIGHT: Check materials with net positive delta have sufficient available stock ──
       const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-      const missingItems: string[] = [];
+      const insufficientItems: { name: string; requested: number; available: number }[] = [];
       for (const material of allMaterials) {
         const delta = (newMap[material] ?? 0) - (oldMap[material] ?? 0);
         if (delta > 0) {
           const inv = await prisma.inventoryItem.findUnique({
             where: { siteId_material: { siteId, material } },
           });
-          if (!inv) missingItems.push(material);
+          const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
+          if (!inv || delta > available) {
+            insufficientItems.push({ name: material, requested: delta, available });
+          }
         }
       }
-      if (missingItems.length > 0) {
+      if (insufficientItems.length > 0) {
+        const lines = insufficientItems.map(i => `• ${i.name}: need ${i.requested} more, only ${i.available} available`);
         return res.status(400).json({
           success: false,
-          error: `The following material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
-          missingItems,
+          error: `Insufficient stock for the following material(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
+          insufficientItems,
+          missingItems: insufficientItems.map(i => i.name),
           field: 'materialsUsed',
         });
       }

@@ -414,9 +414,11 @@ export default function PELaying() {
     } catch (err) {
       console.error('PE API save error:', err);
       const errData = err?.response?.data;
-      if (errData?.missingItems?.length > 0) {
-        const missing = errData.missingItems;
-        const msg = `⚠️ Stock not found for:\n${missing.map(n => `• ${n}`).join('\n')}\n\nAdd these items to Inventory first.`;
+      if (errData?.insufficientItems?.length > 0 || errData?.missingItems?.length > 0) {
+        const items = errData.insufficientItems || [];
+        const msg = items.length > 0
+          ? `⚠️ Insufficient stock:\n${items.map(i => `• ${i.name}: need ${i.requested}, only ${i.available} available`).join('\n')}\n\nReceive more stock in Inventory first.`
+          : (errData.error || '⚠️ Some pipe materials are not in inventory.');
         showToast(msg, 'error');
       } else {
         showToast(`❌ ${errData?.error || 'Save failed. Please try again.'}`, 'error');

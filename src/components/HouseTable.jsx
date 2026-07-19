@@ -825,11 +825,11 @@ export default function HouseTable() {
       } catch (err) {
         console.error('PNG API save error:', err);
         const errData = err?.response?.data;
-        if (errData?.field === 'materialsUsed' || errData?.missingItems?.length > 0) {
-          // Stock pre-flight failure — show every missing material name clearly
-          const missing = errData.missingItems || [];
-          const msg = missing.length > 0
-            ? `⚠️ Stock not found for:\n${missing.map(n => `• ${n}`).join('\n')}\n\nAdd these items to Inventory first.`
+        if (errData?.field === 'materialsUsed' || errData?.insufficientItems?.length > 0 || errData?.missingItems?.length > 0) {
+          // Stock pre-flight failure — show per-item requested vs available detail
+          const items = errData.insufficientItems || [];
+          const msg = items.length > 0
+            ? `⚠️ Insufficient stock:\n${items.map(i => `• ${i.name}: need ${i.requested}, only ${i.available} available`).join('\n')}\n\nReceive more stock in Inventory first.`
             : (errData.error || '⚠️ Some materials are not in inventory.');
           showToast(msg, 'error');
         } else if (errData?.field && errData?.error) {

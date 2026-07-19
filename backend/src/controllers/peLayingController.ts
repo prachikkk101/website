@@ -99,6 +99,37 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
     }
 
     try {
+      // Compute pipe usage totals to check before creating
+      const pipeUsage = [
+        { material: '32mm PE Pipe',  qty: Math.round((data.d32oc ?? 0) + (data.d32b ?? 0) + (data.d32hdd ?? 0)) },
+        { material: '63mm PE Pipe',  qty: Math.round((data.d63oc ?? 0) + (data.d63b ?? 0) + (data.d63hdd ?? 0)) },
+        { material: '90mm PE Pipe',  qty: Math.round(data.d90tot ?? ((data.d90oc ?? 0) + (data.d90b ?? 0) + (data.d90hdd ?? 0))) },
+        { material: '125mm PE Pipe', qty: Math.round(data.d125tot ?? ((data.d125oc ?? 0) + (data.d125b ?? 0) + (data.d125hdd ?? 0))) },
+      ].filter(p => p.qty > 0);
+
+      // ── PRE-FLIGHT: Stock sufficiency check before creating ──
+      // Reject if: (a) item doesn't exist in inventory, OR (b) available qty < requested qty.
+      const insufficientItems: { name: string; requested: number; available: number }[] = [];
+      for (const pipe of pipeUsage) {
+        const inv = await prisma.inventoryItem.findUnique({
+          where: { siteId_material: { siteId, material: pipe.material } },
+        });
+        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
+        if (!inv || pipe.qty > available) {
+          insufficientItems.push({ name: pipe.material, requested: pipe.qty, available });
+        }
+      }
+      if (insufficientItems.length > 0) {
+        const lines = insufficientItems.map(i => `• ${i.name}: requested ${i.requested}, only ${i.available} available`);
+        return res.status(400).json({
+          success: false,
+          error: `Insufficient stock for the following pipe(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
+          insufficientItems,
+          missingItems: insufficientItems.map(i => i.name),
+          field: 'materials',
+        });
+      }
+
       const record = await prisma.pELaying.create({
         data: {
           siteId,
@@ -134,17 +165,8 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
       console.log('🟢 PE Laying created successfully. ID:', record.id);
 
-      // ── PE Laying Inventory Deduction (fire-and-forget) ──────────────────────
-      // Mirrors the PNG Connection deduction pattern: runs AFTER the HTTP response,
-      // never blocks or fails the save. Logs all outcomes for traceability.
-      // Maps pipe sizes to InventoryItem.material names used in the Inventory page.
-      const pipeUsage = [
-        { material: '32mm PE Pipe', qty: Math.round((data.d32oc ?? 0) + (data.d32b ?? 0)) },
-        { material: '63mm PE Pipe', qty: Math.round((data.d63oc ?? 0) + (data.d63b ?? 0) + (data.d63hdd ?? 0)) },
-        { material: '90mm PE Pipe', qty: Math.round(data.d90tot ?? 0) },
-        { material: '125mm PE Pipe', qty: Math.round(data.d125tot ?? 0) },
-      ].filter(p => p.qty > 0);
-
+      // ── STEP 2: Deduct stock (fire-and-forget) ──
+      // pipeUsage is already computed above; skip the re-computation.
       if (pipeUsage.length > 0) {
         const siteIdSnapshot = siteId;
         setImmediate(async () => {
@@ -159,7 +181,7 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
                 continue;
               }
               const newIssued  = invItem.issued + pipe.qty;
-              const newInStore = Math.max(0, invItem.received - newIssued + invItem.returned);
+              const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
               await prisma.inventoryItem.update({
                 where: { siteId_material: { siteId: siteIdSnapshot, material: pipe.material } },
                 data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
@@ -246,22 +268,28 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
 
     console.log(`[PE update] Pipe deltas:`, JSON.stringify(pipeDeltas));
 
-    // ── PRE-FLIGHT: Check materials with net positive delta exist in inventory ──
+    // ── PRE-FLIGHT: Check materials with net positive delta exist AND have sufficient available stock ──
     const siteId = existing.siteId;
-    const missingItems: string[] = [];
+    const insufficientItems: { name: string; requested: number; available: number }[] = [];
     for (const p of pipeDeltas) {
       if (p.delta > 0) {
         const inv = await prisma.inventoryItem.findUnique({
           where: { siteId_material: { siteId, material: p.material } },
         });
-        if (!inv) missingItems.push(p.material);
+        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
+        // delta is the NET increase needed — available stock covers the increase only
+        if (!inv || p.delta > available) {
+          insufficientItems.push({ name: p.material, requested: p.delta, available });
+        }
       }
     }
-    if (missingItems.length > 0) {
+    if (insufficientItems.length > 0) {
+      const lines = insufficientItems.map(i => `• ${i.name}: need ${i.requested} more, only ${i.available} available`);
       return res.status(400).json({
         success: false,
-        error: `The following pipe material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
-        missingItems,
+        error: `Insufficient stock for the following pipe(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
+        insufficientItems,
+        missingItems: insufficientItems.map(i => i.name),
         field: 'materials',
       });
     }
@@ -313,7 +341,7 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
               continue;
             }
             const newIssued  = Math.max(0, inv.issued + adj.delta);
-            const newInStore = Math.max(0, inv.received - newIssued + inv.returned);
+            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
             await prisma.inventoryItem.update({
               where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
               data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
