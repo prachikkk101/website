@@ -219,6 +219,53 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     const recordId = req.params.recordId as string;
     const data = schema.parse(req.body);
 
+    // Fetch the EXISTING record so we can compute pipe quantity deltas
+    const existing = await prisma.pELaying.findUnique({ where: { id: recordId } });
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'PE Laying record not found' });
+    }
+
+    // Compute OLD pipe totals from DB
+    const old32  = Math.round(existing.d32oc.toNumber()  + existing.d32b.toNumber()  + existing.d32hdd.toNumber());
+    const old63  = Math.round(existing.d63oc.toNumber()  + existing.d63b.toNumber()  + existing.d63hdd.toNumber());
+    const old90  = Math.round(existing.d90tot.toNumber());
+    const old125 = Math.round(existing.d125tot.toNumber());
+
+    // Compute NEW pipe totals from incoming data (fall back to existing if not provided)
+    const new32  = Math.round((data.d32oc  ?? existing.d32oc.toNumber())  + (data.d32b  ?? existing.d32b.toNumber())  + (data.d32hdd  ?? existing.d32hdd.toNumber()));
+    const new63  = Math.round((data.d63oc  ?? existing.d63oc.toNumber())  + (data.d63b  ?? existing.d63b.toNumber())  + (data.d63hdd  ?? existing.d63hdd.toNumber()));
+    const new90  = data.d90tot  !== undefined ? Math.round(data.d90tot  ?? 0) : Math.round((data.d90oc  ?? existing.d90oc.toNumber())  + (data.d90b  ?? existing.d90b.toNumber())  + (data.d90hdd  ?? existing.d90hdd.toNumber()));
+    const new125 = data.d125tot !== undefined ? Math.round(data.d125tot ?? 0) : Math.round((data.d125oc ?? existing.d125oc.toNumber()) + (data.d125b ?? existing.d125b.toNumber()) + (data.d125hdd ?? existing.d125hdd.toNumber()));
+
+    const pipeDeltas = [
+      { material: '32mm PE Pipe',  delta: new32  - old32  },
+      { material: '63mm PE Pipe',  delta: new63  - old63  },
+      { material: '90mm PE Pipe',  delta: new90  - old90  },
+      { material: '125mm PE Pipe', delta: new125 - old125 },
+    ];
+
+    console.log(`[PE update] Pipe deltas:`, JSON.stringify(pipeDeltas));
+
+    // ── PRE-FLIGHT: Check materials with net positive delta exist in inventory ──
+    const siteId = existing.siteId;
+    const missingItems: string[] = [];
+    for (const p of pipeDeltas) {
+      if (p.delta > 0) {
+        const inv = await prisma.inventoryItem.findUnique({
+          where: { siteId_material: { siteId, material: p.material } },
+        });
+        if (!inv) missingItems.push(p.material);
+      }
+    }
+    if (missingItems.length > 0) {
+      return res.status(400).json({
+        success: false,
+        error: `The following pipe material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
+        missingItems,
+        field: 'materials',
+      });
+    }
+
     const updated = await prisma.pELaying.update({
       where: { id: recordId },
       data: {
@@ -249,6 +296,38 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
         updatedAt: new Date(),
       },
     });
+
+    // ── Diff-based stock adjustment (fire-and-forget) ──
+    const adjustments = pipeDeltas.filter(p => p.delta !== 0);
+    if (adjustments.length > 0) {
+      const siteIdSnapshot = siteId;
+      setImmediate(async () => {
+        console.log(`[PE update] 🟡 Stock diff-adjustment: ${adjustments.length} pipe(s) changed`);
+        for (const adj of adjustments) {
+          try {
+            const inv = await prisma.inventoryItem.findUnique({
+              where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
+            });
+            if (!inv) {
+              console.warn(`[PE update] ⚠️ "${adj.material}" not in inventory — skipping`);
+              continue;
+            }
+            const newIssued  = Math.max(0, inv.issued + adj.delta);
+            const newInStore = Math.max(0, inv.received - newIssued + inv.returned);
+            await prisma.inventoryItem.update({
+              where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
+              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+            });
+            console.log(`[PE update] ✅ "${adj.material}" delta=${adj.delta > 0 ? '+' : ''}${adj.delta} → issued now ${newIssued}`);
+          } catch (e: any) {
+            console.error(`[PE update] ❌ Adjustment failed for "${adj.material}":`, e.message);
+          }
+        }
+        console.log('[PE update] 🟢 Stock diff-adjustment complete.');
+      });
+    } else {
+      console.log('[PE update] ⚪ Pipe quantities unchanged — no inventory adjustments needed.');
+    }
 
     res.status(200).json({ success: true, record: updated });
   } catch (error) {

@@ -155,6 +155,27 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
+    // ── PRE-FLIGHT: Check every material with qty > 0 exists in this site's inventory ──
+    // If any are missing, reject BEFORE saving so the user knows the exact item name.
+    if (data.materialsUsed && data.materialsUsed.length > 0) {
+      const materialsToCheck = data.materialsUsed.filter(m => Math.round(m.qty) > 0);
+      const missingItems: string[] = [];
+      for (const mat of materialsToCheck) {
+        const inv = await prisma.inventoryItem.findUnique({
+          where: { siteId_material: { siteId, material: mat.material } },
+        });
+        if (!inv) missingItems.push(mat.material);
+      }
+      if (missingItems.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `The following material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
+          missingItems,
+          field: 'materialsUsed',
+        });
+      }
+    }
+
     // ── STEP 1: Create the PNG connection record (committed independently) ──
     const connection = await prisma.pNGConnection.create({
       data: {
@@ -398,8 +419,28 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       console.log(`[PNG update] 🔵 oldMap:`, JSON.stringify(oldMap));
       console.log(`[PNG update] 🔵 newMap:`, JSON.stringify(newMap));
 
-      // Union of all material names touched by old or new
+      // ── PRE-FLIGHT: Check that every material with a net positive delta exists in inventory ──
+      // Materials decreasing or staying the same are fine (returns/no-ops never need a DB row).
+      // Only block when the user is trying to issue MORE of a material that isn't in stock at all.
       const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+      const missingItems: string[] = [];
+      for (const material of allMaterials) {
+        const delta = (newMap[material] ?? 0) - (oldMap[material] ?? 0);
+        if (delta > 0) {
+          const inv = await prisma.inventoryItem.findUnique({
+            where: { siteId_material: { siteId, material } },
+          });
+          if (!inv) missingItems.push(material);
+        }
+      }
+      if (missingItems.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `The following material(s) are not found in this site\'s inventory and cannot be deducted:\n• ${missingItems.join('\n• ')}\n\nPlease add them to Inventory first.`,
+          missingItems,
+          field: 'materialsUsed',
+        });
+      }
 
       // Persist the new materialsUsed to DB
       await prisma.pNGConnection.update({

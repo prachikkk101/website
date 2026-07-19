@@ -413,7 +413,14 @@ export default function PELaying() {
       }
     } catch (err) {
       console.error('PE API save error:', err);
-      showToast('❌ Save failed. Please try again.');
+      const errData = err?.response?.data;
+      if (errData?.missingItems?.length > 0) {
+        const missing = errData.missingItems;
+        const msg = `⚠️ Stock not found for:\n${missing.map(n => `• ${n}`).join('\n')}\n\nAdd these items to Inventory first.`;
+        showToast(msg, 'error');
+      } else {
+        showToast(`❌ ${errData?.error || 'Save failed. Please try again.'}`, 'error');
+      }
       return;
     }
 

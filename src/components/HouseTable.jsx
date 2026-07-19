@@ -824,9 +824,15 @@ export default function HouseTable() {
         setCatOpen(null);
       } catch (err) {
         console.error('PNG API save error:', err);
-        // If backend returns a field-specific error, show it inline under the right field
         const errData = err?.response?.data;
-        if (errData?.field && errData?.error) {
+        if (errData?.field === 'materialsUsed' || errData?.missingItems?.length > 0) {
+          // Stock pre-flight failure — show every missing material name clearly
+          const missing = errData.missingItems || [];
+          const msg = missing.length > 0
+            ? `⚠️ Stock not found for:\n${missing.map(n => `• ${n}`).join('\n')}\n\nAdd these items to Inventory first.`
+            : (errData.error || '⚠️ Some materials are not in inventory.');
+          showToast(msg, 'error');
+        } else if (errData?.field && errData?.error) {
           setErrors(prev => ({ ...prev, [errData.field]: errData.error }));
         } else {
           showToast(`❌ ${errData?.error || 'Save failed. Please try again.'}`, 'error');
