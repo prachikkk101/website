@@ -633,28 +633,21 @@ export default function HouseTable() {
       Object.entries(h.materialsUsed).forEach(([k, v]) => { savedMatsMap[k] = v?.qty ?? v; });
     }
 
-    // Build the set of ALL material names that belong to stockCatData accordion.
-    // A material in this set must ONLY be restored via catQtys — never via form[mat.key].
-    // This prevents the same quantity from being counted twice in handleSave.
-    const catItemNames = new Set();
-    stockCatData.forEach(cat => cat.items.forEach(item => catItemNames.add(item)));
+    // Build a set of matList labels so we can avoid restoring them into the accordion
+    const matListNames = new Set(matList.map(m => m.label));
 
-    // Restore matList form fields — SKIP any material whose name is also in catItemNames
-    // so we never restore the same quantity into both form[mat.key] AND catQtys.
+    // Restore matList form fields (PRIMARY source for overlapping materials)
     matList.forEach(m => {
-      if (catItemNames.has(m.label)) {
-        // This material is owned by the stock category system — clear the form field
-        initForm[m.key] = '';
-      } else {
-        const qty = savedMatsMap[m.label];
-        initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
-      }
+      const qty = savedMatsMap[m.label];
+      initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
     });
 
-    // Restore stock category material quantities (single source of truth for these items)
+    // Restore stock category material quantities (SECONDARY)
+    // ONLY restore here if the material is NOT in the top matList
     const initCatQtys = {};
     stockCatData.forEach(cat => {
       cat.items.forEach(item => {
+        if (matListNames.has(item)) return; // Already restored in the top list!
         const qty = savedMatsMap[item];
         if (qty !== undefined && qty !== 0) {
           initCatQtys[`${cat.id}__${item}`] = qty;
@@ -707,24 +700,22 @@ export default function HouseTable() {
     }
     console.log('🔵 PNG final photo URLs before save — photo1Data:', p1url, '| photo2Data:', p2url);
 
-    // Build materialsUsed as a DEDUPED map — catQtys take priority over matList form keys
-    // when the same material name appears in both systems.
-    // Step 1: matList form fields (only those NOT also in stock category system)
+    // Step 1: matList form fields (Primary)
     const matMergeMap = {};
-    const catItemNamesForSave = new Set(
-      stockCatData.flatMap(cat => cat.items)
-    );
     matList.forEach(mat => {
-      if (catItemNamesForSave.has(mat.label)) return; // skip — owned by catQtys
       const qty = form[mat.key] || 0;
       if (qty > 0) matMergeMap[mat.label] = { qty, unit: mat.unit };
     });
-    // Step 2: catQtys (accordion — these always win / override)
+    // Step 2: catQtys (Accordion — add to existing if user typed in both places)
     Object.entries(catQtys).forEach(([key, qty]) => {
       if (qty > 0) {
         const [, ...parts] = key.split('__');
         const name = parts.join('__');
-        matMergeMap[name] = { qty, unit: 'pcs' }; // overwrite any matList entry with same name
+        if (matMergeMap[name]) {
+          matMergeMap[name].qty += qty;
+        } else {
+          matMergeMap[name] = { qty, unit: 'pcs' };
+        }
       }
     });
     // Step 3: custom per-entry materials
