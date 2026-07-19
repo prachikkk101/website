@@ -384,12 +384,19 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       const newMaterials = data.materialsUsed ?? [];
       const siteId = existing.siteId;
 
+      // ── DIAGNOSTIC LOGGING ─────────────────────────────────────────────────
+      console.log(`[PNG update] 🔵 EXISTING materialsUsed (from DB):`, JSON.stringify(oldMaterials));
+      console.log(`[PNG update] 🔵 INCOMING materialsUsed (from request):`, JSON.stringify(newMaterials));
+
       // Build lookup maps
       const oldMap: Record<string, number> = {};
       for (const m of oldMaterials) { oldMap[m.material] = Math.round(m.qty ?? 0); }
 
       const newMap: Record<string, number> = {};
       for (const m of newMaterials) { newMap[m.material] = Math.round(m.qty ?? 0); }
+
+      console.log(`[PNG update] 🔵 oldMap:`, JSON.stringify(oldMap));
+      console.log(`[PNG update] 🔵 newMap:`, JSON.stringify(newMap));
 
       // Union of all material names touched by old or new
       const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
@@ -406,6 +413,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         const oldQty = oldMap[material] ?? 0;
         const newQty = newMap[material] ?? 0;
         const delta  = newQty - oldQty;
+        console.log(`[PNG update] 🔵 "${material}": old=${oldQty}, new=${newQty}, delta=${delta >= 0 ? '+' : ''}${delta}`);
         if (delta !== 0) adjustments.push({ material, delta });
       }
 

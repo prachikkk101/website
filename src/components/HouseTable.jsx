@@ -632,13 +632,26 @@ export default function HouseTable() {
       // legacy object shape {label: {qty, unit}} — keep backward compat
       Object.entries(h.materialsUsed).forEach(([k, v]) => { savedMatsMap[k] = v?.qty ?? v; });
     }
-    // Restore material quantities from saved entry
+
+    // Build the set of ALL material names that belong to stockCatData accordion.
+    // A material in this set must ONLY be restored via catQtys — never via form[mat.key].
+    // This prevents the same quantity from being counted twice in handleSave.
+    const catItemNames = new Set();
+    stockCatData.forEach(cat => cat.items.forEach(item => catItemNames.add(item)));
+
+    // Restore matList form fields — SKIP any material whose name is also in catItemNames
+    // so we never restore the same quantity into both form[mat.key] AND catQtys.
     matList.forEach(m => {
-      const qty = savedMatsMap[m.label];
-      initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
+      if (catItemNames.has(m.label)) {
+        // This material is owned by the stock category system — clear the form field
+        initForm[m.key] = '';
+      } else {
+        const qty = savedMatsMap[m.label];
+        initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
+      }
     });
 
-    // Restore stock category material quantities
+    // Restore stock category material quantities (single source of truth for these items)
     const initCatQtys = {};
     stockCatData.forEach(cat => {
       cat.items.forEach(item => {
@@ -694,25 +707,36 @@ export default function HouseTable() {
     }
     console.log('🔵 PNG final photo URLs before save — photo1Data:', p1url, '| photo2Data:', p2url);
 
-    // Build materialsUsed from fixed matList + category dropdowns
-    const materialsUsed = {};
+    // Build materialsUsed as a DEDUPED map — catQtys take priority over matList form keys
+    // when the same material name appears in both systems.
+    // Step 1: matList form fields (only those NOT also in stock category system)
+    const matMergeMap = {};
+    const catItemNamesForSave = new Set(
+      stockCatData.flatMap(cat => cat.items)
+    );
     matList.forEach(mat => {
+      if (catItemNamesForSave.has(mat.label)) return; // skip — owned by catQtys
       const qty = form[mat.key] || 0;
-      if (qty > 0) materialsUsed[mat.label] = { qty, unit: mat.unit };
+      if (qty > 0) matMergeMap[mat.label] = { qty, unit: mat.unit };
     });
-    // Merge category quantities
+    // Step 2: catQtys (accordion — these always win / override)
     Object.entries(catQtys).forEach(([key, qty]) => {
       if (qty > 0) {
         const [, ...parts] = key.split('__');
         const name = parts.join('__');
-        if (materialsUsed[name]) {
-          materialsUsed[name].qty += qty;
-        } else {
-          materialsUsed[name] = { qty, unit: 'pcs' };
-        }
+        matMergeMap[name] = { qty, unit: 'pcs' }; // overwrite any matList entry with same name
+      }
+    });
+    // Step 3: custom per-entry materials
+    customMaterials.forEach(mat => {
+      if (mat.label?.trim() && mat.qty > 0) {
+        matMergeMap[mat.label.trim()] = { qty: mat.qty, unit: mat.unit || 'pcs' };
       }
     });
 
+    const materialsUsed = matMergeMap; // kept for local state update below
+    const materialsUsedPayload = Object.entries(matMergeMap)
+      .map(([material, v]) => ({ material, qty: Number(v.qty), unit: v.unit || 'pcs' }));
     const finalCityLabel = mergedGAs
       .flatMap(g => g.cities || [])
       .find(c => c.id === formCity)?.label || formCity;
@@ -730,11 +754,6 @@ export default function HouseTable() {
     }
 
     try {
-      // Convert materialsUsed { name: {qty, unit} } → array for backend
-      const materialsUsedPayload = Object.entries(materialsUsed)
-        .filter(([, v]) => v.qty > 0)
-        .map(([material, v]) => ({ material, qty: Number(v.qty), unit: v.unit || 'pcs' }));
-
       const payload = {
         appNo: form.appNo, bpNo: form.bpNo || null,
         accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
@@ -753,7 +772,7 @@ export default function HouseTable() {
         // Photos — send R2 URL if a new file was selected; undefined = keep existing in DB
         photo1Data: p1url || undefined,
         photo2Data: p2url || undefined,
-        // Sent on CREATE only — triggers stock deduction in backend $transaction
+        // Deduped materials payload — catQtys take priority over matList when names overlap
         materialsUsed: materialsUsedPayload,
         // Custom column values grouped into one JSON field
         customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
