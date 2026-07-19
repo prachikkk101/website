@@ -814,7 +814,13 @@ export default function HouseTable() {
         setCatOpen(null);
       } catch (err) {
         console.error('PNG API save error:', err);
-        showToast('❌ Save failed. Please try again.');
+        // If backend returns a field-specific error, show it inline under the right field
+        const errData = err?.response?.data;
+        if (errData?.field && errData?.error) {
+          setErrors(prev => ({ ...prev, [errData.field]: errData.error }));
+        } else {
+          showToast(`❌ ${errData?.error || 'Save failed. Please try again.'}`, 'error');
+        }
         return;
       }
   }
@@ -851,8 +857,8 @@ export default function HouseTable() {
           <SectionTitle>1. Customer Details</SectionTitle>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-              <Field label="BP Number (optional)"><Input value={form.bpNo} onChange={val => f('bpNo', val)} /></Field>
-              <Field label="Application No."><Input value={form.appNo} onChange={val => f('appNo', val)} /></Field>
+              <Field label="BP Number (optional)" error={errors.bpNo}><Input value={form.bpNo} onChange={val => f('bpNo', val)} error={errors.bpNo} /></Field>
+              <Field label="Application No." error={errors.appNo}><Input value={form.appNo} onChange={val => f('appNo', val)} error={errors.appNo} /></Field>
             </div>
             <Field label="Customer Name" required error={errors.name}><Input id="ht-field-name" value={form.name} onChange={val => f('name', val)} error={errors.name} /></Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

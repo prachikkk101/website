@@ -138,7 +138,20 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
     if (appNo) {
       const existing = await prisma.pNGConnection.findUnique({ where: { appNo } });
       if (existing) {
-        return res.status(400).json({ success: false, error: 'Application number already exists' });
+        return res.status(400).json({ success: false, error: 'Application number already exists', field: 'appNo' });
+      }
+    }
+
+    // BP Number must be unique within the same site (GA Location) — allowed to repeat across different sites
+    const bpNo = (data.bpNo && data.bpNo.trim()) ? data.bpNo.trim() : null;
+    if (bpNo) {
+      const dupBp = await prisma.pNGConnection.findFirst({ where: { bpNo, siteId } });
+      if (dupBp) {
+        return res.status(400).json({
+          success: false,
+          error: `BP Number "${bpNo}" already exists under this GA Location. Please use a different BP Number or check for a duplicate entry.`,
+          field: 'bpNo',
+        });
       }
     }
 
@@ -306,6 +319,24 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       return res.status(404).json({ success: false, error: 'Connection not found' });
     }
 
+    // BP Number must be unique within the same site — but the same bpNo is allowed across different sites.
+    // Exclude this connection itself from the duplicate check (user may re-save unchanged bpNo).
+    if (data.bpNo !== undefined && data.bpNo) {
+      const bpNoTrimmed = data.bpNo.trim();
+      if (bpNoTrimmed) {
+        const dupBp = await prisma.pNGConnection.findFirst({
+          where: { bpNo: bpNoTrimmed, siteId: existing.siteId, id: { not: connectionId } },
+        });
+        if (dupBp) {
+          return res.status(400).json({
+            success: false,
+            error: `BP Number "${bpNoTrimmed}" already exists under this GA Location. Please use a different BP Number or check for a duplicate entry.`,
+            field: 'bpNo',
+          });
+        }
+      }
+    }
+
     const updated = await prisma.pNGConnection.update({
       where: { id: connectionId },
       data: {
@@ -343,67 +374,70 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
 
     console.log('🟢 PNG Update saved — photo1Data stored:', data.photo1Data !== undefined ? 'YES' : 'unchanged', '| photo2Data stored:', data.photo2Data !== undefined ? 'YES' : 'unchanged');
 
-    // ── Revert old stock, apply new stock, persist materialsUsed ────────
-    // Only runs when materialsUsed is explicitly included in the update payload.
+    // ── Diff-based stock adjustment ─────────────────────────────────────────
+    // ONLY runs when materialsUsed is explicitly included in the update payload.
+    // Computes delta = newQty - oldQty for each material.
+    // If delta = 0 → no DB write. If delta > 0 → add to issued. If delta < 0 → subtract from issued.
+    // This makes saving with zero changes a true no-op (no inventory updates at all).
     if (data.materialsUsed !== undefined) {
       const oldMaterials = (existing.materialsUsed as { material: string; qty: number }[] | null) ?? [];
       const newMaterials = data.materialsUsed ?? [];
       const siteId = existing.siteId;
 
-      // Persist the new materialsUsed immediately (synchronously, before background jobs)
+      // Build lookup maps
+      const oldMap: Record<string, number> = {};
+      for (const m of oldMaterials) { oldMap[m.material] = Math.round(m.qty ?? 0); }
+
+      const newMap: Record<string, number> = {};
+      for (const m of newMaterials) { newMap[m.material] = Math.round(m.qty ?? 0); }
+
+      // Union of all material names touched by old or new
+      const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
+
+      // Persist the new materialsUsed to DB
       await prisma.pNGConnection.update({
         where: { id: connectionId },
         data: { materialsUsed: newMaterials.length > 0 ? newMaterials : [] },
       });
 
-      // Background stock adjustment — revert old, apply new
-      setImmediate(async () => {
-        console.log('[PNG update] 🟡 Stock adjustment: reverting old materials, applying new...');
-        // Step 1: revert old deductions
-        for (const mat of oldMaterials) {
-          try {
-            const qty = Math.round(mat.qty ?? 0);
-            if (qty <= 0) continue;
-            const inv = await prisma.inventoryItem.findUnique({
-              where: { siteId_material: { siteId, material: mat.material } },
-            });
-            if (!inv) continue;
-            const newIssued  = Math.max(0, inv.issued - qty);
-            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
-            await prisma.inventoryItem.update({
-              where: { siteId_material: { siteId, material: mat.material } },
-              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-            });
-            console.log(`[PNG update] ↩️  Reverted "${mat.material}" -${qty}`);
-          } catch (e: any) {
-            console.error(`[PNG update] ❌ Revert failed for "${mat.material}":`, e.message);
-          }
-        }
-        // Step 2: apply new deductions
-        for (const mat of newMaterials) {
-          try {
-            const qty = Math.round(mat.qty ?? 0);
-            if (qty <= 0) continue;
-            const inv = await prisma.inventoryItem.findUnique({
-              where: { siteId_material: { siteId, material: mat.material } },
-            });
-            if (!inv) {
-              console.warn(`[PNG update] ⚠️ Material "${mat.material}" not in inventory — skipping`);
-              continue;
+      // Compute deltas and adjust inventory — runs in background, never blocks response
+      const adjustments: { material: string; delta: number }[] = [];
+      for (const material of allMaterials) {
+        const oldQty = oldMap[material] ?? 0;
+        const newQty = newMap[material] ?? 0;
+        const delta  = newQty - oldQty;
+        if (delta !== 0) adjustments.push({ material, delta });
+      }
+
+      if (adjustments.length > 0) {
+        const siteIdSnapshot = siteId;
+        setImmediate(async () => {
+          console.log(`[PNG update] 🟡 Stock diff-adjustment: ${adjustments.length} material(s) changed`);
+          for (const adj of adjustments) {
+            try {
+              const inv = await prisma.inventoryItem.findUnique({
+                where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
+              });
+              if (!inv) {
+                console.warn(`[PNG update] ⚠️ Material "${adj.material}" not in inventory — skipping`);
+                continue;
+              }
+              const newIssued  = Math.max(0, inv.issued + adj.delta);
+              const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
+              await prisma.inventoryItem.update({
+                where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
+                data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+              });
+              console.log(`[PNG update] ✅ "${adj.material}" delta=${adj.delta > 0 ? '+' : ''}${adj.delta} → issued now ${newIssued}`);
+            } catch (e: any) {
+              console.error(`[PNG update] ❌ Adjustment failed for "${adj.material}":`, e.message);
             }
-            const newIssued  = inv.issued + qty;
-            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
-            await prisma.inventoryItem.update({
-              where: { siteId_material: { siteId, material: mat.material } },
-              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-            });
-            console.log(`[PNG update] ✅ Applied "${mat.material}" +${qty}`);
-          } catch (e: any) {
-            console.error(`[PNG update] ❌ Apply failed for "${mat.material}":`, e.message);
           }
-        }
-        console.log('[PNG update] 🟢 Stock adjustment complete.');
-      });
+          console.log('[PNG update] 🟢 Stock diff-adjustment complete.');
+        });
+      } else {
+        console.log('[PNG update] ⚪ Materials unchanged — no inventory adjustments needed.');
+      }
     }
 
     res.status(200).json({ success: true, connection: updated });

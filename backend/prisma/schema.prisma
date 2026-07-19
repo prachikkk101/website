@@ -199,7 +199,7 @@ model PNGConnection {
   id                String                 @id @default(uuid())
   siteId            String
   appNo             String?                @unique
-  bpNo              String?                @unique
+  bpNo              String?                // uniqueness enforced per-site in application code
   accountType       AccountType            @default(DOMESTIC)
   customerName      String
   mobile            String

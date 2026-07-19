@@ -250,8 +250,9 @@ export default function PELaying() {
   const kpiTotals = useMemo(() => allData.reduce((acc, r) => ({
     d32:  acc.d32  + (Number(r.d32oc)  || 0) + (Number(r.d32b)  || 0) + (Number(r.d32hdd)  || 0),
     d63:  acc.d63  + (Number(r.d63oc)  || 0) + (Number(r.d63b)  || 0) + (Number(r.d63hdd)  || 0),
-    d90:  acc.d90  + (Number(r.d90oc)  || 0) + (Number(r.d90b)  || 0) + (Number(r.d90hdd)  || 0) + (Number(r.d90tot)  || 0),
-    d125: acc.d125 + (Number(r.d125oc) || 0) + (Number(r.d125b) || 0) + (Number(r.d125hdd) || 0) + (Number(r.d125tot) || 0),
+    // Use sub-fields only — d90tot stores the same sum and must NOT be added again
+    d90:  acc.d90  + (Number(r.d90oc)  || 0) + (Number(r.d90b)  || 0) + (Number(r.d90hdd)  || 0),
+    d125: acc.d125 + (Number(r.d125oc) || 0) + (Number(r.d125b) || 0) + (Number(r.d125hdd) || 0),
   }), { d32: 0, d63: 0, d90: 0, d125: 0 }), [allData]);
 
   // ── Filtered rows (by tab + area + global GA) ──
@@ -283,11 +284,13 @@ export default function PELaying() {
     d90oc:   acc.d90oc   + (Number(r.d90oc)   || 0),
     d90b:    acc.d90b    + (Number(r.d90b)    || 0),
     d90hdd:  acc.d90hdd  + (Number(r.d90hdd)  || 0),
-    d90t:    acc.d90t    + (Number(r.d90oc)   || 0) + (Number(r.d90b)   || 0) + (Number(r.d90hdd) || 0) + (Number(r.d90tot) || 0),
+    // Use sub-fields only — d90tot already equals oc+b+hdd, adding it again causes 2× total
+    d90t:    acc.d90t    + (Number(r.d90oc)   || 0) + (Number(r.d90b)   || 0) + (Number(r.d90hdd) || 0),
     d125oc:  acc.d125oc  + (Number(r.d125oc)  || 0),
     d125b:   acc.d125b   + (Number(r.d125b)   || 0),
     d125hdd: acc.d125hdd + (Number(r.d125hdd) || 0),
-    d125t:   acc.d125t   + (Number(r.d125oc)  || 0) + (Number(r.d125b)  || 0) + (Number(r.d125hdd) || 0) + (Number(r.d125tot) || 0),
+    // Use sub-fields only — d125tot already equals oc+b+hdd, adding it again causes 2× total
+    d125t:   acc.d125t   + (Number(r.d125oc)  || 0) + (Number(r.d125b)  || 0) + (Number(r.d125hdd) || 0),
   }), { d32oc:0,d32b:0,d32hdd:0,d63oc:0,d63b:0,d63hdd:0,d90oc:0,d90b:0,d90hdd:0,d90t:0,d125oc:0,d125b:0,d125hdd:0,d125t:0 }), [filtered]);
 
   function handleExport() { exportPELaying(filtered, exportFromDate, exportToDate); }
