@@ -95,6 +95,7 @@ model Site {
   toolReturns  ToolReturn[]
   attendance   Attendance[]
   meterRegisters MeterRegister[]
+  stockReceipts StockReceipt[]
 }
 
 model SiteUser {
@@ -424,3 +425,20 @@ model DailyReport {
   postedAt  DateTime @default(now())
 }
 
+// Individual receive-stock transaction log.
+// One row is created EVERY TIME stock is received (not overwritten).
+// Used by the Stock History view to show a chronological receive log.
+model StockReceipt {
+  id          String   @id @default(cuid())
+  siteId      String
+  material    String
+  unit      String   @default("pcs")
+  category  String   @default("")
+  quantity    Int
+  challanNo   String?
+  photoUrl    String?
+  receivedBy  String?  // userId of the user who received the stock
+  receivedAt  DateTime @default(now())
+
+  site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+}

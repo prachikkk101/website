@@ -7,11 +7,31 @@ import { Response, NextFunction } from 'express';
 
 const router = Router({ mergeParams: true }); // inherits :siteId from parent
 
+/* ── GET /api/sites/:siteId/inventory/receipts
+   Returns all StockReceipt rows for a site, newest first.
+   This is what the Stock History view queries — one row per receive event.
+─────────────────────────────────────────────────────── */
+router.get(
+  '/receipts',
+  authenticate,
+  checkSiteAccess,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const siteId = req.params.siteId as string;
+      const receipts = await prisma.stockReceipt.findMany({
+        where: { siteId },
+        orderBy: { receivedAt: 'desc' },
+      });
+      res.json({ success: true, receipts });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 /* ── GET /api/sites/:siteId/inventory/history?date=YYYY-MM-DD
-   Returns stock snapshot for a site as of a given date.
-   Currently returns current InventoryItem state (best-effort).
-   When a StockTransaction log table is added, this endpoint
-   can reconstruct true historical state from cumulative totals.
+   Legacy endpoint — now redirects to StockReceipt log.
+   Returns stock receipts so the history view shows actual receive events.
 ─────────────────────────────────────────────────────────── */
 router.get(
   '/history',
@@ -75,15 +95,18 @@ router.post(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const siteId = req.params.siteId as string;
-      const { items, challanPhotoUrl } = req.body as {
+      const { items, challanNo, challanPhotoUrl, receivedAt } = req.body as {
         items: { material: string; qty: number; unit?: string; category?: string }[];
+        challanNo?: string;
         challanPhotoUrl?: string;
+        receivedAt?: string;
       };
 
       if (!Array.isArray(items) || items.length === 0) {
         return res.status(400).json({ success: false, error: 'items array is required' });
       }
 
+      const effectiveDate = receivedAt ? new Date(receivedAt) : new Date();
       const results = [];
       for (const item of items) {
         const material = String(item.material);
@@ -92,12 +115,12 @@ router.post(
         const category = String(item.category ?? '');
         if (!material || qty <= 0) continue;
 
+        // 1. Upsert aggregate InventoryItem (unchanged logic)
         const upserted = await prisma.inventoryItem.upsert({
           where: { siteId_material: { siteId, material } },
           update: {
             received: { increment: qty },
             inStore:  { increment: qty },
-            // Only update challanPhotoUrl if a new photo was provided for this receipt
             ...(challanPhotoUrl ? { challanPhotoUrl } : {}),
             updatedAt: new Date(),
           },
@@ -114,6 +137,21 @@ router.post(
           },
         });
         results.push(upserted);
+
+        // 2. Create StockReceipt transaction log row (additive — one row per receipt event)
+        await prisma.stockReceipt.create({
+          data: {
+            siteId,
+            material,
+            unit,
+            category,
+            quantity: qty,
+            challanNo: challanNo || null,
+            photoUrl: challanPhotoUrl || null,
+            receivedBy: req.user?.id || null,
+            receivedAt: effectiveDate,
+          },
+        });
       }
 
       res.status(201).json({ success: true, items: results });

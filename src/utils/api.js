@@ -132,8 +132,13 @@ export const stockAPI = {
   getAll: (siteId) =>
     api.get(`/sites/${siteId}/inventory`).then(r => r.data.items || []),
 
-  receiveStock: (siteId, items, challanPhotoUrl) =>
-    api.post(`/sites/${siteId}/inventory/receive`, { items, ...(challanPhotoUrl ? { challanPhotoUrl } : {}) }).then(r => r.data.items || []),
+  receiveStock: (siteId, items, challanPhotoUrl, challanNo, receivedAt) =>
+    api.post(`/sites/${siteId}/inventory/receive`, {
+      items,
+      ...(challanPhotoUrl ? { challanPhotoUrl } : {}),
+      ...(challanNo       ? { challanNo }       : {}),
+      ...(receivedAt      ? { receivedAt }      : {}),
+    }).then(r => r.data.items || []),
 
   returnStock: (siteId, items) =>
     api.post(`/sites/${siteId}/inventory/return`, { items }).then(r => r.data.items || []),
@@ -143,6 +148,10 @@ export const stockAPI = {
 
   deleteItem: (siteId, material) =>
     api.delete(`/sites/${siteId}/inventory/${encodeURIComponent(material)}`).then(r => r.data),
+
+  // Returns the StockReceipt transaction log (one row per receive event) for Stock History
+  getReceipts: (siteId) =>
+    api.get(`/sites/${siteId}/inventory/receipts`).then(r => r.data.receipts || []),
 
   getHistory: (siteId, date) => {
     const params = date ? { date } : {};

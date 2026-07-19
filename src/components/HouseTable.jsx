@@ -898,34 +898,46 @@ export default function HouseTable() {
              <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={val => f('address1', val)} error={errors.address1} /></Field>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
-                 <Select
-                   id="ht-field-ga"
-                   value={formGA}
-                   onChange={val => {
-                     setFormGA(val);
-                     setFormCity('');
-                     setFormArea('');
-                   }}
-                   error={errors.ga}
-                 >
-                   <option value="">Select GA Location</option>
-                   {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
-                 </Select>
+                 {!isAdmin && mergedGAs.length === 1 ? (
+                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                     {mergedGAs[0].label || mergedGAs[0].name}
+                   </div>
+                 ) : (
+                   <Select
+                     id="ht-field-ga"
+                     value={formGA}
+                     onChange={val => {
+                       setFormGA(val);
+                       setFormCity('');
+                       setFormArea('');
+                     }}
+                     error={errors.ga}
+                   >
+                     <option value="">Select GA Location</option>
+                     {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                   </Select>
+                 )}
                </Field>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                  <Field label="City" required error={errors.city}>
-                   <Select
-                     id="ht-field-city"
-                     value={formCity}
-                     onChange={val => {
-                       setFormCity(val);
-                       setFormArea('');
-                     }}
-                     error={errors.city}
-                   >
-                     <option value="">Select City</option>
-                     {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                   </Select>
+                   {!isAdmin && cityOptions.length === 1 ? (
+                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                       {cityOptions[0].label || cityOptions[0].name}
+                     </div>
+                   ) : (
+                     <Select
+                       id="ht-field-city"
+                       value={formCity}
+                       onChange={val => {
+                         setFormCity(val);
+                         setFormArea('');
+                       }}
+                       error={errors.city}
+                     >
+                       <option value="">Select City</option>
+                       {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                     </Select>
+                   )}
                  </Field>
                  <Field label="Area / Society" required error={errors.area}>
                    <Select

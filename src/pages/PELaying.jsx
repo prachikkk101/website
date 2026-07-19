@@ -58,6 +58,8 @@ export default function PELaying() {
   const { user }      = useContext(AuthContext);
   const { selectedSiteId, siteList, siteLoading, selGA, mergedGAs, getCitiesForGA, getAreasForCity, globalLocationContext } = useSite();
   const siteId        = selectedSiteId || null;
+  const isAdmin       = user?.role === 'ADMIN' ||
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com'].includes((user?.email || '').toLowerCase());
   const [allData,  setAllData]  = useState([]);
   const [loading,  setLoading]  = useState(false);
 
@@ -781,34 +783,46 @@ export default function PELaying() {
               </div>
             </Field>
             <Field label="GA Location" required error={errors.ga}>
-              <Select
-                value={formGA}
-                disabled={globalLocationContext?.gaId !== 'all'}
-                onChange={val => {
-                    setFormGA(val);
-                    setFormCity('');
-                    setFormArea('');
-                  }}
-                error={errors.ga}
-              >
-                <option value="">Select GA Location</option>
-                {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
-              </Select>
+              {!isAdmin && mergedGAs.length === 1 ? (
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                  {mergedGAs[0].label || mergedGAs[0].name}
+                </div>
+              ) : (
+                <Select
+                  value={formGA}
+                  disabled={globalLocationContext?.gaId !== 'all'}
+                  onChange={val => {
+                      setFormGA(val);
+                      setFormCity('');
+                      setFormArea('');
+                    }}
+                  error={errors.ga}
+                >
+                  <option value="">Select GA Location</option>
+                  {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                </Select>
+              )}
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="City" required error={errors.city}>
-                <Select
-                  value={formCity}
-                  disabled={globalLocationContext?.cityId !== 'all'}
-                  onChange={val => {
-                      setFormCity(val);
-                      setFormArea('');
-                    }}
-                  error={errors.city}
-                >
-                  <option value="">Select City</option>
-                  {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </Select>
+                {!isAdmin && cityOptions.length === 1 ? (
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                    {cityOptions[0].label || cityOptions[0].name}
+                  </div>
+                ) : (
+                  <Select
+                    value={formCity}
+                    disabled={globalLocationContext?.cityId !== 'all'}
+                    onChange={val => {
+                        setFormCity(val);
+                        setFormArea('');
+                      }}
+                    error={errors.city}
+                  >
+                    <option value="">Select City</option>
+                    {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                  </Select>
+                )}
               </Field>
               <Field label="Area / Society" required error={errors.area}>
                 <Select

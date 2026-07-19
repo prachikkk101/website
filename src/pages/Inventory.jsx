@@ -577,7 +577,7 @@ export default function Inventory() {
         unit: 'pcs',
         category: item.category,
       }));
-      await stockAPI.receiveStock(currentSiteId, itemsToSend, uploadedChallanUrl);
+      await stockAPI.receiveStock(currentSiteId, itemsToSend, uploadedChallanUrl, challan || null, dateRcv || null);
       const refreshed = await stockAPI.getAll(currentSiteId);
       setStockData(mapStockData(refreshed));
       showToast('✓ Stock received');
@@ -685,30 +685,49 @@ export default function Inventory() {
           background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
           border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
-        {/* GA Location dropdown */}
-        <select
-          id="inv-ga-filter"
-          value={invGA}
-          onChange={e => { setInvGA(e.target.value); setInvCity(''); }}
-          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-              fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
-        >
-          <option value="">— Select GA Location —</option>
-          {invGAOptions.map(g => <option key={g.id} value={g.id}>{g.label || g.name}</option>)}
-        </select>
-        {/* City dropdown (cascades from GA) */}
-        <select
-          id="inv-city-filter"
-          value={invCity}
-          onChange={e => setInvCity(e.target.value)}
-          disabled={!invGA}
-          style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-              fontSize: 12, background: invGA ? '#fff' : '#f8faf7', color: '#1f4e1a',
-              cursor: invGA ? 'pointer' : 'not-allowed', opacity: invGA ? 1 : 0.6 }}
-        >
-          <option value="">— Select City —</option>
-          {invCityOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}</option>)}
-        </select>
+        {/* GA Location — locked label if non-admin with only 1 option */}
+        {!isAdmin && invGAOptions.length === 1 ? (
+          <>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
+              {invGAOptions[0].label || invGAOptions[0].name}
+            </span>
+            {/* Auto-set when locked */}
+            {invGA !== invGAOptions[0].id && (setInvGA(invGAOptions[0].id), null)}
+          </>
+        ) : (
+          <select
+            id="inv-ga-filter"
+            value={invGA}
+            onChange={e => { setInvGA(e.target.value); setInvCity(''); }}
+            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+                fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+          >
+            <option value="">— Select GA Location —</option>
+            {invGAOptions.map(g => <option key={g.id} value={g.id}>{g.label || g.name}</option>)}
+          </select>
+        )}
+        {/* City — locked label if non-admin with only 1 city for this GA */}
+        {!isAdmin && invGA && invCityOptions.length === 1 ? (
+          <>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
+              {invCityOptions[0].label || invCityOptions[0].name}
+            </span>
+            {invCity !== invCityOptions[0].id && (setInvCity(invCityOptions[0].id), null)}
+          </>
+        ) : (
+          <select
+            id="inv-city-filter"
+            value={invCity}
+            onChange={e => setInvCity(e.target.value)}
+            disabled={!invGA}
+            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+                fontSize: 12, background: invGA ? '#fff' : '#f8faf7', color: '#1f4e1a',
+                cursor: invGA ? 'pointer' : 'not-allowed', opacity: invGA ? 1 : 0.6 }}
+          >
+            <option value="">— Select City —</option>
+            {invCityOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}</option>)}
+          </select>
+        )}
         {invGA && invCity && (
           <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
             ✔ Viewing: {invCityOptions.find(c => c.id === invCity)?.label || invCity}
@@ -741,20 +760,11 @@ export default function Inventory() {
               setHistoryLoading(true);
               setShowHistoryModal(true);
               try {
-                const result = await stockAPI.getHistory(currentSiteId, historyDate);
-                const mapped = (result.items || []).map((item, idx) => ({
-                  sr: idx + 1,
-                  mat: item.material,
-                  unit: item.unit || 'pcs',
-                  recv: item.received || 0,
-                  issued: item.issued || 0,
-                  ret: item.returned || 0,
-                  inStore: item.inStore || 0,
-                }));
-                setHistoryData(mapped);
-                setHistoryNote(result.note || '');
+                const receipts = await stockAPI.getReceipts(currentSiteId);
+                setHistoryData(receipts);
+                setHistoryNote('');
               } catch (err) {
-                showToast('✗ Failed to load history', 'error');
+                showToast('✗ Failed to load receipt history', 'error');
                 setShowHistoryModal(false);
               } finally {
                 setHistoryLoading(false);
@@ -762,7 +772,7 @@ export default function Inventory() {
             }}
             style={{ height: 32, background: '#1e3a5f', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            📅 Stock History
+            📦 Stock History
           </button>
           {canWrite && (
             <>
@@ -1190,34 +1200,48 @@ export default function Inventory() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={formErr.ga}>
-                <Select
-                  id="inv-field-ga"
-                  value={formGA}
-                  onChange={val => {
-                    setFormGA(val);
-                    setFormCity('');
-                    setFormArea('');
-                  }}
-                  error={formErr.ga}
-                >
-                  <option value="">Select GA Location</option>
-                  {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
-                </Select>
+                {!isAdmin && mergedGAs.length === 1 ? (
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                    {mergedGAs[0].label || mergedGAs[0].name}
+                    {formGA !== mergedGAs[0].id && (setFormGA(mergedGAs[0].id), null)}
+                  </div>
+                ) : (
+                  <Select
+                    id="inv-field-ga"
+                    value={formGA}
+                    onChange={val => {
+                      setFormGA(val);
+                      setFormCity('');
+                      setFormArea('');
+                    }}
+                    error={formErr.ga}
+                  >
+                    <option value="">Select GA Location</option>
+                    {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </Select>
+                )}
               </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={formErr.city}>
-                  <Select
-                    id="inv-field-city"
-                    value={formCity}
-                    onChange={val => {
-                      setFormCity(val);
-                      setFormArea('');
-                    }}
-                    error={formErr.city}
-                  >
-                    <option value="">Select City</option>
-                    {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </Select>
+                  {!isAdmin && cityOptions.length === 1 ? (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                      {cityOptions[0].label || cityOptions[0].name}
+                      {formCity !== cityOptions[0].id && (setFormCity(cityOptions[0].id), null)}
+                    </div>
+                  ) : (
+                    <Select
+                      id="inv-field-city"
+                      value={formCity}
+                      onChange={val => {
+                        setFormCity(val);
+                        setFormArea('');
+                      }}
+                      error={formErr.city}
+                    >
+                      <option value="">Select City</option>
+                      {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </Select>
+                  )}
                 </Field>
                 <Field label="Area / Site" required error={formErr.area}>
                   <Select
@@ -1438,124 +1462,80 @@ export default function Inventory() {
           </div>
         </div>
       )}
-      {/* ── Stock History Modal ── */}
+      {/* ── Stock History Modal — shows StockReceipt transaction log ── */}
       {showHistoryModal && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.55)', zIndex: 9100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
           onClick={e => { if (e.target === e.currentTarget) setShowHistoryModal(false); }}
         >
-          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
+          <div style={{ background: '#fff', borderRadius: 14, width: '100%', maxWidth: 860, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden' }}
             onClick={e => e.stopPropagation()}>
             {/* Header */}
             <div style={{ background: '#1e3a5f', padding: '16px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
               <div>
-                <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>📅 Stock History</span>
-                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 10 }}>View stock levels as of a specific date</span>
+                <span style={{ color: '#fff', fontSize: 15, fontWeight: 700 }}>📦 Stock Receive History</span>
+                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, marginLeft: 10 }}>Chronological log of all received stock</span>
               </div>
               <button onClick={() => setShowHistoryModal(false)} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.8)', fontSize: 20, cursor: 'pointer' }}>✕</button>
             </div>
 
-            {/* Controls */}
-            <div style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', flexShrink: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ fontSize: 12, fontWeight: 600, color: '#374151' }}>Select Date:</label>
-                <input
-                  type="date"
-                  value={historyDate}
-                  onChange={async e => {
-                    const newDate = e.target.value;
-                    setHistoryDate(newDate);
-                    if (!currentSiteId) return;
-                    setHistoryLoading(true);
-                    try {
-                      const result = await stockAPI.getHistory(currentSiteId, newDate);
-                      const mapped = (result.items || []).map((item, idx) => ({
-                        sr: idx + 1, mat: item.material, unit: item.unit || 'pcs',
-                        recv: item.received || 0, issued: item.issued || 0,
-                        ret: item.returned || 0, inStore: item.inStore || 0,
-                      }));
-                      setHistoryData(mapped);
-                      setHistoryNote(result.note || '');
-                    } catch { showToast('✗ Failed to reload', 'error'); }
-                    finally { setHistoryLoading(false); }
-                  }}
-                  style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 6, padding: '0 10px', fontSize: 13 }}
-                />
-              </div>
-              <button
-                onClick={() => {
-                  const exportRows = historyData.map(r => ({ ...r, open: 0, onSite: r.recv - r.issued - r.ret, req: 0, status: { label: r.inStore > 0 ? 'OK' : 'Critical' } }));
-                  exportStockData(exportRows, historyDate);
-                }}
-                style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 6, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
-                Export
-              </button>
-              <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>{historyData.length} materials</span>
+            {/* Count badge */}
+            <div style={{ padding: '10px 20px', borderBottom: '1px solid #e2e8f0', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>
+                {historyData.length} receipt event{historyData.length !== 1 ? 's' : ''} found
+              </span>
             </div>
-
-            {/* Note banner */}
-            {historyNote && (
-              <div style={{ padding: '8px 20px', background: '#fef3c7', borderBottom: '1px solid #fde68a', fontSize: 11, color: '#92400e', flexShrink: 0 }}>
-                ℹ️ {historyNote}
-              </div>
-            )}
 
             {/* Table body */}
             <div style={{ overflowY: 'auto', flex: 1, padding: '0 0 16px' }}>
               {historyLoading ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Loading history...</div>
+                <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Loading receipt history...</div>
               ) : historyData.length === 0 ? (
-                <div style={{ padding: 32, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No stock data found for this site.</div>
+                <div style={{ padding: 40, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                  <div style={{ fontSize: 32, marginBottom: 8 }}>📭</div>
+                  No stock receipts found for this site yet.<br />
+                  <span style={{ fontSize: 11, color: '#c0c0c0' }}>Receipts will appear here after you use "Receive Stock" from today.</span>
+                </div>
               ) : (
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
                   <thead>
                     <tr style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%)', color: '#fff', position: 'sticky', top: 0 }}>
-                      {['Sr.', 'Material', 'Unit', 'Received', 'Used', 'Returned', 'Available', 'Status'].map(h => (
-                        <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Material' ? 'left' : 'center', fontWeight: 700, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                      {['Date', 'Challan / DC No.', 'Material', 'Qty Received', 'Photo'].map(h => (
+                        <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Material' || h === 'Challan / DC No.' ? 'left' : 'center', fontWeight: 700, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {historyData.map((r, i) => {
-                      const avail = Math.max(0, r.recv - r.issued - r.ret);
-                      const pct = r.recv > 0 ? (avail / r.recv) * 100 : 0;
-                      const status = pct >= 50 ? { label: 'Good', color: '#16a34a', bg: '#dcfce7' }
-                        : pct >= 20 ? { label: 'Low', color: '#d97706', bg: '#fef3c7' }
-                        : r.recv === 0 ? { label: 'No Data', color: '#94a3b8', bg: '#f1f5f9' }
-                        : { label: 'Critical', color: '#dc2626', bg: '#fee2e2' };
                       const base = i % 2 === 0 ? '#fff' : '#f8fbf8';
+                      // Format date as DD/MM/YYYY
+                      const d = r.receivedAt ? new Date(r.receivedAt) : null;
+                      const dateStr = d
+                        ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
+                        : '—';
                       return (
-                        <tr key={r.mat} style={{ background: base, borderBottom: '1px solid #f1f5f9' }}
+                        <tr key={r.id} style={{ background: base, borderBottom: '1px solid #f1f5f9' }}
                           onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
                           onMouseLeave={e => e.currentTarget.style.background = base}>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#94a3b8', fontWeight: 500 }}>{r.sr}</td>
-                          <td style={{ padding: '12px 14px', fontWeight: 600, color: '#1e293b' }}>{r.mat}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#64748b' }}>{r.unit}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 600 }}>{r.recv.toLocaleString()}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#1e293b', fontWeight: 600 }}>{r.issued.toLocaleString()}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center', color: '#3b82f6', fontWeight: 600 }}>{r.ret.toLocaleString()}</td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                            <span style={{ fontWeight: 700, fontSize: 13, color: avail > 0 ? '#16a34a' : '#dc2626' }}>{avail.toLocaleString()}</span>
+                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>{dateStr}</td>
+                          <td style={{ padding: '11px 14px', color: '#64748b', fontStyle: r.challanNo ? 'normal' : 'italic' }}>
+                            {r.challanNo || <span style={{ color: '#c0c0c0' }}>—</span>}
                           </td>
-                          <td style={{ padding: '12px 14px', textAlign: 'center' }}>
-                            <span style={{ background: status.bg, color: status.color, fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 10, display: 'inline-block', whiteSpace: 'nowrap' }}>{status.label}</span>
+                          <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1e293b' }}>{r.material}</td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 700, fontSize: 13 }}>
+                            {r.quantity.toLocaleString()} <span style={{ fontWeight: 400, fontSize: 10, color: '#64748b' }}>{r.unit}</span>
+                          </td>
+                          <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                            {r.photoUrl ? (
+                              <PhotoViewer photoUrl={r.photoUrl} label="Challan Photo" />
+                            ) : (
+                              <span style={{ fontSize: 11, color: '#c0c0c0', fontStyle: 'italic' }}>No photo</span>
+                            )}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
-                  <tfoot>
-                    <tr style={{ background: '#eff6ff', borderTop: '2px solid #1e3a5f' }}>
-                      <td colSpan={3} style={{ padding: '12px 14px', textAlign: 'right', color: '#1e3a5f', fontWeight: 700, fontSize: 11, textTransform: 'uppercase' }}>Total</td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.recv,0).toLocaleString()}</td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#1e293b', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.issued,0).toLocaleString()}</td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#3b82f6', fontWeight: 700 }}>{historyData.reduce((s,r) => s+r.ret,0).toLocaleString()}</td>
-                      <td style={{ padding: '12px 14px', textAlign: 'center', color: '#16a34a', fontWeight: 700, fontSize: 13 }}>{historyData.reduce((s,r) => s+Math.max(0,r.recv-r.issued-r.ret),0).toLocaleString()}</td>
-                      <td />
-                    </tr>
-                  </tfoot>
                 </table>
               )}
             </div>
