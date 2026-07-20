@@ -248,25 +248,6 @@ export default function Inventory() {
     return ga ? (ga.cities || []) : [];
   }, [invGA, mergedGAs]);
 
-  // ── Assigned pairs (for non-admin locking) ──
-  // Each site in siteList IS one GA+City pair (already filtered by backend to user's sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName   || '',
-    cityName:  s.location || '',
-    gaLabel:   s.gaName   || s.name || '',
-    cityLabel: s.location || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
-
-  // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
-  useEffect(() => {
-    if (isAdmin || siteList.length === 0) return;
-    if (assignedPairs.length === 1) {
-      setInvGA(assignedPairs[0].gaName);
-      setInvCity(assignedPairs[0].cityName);
-    }
-  }, [isAdmin, assignedPairs.length, siteList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Derive siteId from the GA + City selection.
   const invSiteId = useMemo(() => {
@@ -328,6 +309,26 @@ export default function Inventory() {
       .includes((user?.email || '').toLowerCase())
   );
   const canWrite = isAdmin || user?.role === 'SUPERVISOR' || user?.role === 'WORKER';
+
+  // ── Assigned pairs (for non-admin locking) ──
+  // Each site in siteList IS one GA+City pair (already filtered by backend to user's sites)
+  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
+    siteId:    s.id,
+    gaName:    s.gaName   || '',
+    cityName:  s.location || '',
+    gaLabel:   s.gaName   || s.name || '',
+    cityLabel: s.location || '',
+    label:     `${s.gaName || ''} — ${s.location || ''}`,
+  }));
+
+  // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
+  useEffect(() => {
+    if (isAdmin || siteList.length === 0) return;
+    if (assignedPairs.length === 1) {
+      setInvGA(assignedPairs[0].gaName);
+      setInvCity(assignedPairs[0].cityName);
+    }
+  }, [isAdmin, assignedPairs.length, siteList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Delivery form state
   const [challan, setChallan] = useState('');

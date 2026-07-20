@@ -141,16 +141,6 @@ export default function HouseTable() {
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
   const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
 
-  // ── Assigned pairs (for non-admin GA+City locking) ──
-  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName    || '',
-    cityName:  s.location  || '',
-    gaLabel:   s.gaName    || s.name || '',
-    cityLabel: s.location  || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
 
   // ── Panel + edit state — MUST be declared BEFORE any useEffect that reads them ──
   const [panelOpen,    setPanelOpen]    = useState(false);
@@ -359,6 +349,18 @@ export default function HouseTable() {
     ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
+
+  // ── Assigned pairs (for non-admin GA+City locking) ──
+  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
+  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
+    siteId:    s.id,
+    gaName:    s.gaName    || '',
+    cityName:  s.location  || '',
+    gaLabel:   s.gaName    || s.name || '',
+    cityLabel: s.location  || '',
+    label:     `${s.gaName || ''} — ${s.location || ''}`,
+  }));
+
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
   const canWrite     = !isViewOnly;
 
