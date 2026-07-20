@@ -73,7 +73,11 @@ export default function PELaying() {
     return mergedGAs.flatMap(ga => ga.cities || []);
   };
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
-  const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
+  // For non-admin single-site users, derive area options directly from the assigned site's
+  // location (city) field — this avoids the one-render gap where formCity is '' on mount
+  // before the panelOpen useEffect fires and sets it from assignedPairs[0].cityName.
+  const _areaCityId = formCity || (!isAdmin && siteList.length === 1 ? (siteList[0]?.location || '') : '');
+  const areaOptions = _areaCityId ? getAreasForCity(_areaCityId) : [];
 
   // ── Assigned pairs (for non-admin GA+City locking) ──
   // Each site in siteList IS one GA+City pair (backend already filtered to user's actual assigned sites)

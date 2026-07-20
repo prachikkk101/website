@@ -139,7 +139,11 @@ export default function HouseTable() {
     return mergedGAs.flatMap(ga => ga.cities || []);
   };
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
-  const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
+  // For non-admin single-site users, derive area options directly from the assigned site's
+  // location field — avoids the one-render gap where formCity is '' before the panelOpen
+  // useEffect sets it from assignedPairs[0].cityName.
+  const _areaCityId = formCity || (user?.role !== 'ADMIN' && siteList.length === 1 ? (siteList[0]?.location || '') : '');
+  const areaOptions = _areaCityId ? getAreasForCity(_areaCityId) : [];
 
 
   // ── Panel + edit state — MUST be declared BEFORE any useEffect that reads them ──
