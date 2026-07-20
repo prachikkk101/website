@@ -286,6 +286,25 @@ export default function HouseTable() {
     setPage(1);
   }, [selGA]);
 
+  // Auth / role checks — MUST be before the useEffect that reads isAdmin/assignedPairs in its dep array
+  const session      = getSession();
+  const isSupervisor = user?.role === 'SUPERVISOR';
+  const siteAccess   = session.siteAccess;
+  const isAdmin      = (
+    user?.role === 'ADMIN' || user?.role === 'admin' ||
+    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
+      .includes((session.email || '').toLowerCase())
+  );
+  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
+  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
+    siteId:    s.id,
+    gaName:    s.gaName    || '',
+    cityName:  s.location  || '',
+    gaLabel:   s.gaName    || s.name || '',
+    cityLabel: s.location  || '',
+    label:     `${s.gaName || ''} — ${s.location || ''}`,
+  }));
+
   // Pre-fill and restrict GA / City / Area fields when panel opens or editEntry changes
   useEffect(() => {
     if (panelOpen) {
@@ -340,26 +359,6 @@ export default function HouseTable() {
     }
   }, [panelOpen, editEntry, globalLocationContext, mergedGAs, assignedPairs, isAdmin]);
 
-  // Auth / role checks
-  const session    = getSession();
-  const isSupervisor = user?.role === 'SUPERVISOR';
-  const siteAccess   = session.siteAccess;
-  const isAdmin      = (
-    user?.role === 'ADMIN' || user?.role === 'admin' ||
-    ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
-      .includes((session.email || '').toLowerCase())
-  );
-
-  // ── Assigned pairs (for non-admin GA+City locking) ──
-  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName    || '',
-    cityName:  s.location  || '',
-    gaLabel:   s.gaName    || s.name || '',
-    cityLabel: s.location  || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
 
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
   const canWrite     = !isViewOnly;
