@@ -757,12 +757,28 @@ export default function HouseTable() {
       .flatMap(g => g.cities || [])
       .find(c => c.id === formCity)?.label || formCity;
 
-    const targetSite = siteList.find(s => 
-      s.gaName?.toLowerCase() === formGA?.toLowerCase() && 
-      s.location?.toLowerCase() === formCity?.toLowerCase() && 
-      s.chargeArea?.toLowerCase() === formArea?.toLowerCase()
-    );
-    const resolvedSiteId = targetSite ? targetSite.id : siteId;
+    // Resolve the correct siteId for this entry.
+    // Priority:
+    // 1. Non-admin with assigned pairs: look up by GA+City from the pair directly (reliable)
+    // 2. Admin or fallback: use the triple gaName+location+chargeArea string match
+    // 3. Last resort: selectedSiteId from context
+    let resolvedSiteId = null;
+    if (!isAdmin && assignedPairs.length > 0) {
+      const pair = assignedPairs.find(p =>
+        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
+        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+      );
+      resolvedSiteId = pair?.siteId ?? (assignedPairs.length === 1 ? assignedPairs[0].siteId : null);
+    }
+    if (!resolvedSiteId) {
+      // Admin or non-admin fallback: try the full 3-field match
+      const targetSite = siteList.find(s =>
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase() &&
+        s.chargeArea?.toLowerCase() === formArea?.toLowerCase()
+      );
+      resolvedSiteId = targetSite?.id ?? siteId ?? null;
+    }
 
     if (!resolvedSiteId) {
       showToast('❌ No matching site found for selected GA, City, and Area.', 'error');

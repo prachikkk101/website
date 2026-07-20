@@ -252,18 +252,30 @@ export default function Inventory() {
   // Derive siteId from the GA + City selection.
   const invSiteId = useMemo(() => {
     if (!invGA || !invCity) return null;
+
+    // Priority 1: exact gaName + location match (most reliable).
+    // invCity is set to s.location (from assignedPairs or city dropdown which uses s.location as id).
+    // invGA is set to s.gaName or a GA id. Try both.
+    const exactMatch = siteList.find(s =>
+      (s.gaName?.toLowerCase() === invGA.toLowerCase() ||
+       s.gaName?.toLowerCase().includes(invGA.toLowerCase()) ||
+       invGA.toLowerCase().includes((s.gaName || '').toLowerCase())) &&
+      s.location?.toLowerCase() === invCity.toLowerCase()
+    );
+    if (exactMatch) return exactMatch.id;
+
+    // Priority 2: fuzzy match — GA name + site name contains city label (legacy fallback)
     const cityObj = invCityOptions.find(c => c.id === invCity);
-    const cityLabel = (cityObj?.label || cityObj?.name || '').toLowerCase();
+    const cityLabel = (cityObj?.label || cityObj?.name || invCity).toLowerCase();
     const gaObj = mergedGAs.find(g => g.id === invGA);
-    const gaLabel = (gaObj?.label || gaObj?.name || '').toLowerCase();
-    // Try city-name match within GA first
-    const matched = siteList.find(s => {
+    const gaLabel = (gaObj?.label || gaObj?.name || invGA).toLowerCase();
+    const fuzzyMatch = siteList.find(s => {
       const sName = (s.name || '').toLowerCase();
       const sGA = (s.gaName || '').toLowerCase();
       return (sGA === gaLabel || sGA.includes(gaLabel) || gaLabel.includes(sGA)) &&
              (sName.includes(cityLabel) || cityLabel.includes(sName));
     });
-    return matched?.id || selectedSiteId;
+    return fuzzyMatch?.id || selectedSiteId || null;
   }, [invGA, invCity, invCityOptions, mergedGAs, siteList, selectedSiteId]);
 
   // Keep currentSiteId pointing to the effective siteId for this page
