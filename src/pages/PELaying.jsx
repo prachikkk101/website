@@ -883,14 +883,28 @@ export default function PELaying() {
                 )}
               </Field>
               <Field label="Area / Society" required error={errors.area}>
-                <Select
-                  value={formArea}
-                  onChange={val => setFormArea(val)}
-                  error={errors.area}
-                >
-                  <option value="">Select Area</option>
-                  {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                </Select>
+                {areaOptions.length > 0 ? (
+                  <Select
+                    value={formArea}
+                    onChange={val => setFormArea(val)}
+                    error={errors.area}
+                  >
+                    <option value="">Select Area</option>
+                    {/* Always include the current value as an option when editing so it shows correctly */}
+                    {formArea && !areaOptions.includes(formArea) && (
+                      <option value={formArea}>{formArea}</option>
+                    )}
+                    {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
+                  </Select>
+                ) : (
+                  // No pre-defined charge areas for this site — allow free-text entry
+                  <Input
+                    value={formArea}
+                    onChange={val => setFormArea(val)}
+                    error={errors.area}
+                    placeholder={formCity ? 'Enter area / society name' : 'Select GA & City first'}
+                  />
+                )}
               </Field>
             </div>
           </div>
