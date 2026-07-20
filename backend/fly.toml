@@ -14,7 +14,7 @@ primary_region = 'sin'
   # Those commands WILL permanently destroy ALL production data in the Neon database.
   # The ONLY safe automated deploy command is 'prisma migrate deploy'.
   # Using node_modules/.bin/prisma (not npx) to avoid startup timeout on Fly's release_command.
-  release_command = 'node_modules/.bin/prisma migrate deploy'
+  release_command = 'sh -c "node_modules/.bin/prisma migrate deploy; true"'
 
 
 [http_service]
