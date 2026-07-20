@@ -248,9 +248,27 @@ export default function Inventory() {
     return ga ? (ga.cities || []) : [];
   }, [invGA, mergedGAs]);
 
+  // ── Assigned pairs (for non-admin locking) ──
+  // Each site in siteList IS one GA+City pair (already filtered by backend to user's sites)
+  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
+    siteId:    s.id,
+    gaName:    s.gaName   || '',
+    cityName:  s.location || '',
+    gaLabel:   s.gaName   || s.name || '',
+    cityLabel: s.location || '',
+    label:     `${s.gaName || ''} — ${s.location || ''}`,
+  }));
+
+  // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
+  useEffect(() => {
+    if (isAdmin || siteList.length === 0) return;
+    if (assignedPairs.length === 1) {
+      setInvGA(assignedPairs[0].gaName);
+      setInvCity(assignedPairs[0].cityName);
+    }
+  }, [isAdmin, assignedPairs.length, siteList.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Derive siteId from the GA + City selection.
-  // Match site whose gaName matches selected GA and whose name contains the city label.
-  // Falls back to selectedSiteId so non-admins always have a valid site.
   const invSiteId = useMemo(() => {
     if (!invGA || !invCity) return null;
     const cityObj = invCityOptions.find(c => c.id === invCity);
@@ -415,20 +433,40 @@ export default function Inventory() {
   useEffect(() => {
     if (panelOpen) {
       const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-      setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
-      setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-      setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      if (ctx.gaId !== 'all') {
+        setFormGA(ctx.gaId);
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
+      } else if (!isAdmin && assignedPairs.length === 1) {
+        setFormGA(assignedPairs[0].gaName);
+        setFormCity(assignedPairs[0].cityName);
+        setFormArea('');
+      } else {
+        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      }
     }
-  }, [panelOpen, globalLocationContext]);
+  }, [panelOpen, globalLocationContext, isAdmin, assignedPairs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (returnStockOpen) {
       const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-      setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
-      setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-      setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      if (ctx.gaId !== 'all') {
+        setFormGA(ctx.gaId);
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
+      } else if (!isAdmin && assignedPairs.length === 1) {
+        setFormGA(assignedPairs[0].gaName);
+        setFormCity(assignedPairs[0].cityName);
+        setFormArea('');
+      } else {
+        setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
+        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+        setFormArea(ctx.area !== 'all' ? ctx.area : '');
+      }
     }
-  }, [returnStockOpen, globalLocationContext]);
+  }, [returnStockOpen, globalLocationContext, isAdmin, assignedPairs.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => (stockData || []).map(s => {
     const netUsed = s.issued - s.ret;
@@ -685,16 +723,28 @@ export default function Inventory() {
           background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
           border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
-        {/* GA Location — locked label if non-admin with only 1 option */}
-        {!isAdmin && invGAOptions.length === 1 ? (
-          <>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
-              {invGAOptions[0].label || invGAOptions[0].name}
-            </span>
-            {/* Auto-set when locked */}
-            {invGA !== invGAOptions[0].id && (setInvGA(invGAOptions[0].id), null)}
-          </>
+        {/* GA Location — paired locking for non-admins */}
+        {!isAdmin && assignedPairs.length === 1 ? (
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
+            {assignedPairs[0].gaLabel}
+          </span>
+        ) : !isAdmin && assignedPairs.length > 1 ? (
+          // Multiple assigned pairs — ONE combined dropdown
+          <select
+            id="inv-ga-filter"
+            value={assignedPairs.find(p => p.gaName === invGA && p.cityName === invCity)?.siteId || ''}
+            onChange={e => {
+              const pair = assignedPairs.find(p => p.siteId === e.target.value);
+              if (pair) { setInvGA(pair.gaName); setInvCity(pair.cityName); }
+            }}
+            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+                fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+          >
+            <option value="">— Select GA — City —</option>
+            {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+          </select>
         ) : (
+          // Admin: full open GA dropdown
           <select
             id="inv-ga-filter"
             value={invGA}
@@ -706,15 +756,18 @@ export default function Inventory() {
             {invGAOptions.map(g => <option key={g.id} value={g.id}>{g.label || g.name}</option>)}
           </select>
         )}
-        {/* City — locked label if non-admin with only 1 city for this GA */}
-        {!isAdmin && invGA && invCityOptions.length === 1 ? (
-          <>
-            <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
-              {invCityOptions[0].label || invCityOptions[0].name}
-            </span>
-            {invCity !== invCityOptions[0].id && (setInvCity(invCityOptions[0].id), null)}
-          </>
+        {/* City — locked for single pair, read-only for multi-pair, open for admin */}
+        {!isAdmin && assignedPairs.length === 1 ? (
+          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
+            {assignedPairs[0].cityLabel}
+          </span>
+        ) : !isAdmin && assignedPairs.length > 1 ? (
+          // City shown as read-only label (set by combined GA—City dropdown above)
+          <span style={{ fontSize: 12, fontWeight: 600, color: invCity ? '#1f4e1a' : '#94a3b8', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px', fontStyle: invCity ? 'normal' : 'italic' }}>
+            {invCity || 'Select above ↑'}
+          </span>
         ) : (
+          // Admin: full open city dropdown
           <select
             id="inv-city-filter"
             value={invCity}
@@ -1200,11 +1253,23 @@ export default function Inventory() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={formErr.ga}>
-                {!isAdmin && mergedGAs.length === 1 ? (
+                {!isAdmin && assignedPairs.length === 1 ? (
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                    {mergedGAs[0].label || mergedGAs[0].name}
-                    {formGA !== mergedGAs[0].id && (setFormGA(mergedGAs[0].id), null)}
+                    {assignedPairs[0].gaLabel}
                   </div>
+                ) : !isAdmin && assignedPairs.length > 1 ? (
+                  <Select
+                    id="inv-field-ga"
+                    value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
+                    onChange={val => {
+                      const pair = assignedPairs.find(p => p.siteId === val);
+                      if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
+                    }}
+                    error={formErr.ga}
+                  >
+                    <option value="">Select GA — City</option>
+                    {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                  </Select>
                 ) : (
                   <Select
                     id="inv-field-ga"
@@ -1223,10 +1288,13 @@ export default function Inventory() {
               </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={formErr.city}>
-                  {!isAdmin && cityOptions.length === 1 ? (
+                  {!isAdmin && assignedPairs.length === 1 ? (
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                      {cityOptions[0].label || cityOptions[0].name}
-                      {formCity !== cityOptions[0].id && (setFormCity(cityOptions[0].id), null)}
+                      {assignedPairs[0].cityLabel}
+                    </div>
+                  ) : !isAdmin && assignedPairs.length > 1 ? (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
+                      {formCity || 'Select above ↑'}
                     </div>
                   ) : (
                     <Select
@@ -1296,32 +1364,60 @@ export default function Inventory() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={retFormErr.ga}>
-                <Select
-                  value={formGA}
-                  onChange={val => {
-                    setFormGA(val);
-                    setFormCity('');
-                    setFormArea('');
-                  }}
-                  error={retFormErr.ga}
-                >
-                  <option value="">Select GA Location</option>
-                  {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
-                </Select>
+                {!isAdmin && assignedPairs.length === 1 ? (
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                    {assignedPairs[0].gaLabel}
+                  </div>
+                ) : !isAdmin && assignedPairs.length > 1 ? (
+                  <Select
+                    value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
+                    onChange={val => {
+                      const pair = assignedPairs.find(p => p.siteId === val);
+                      if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
+                    }}
+                    error={retFormErr.ga}
+                  >
+                    <option value="">Select GA — City</option>
+                    {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                  </Select>
+                ) : (
+                  <Select
+                    value={formGA}
+                    onChange={val => {
+                      setFormGA(val);
+                      setFormCity('');
+                      setFormArea('');
+                    }}
+                    error={retFormErr.ga}
+                  >
+                    <option value="">Select GA Location</option>
+                    {mergedGAs.map(g => <option key={g.id} value={g.id}>{g.label}</option>)}
+                  </Select>
+                )}
               </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={retFormErr.city}>
-                  <Select
-                    value={formCity}
-                    onChange={val => {
-                      setFormCity(val);
-                      setFormArea('');
-                    }}
-                    error={retFormErr.city}
-                  >
-                    <option value="">Select City</option>
-                    {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-                  </Select>
+                  {!isAdmin && assignedPairs.length === 1 ? (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
+                      {assignedPairs[0].cityLabel}
+                    </div>
+                  ) : !isAdmin && assignedPairs.length > 1 ? (
+                    <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
+                      {formCity || 'Select above ↑'}
+                    </div>
+                  ) : (
+                    <Select
+                      value={formCity}
+                      onChange={val => {
+                        setFormCity(val);
+                        setFormArea('');
+                      }}
+                      error={retFormErr.city}
+                    >
+                      <option value="">Select City</option>
+                      {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </Select>
+                  )}
                 </Field>
                 <Field label="Area / Site" required error={retFormErr.area}>
                   <Select

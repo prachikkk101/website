@@ -141,6 +141,17 @@ export default function HouseTable() {
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
   const areaOptions = formCity !== '' ? getAreasForCity(formCity) : [];
 
+  // ── Assigned pairs (for non-admin GA+City locking) ──
+  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
+  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
+    siteId:    s.id,
+    gaName:    s.gaName    || '',
+    cityName:  s.location  || '',
+    gaLabel:   s.gaName    || s.name || '',
+    cityLabel: s.location  || '',
+    label:     `${s.gaName || ''} — ${s.location || ''}`,
+  }));
+
   // ── Panel + edit state — MUST be declared BEFORE any useEffect that reads them ──
   const [panelOpen,    setPanelOpen]    = useState(false);
   const [editEntry,    setEditEntry]    = useState(null);
@@ -315,16 +326,29 @@ export default function HouseTable() {
         setFormArea(editEntry.area || '');
       } else {
         const ctx = globalLocationContext || { gaId: 'all', cityId: 'all', area: 'all' };
-        // Auto-select if user has exactly one GA location (supervisor/worker with one site)
-        const autoGA = ctx.gaId !== 'all'
-          ? ctx.gaId
-          : (mergedGAs.length === 1 ? mergedGAs[0].id : '');
-        setFormGA(autoGA);
-        setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-        setFormArea(ctx.area !== 'all' ? ctx.area : '');
+        if (ctx.gaId !== 'all') {
+          // Navbar context is pinned — use it directly
+          setFormGA(ctx.gaId);
+          setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
+          setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
+        } else if (!isAdmin && assignedPairs.length === 1) {
+          // Single assigned site — auto-set both GA and City from the pair
+          setFormGA(assignedPairs[0].gaName);
+          setFormCity(assignedPairs[0].cityName);
+          setFormArea('');
+        } else if (!isAdmin && mergedGAs.length === 1) {
+          // Only one GA in system for this user
+          setFormGA(mergedGAs[0].id);
+          setFormCity('');
+          setFormArea('');
+        } else {
+          setFormGA('');
+          setFormCity('');
+          setFormArea('');
+        }
       }
     }
-  }, [panelOpen, editEntry, globalLocationContext, mergedGAs]);
+  }, [panelOpen, editEntry, globalLocationContext, mergedGAs, assignedPairs, isAdmin]);
 
   // Auth / role checks
   const session    = getSession();
@@ -898,11 +922,27 @@ export default function HouseTable() {
              <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={val => f('address1', val)} error={errors.address1} /></Field>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
-                 {!isAdmin && mergedGAs.length === 1 ? (
+                 {!isAdmin && assignedPairs.length === 1 ? (
+                   // Single assigned GA+City pair — show both as locked text (no dropdown for either)
                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                     {mergedGAs[0].label || mergedGAs[0].name}
+                     {assignedPairs[0].gaLabel}
                    </div>
+                 ) : !isAdmin && assignedPairs.length > 1 ? (
+                   // Multiple assigned pairs — ONE combined dropdown "Hisar — PLA", "Hisar — UE-II"
+                   <Select
+                     id="ht-field-ga"
+                     value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
+                     onChange={val => {
+                       const pair = assignedPairs.find(p => p.siteId === val);
+                       if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
+                     }}
+                     error={errors.ga}
+                   >
+                     <option value="">Select GA — City</option>
+                     {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                   </Select>
                  ) : (
+                   // Admin: full open dropdown
                    <Select
                      id="ht-field-ga"
                      value={formGA}
@@ -920,11 +960,18 @@ export default function HouseTable() {
                </Field>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                  <Field label="City" required error={errors.city}>
-                   {!isAdmin && cityOptions.length === 1 ? (
+                   {!isAdmin && assignedPairs.length === 1 ? (
+                     // Single pair: City locked (formCity already auto-set by useEffect)
                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                       {cityOptions[0].label || cityOptions[0].name}
+                       {assignedPairs[0].cityLabel}
+                     </div>
+                   ) : !isAdmin && assignedPairs.length > 1 ? (
+                     // Multiple pairs: City is set together with GA in the combined dropdown above
+                     <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
+                       {formCity || 'Select above ↑'}
                      </div>
                    ) : (
+                     // Admin: full open city dropdown
                      <Select
                        id="ht-field-city"
                        value={formCity}
