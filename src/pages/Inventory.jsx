@@ -362,10 +362,11 @@ export default function Inventory() {
     return mergedGAs.flatMap(ga => ga.cities || []);
   };
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
-  // For non-admin single-site users, derive area options directly from the assigned site's
-  // location field — avoids the one-render gap where formCity is '' before the form open
-  // useEffect sets it from assignedPairs[0].cityName.
-  const _areaCityId = formCity || (user?.role !== 'ADMIN' && siteList.length === 1 ? (siteList[0]?.location || '') : '');
+  // For non-admin users, derive area options from formCity (set when panel opens).
+  // Fallback: if formCity is still empty (one-render lag), use the single shared city
+  // when ALL assigned sites share the same city (covers both 1-site and multi-site same-city users).
+  const _areaCityId = formCity ||
+    (!isAdmin && uniqueCities.length === 1 ? uniqueCities[0] : '');
   const areaOptions = _areaCityId ? getAreasForCity(_areaCityId) : [];
 
   // Summary accordion & return stock states
@@ -459,9 +460,11 @@ export default function Inventory() {
         setFormGA(ctx.gaId);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
         setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
-      } else if (!isAdmin && assignedPairs.length === 1) {
-        setFormGA(assignedPairs[0].gaName);
-        setFormCity(assignedPairs[0].cityName);
+      } else if (!isAdmin && assignedPairs.length > 0) {
+        // Pre-fill locked fields based on unique values across all assigned sites.
+        // Works for 1 site OR multiple sites that share the same GA/City (e.g. Atul Kumar).
+        if (uniqueGAs.length === 1)    setFormGA(uniqueGAs[0]);    else setFormGA('');
+        if (uniqueCities.length === 1) setFormCity(uniqueCities[0]); else setFormCity('');
         setFormArea('');
       } else {
         setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
@@ -469,7 +472,7 @@ export default function Inventory() {
         setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }
     }
-  }, [panelOpen, globalLocationContext, isAdmin, assignedPairs.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [panelOpen, globalLocationContext, isAdmin, assignedPairs.length, uniqueGAs, uniqueCities]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (returnStockOpen) {
@@ -478,9 +481,10 @@ export default function Inventory() {
         setFormGA(ctx.gaId);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
         setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
-      } else if (!isAdmin && assignedPairs.length === 1) {
-        setFormGA(assignedPairs[0].gaName);
-        setFormCity(assignedPairs[0].cityName);
+      } else if (!isAdmin && assignedPairs.length > 0) {
+        // Same fix as panelOpen: pre-fill locked fields from unique values.
+        if (uniqueGAs.length === 1)    setFormGA(uniqueGAs[0]);    else setFormGA('');
+        if (uniqueCities.length === 1) setFormCity(uniqueCities[0]); else setFormCity('');
         setFormArea('');
       } else {
         setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
@@ -488,7 +492,7 @@ export default function Inventory() {
         setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }
     }
-  }, [returnStockOpen, globalLocationContext, isAdmin, assignedPairs.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [returnStockOpen, globalLocationContext, isAdmin, assignedPairs.length, uniqueGAs, uniqueCities]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rows = useMemo(() => (stockData || []).map(s => {
     const netUsed = s.issued - s.ret;
