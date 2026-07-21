@@ -142,7 +142,9 @@ export default function HouseTable() {
   // For non-admin users, derive area options from formCity (set by the panelOpen useEffect).
   // Fallback: if formCity hasn't been set yet (one-render lag), compute the shared city
   // from siteList directly — works for any number of sites as long as they share one city.
-  const _fallbackCity = !isAdmin && siteList.length > 0
+  // NOTE: do NOT reference `isAdmin` here — it's declared later in the component (TDZ risk).
+  // The cs.length===1 guard already prevents false positives for admins (many sites, many cities).
+  const _fallbackCity = siteList.length > 0
     ? (() => { const cs = [...new Set(siteList.map(s => s.location || '').filter(Boolean))]; return cs.length === 1 ? cs[0] : ''; })()
     : '';
   const _areaCityId = formCity || _fallbackCity;
