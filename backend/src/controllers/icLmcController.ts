@@ -11,7 +11,10 @@ export const getICWork = async (req: AuthenticatedRequest, res: Response, next: 
     const siteId = req.params.siteId as string;
     const { status } = req.query;
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (status) where.status = status as ICStatus;
 
     const records = await prisma.iCWork.findMany({
@@ -94,7 +97,10 @@ export const getLMCWork = async (req: AuthenticatedRequest, res: Response, next:
     const siteId = req.params.siteId as string;
     const { appNo, bpNo } = req.query;
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (appNo) where.appNo = { contains: String(appNo), mode: 'insensitive' };
     if (bpNo) where.bpNo = { contains: String(bpNo), mode: 'insensitive' };
 

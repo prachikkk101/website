@@ -249,34 +249,22 @@ export default function Inventory() {
   }, [invGA, mergedGAs]);
 
 
-  // Derive siteId from the GA + City selection.
-  const invSiteId = useMemo(() => {
-    if (!invGA || !invCity) return null;
+  const [invSelectedSiteId, setInvSelectedSiteId] = useState(null);
 
-    // Priority 1: exact gaName + location match (most reliable).
-    // invCity is set to s.location (from assignedPairs or city dropdown which uses s.location as id).
-    // invGA is set to s.gaName or a GA id. Try both.
+  // Derive siteId from selection or direct site pick.
+  const invSiteId = useMemo(() => {
+    if (invSelectedSiteId) return invSelectedSiteId;
+    if (!isAdmin && assignedPairs.length === 1) return assignedPairs[0].siteId;
+    if (!invGA || !invCity) return 'all';
+
     const exactMatch = siteList.find(s =>
       (s.gaName?.toLowerCase() === invGA.toLowerCase() ||
        s.gaName?.toLowerCase().includes(invGA.toLowerCase()) ||
        invGA.toLowerCase().includes((s.gaName || '').toLowerCase())) &&
       s.location?.toLowerCase() === invCity.toLowerCase()
     );
-    if (exactMatch) return exactMatch.id;
-
-    // Priority 2: fuzzy match — GA name + site name contains city label (legacy fallback)
-    const cityObj = invCityOptions.find(c => c.id === invCity);
-    const cityLabel = (cityObj?.label || cityObj?.name || invCity).toLowerCase();
-    const gaObj = mergedGAs.find(g => g.id === invGA);
-    const gaLabel = (gaObj?.label || gaObj?.name || invGA).toLowerCase();
-    const fuzzyMatch = siteList.find(s => {
-      const sName = (s.name || '').toLowerCase();
-      const sGA = (s.gaName || '').toLowerCase();
-      return (sGA === gaLabel || sGA.includes(gaLabel) || gaLabel.includes(sGA)) &&
-             (sName.includes(cityLabel) || cityLabel.includes(sName));
-    });
-    return fuzzyMatch?.id || selectedSiteId || null;
-  }, [invGA, invCity, invCityOptions, mergedGAs, siteList, selectedSiteId]);
+    return exactMatch?.id || selectedSiteId || 'all';
+  }, [invSelectedSiteId, invGA, invCity, assignedPairs, siteList, selectedSiteId, isAdmin]);
 
   // Keep currentSiteId pointing to the effective siteId for this page
   const currentSiteId = invSiteId;
@@ -742,62 +730,51 @@ export default function Inventory() {
           background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
           border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
-        {/* GA Location — paired locking for non-admins */}
+        {/* Site Selector — paired locking for non-admins, full site list for admin */}
         {!isAdmin && assignedPairs.length === 1 ? (
           <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
-            {assignedPairs[0].gaLabel}
+            {assignedPairs[0].label || assignedPairs[0].gaLabel}
           </span>
         ) : !isAdmin && assignedPairs.length > 1 ? (
-          // Multiple assigned pairs — ONE combined dropdown
           <select
             id="inv-ga-filter"
-            value={assignedPairs.find(p => p.gaName === invGA && p.cityName === invCity)?.siteId || ''}
+            value={invSelectedSiteId || ''}
             onChange={e => {
-              const pair = assignedPairs.find(p => p.siteId === e.target.value);
+              const val = e.target.value;
+              setInvSelectedSiteId(val || null);
+              const pair = assignedPairs.find(p => p.siteId === val);
               if (pair) { setInvGA(pair.gaName); setInvCity(pair.cityName); }
             }}
             style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
                 fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
           >
-            <option value="">— Select GA — City —</option>
+            <option value="">— Select Site —</option>
             {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
           </select>
         ) : (
-          // Admin: full open GA dropdown
+          // Admin: full site selector listing all sites explicitly
           <select
-            id="inv-ga-filter"
-            value={invGA}
-            onChange={e => { setInvGA(e.target.value); setInvCity(''); }}
+            id="inv-site-filter"
+            value={invSelectedSiteId || ''}
+            onChange={e => {
+              const val = e.target.value;
+              setInvSelectedSiteId(val || null);
+              if (val) {
+                const s = siteList.find(x => x.id === val);
+                if (s) { setInvGA(s.gaName); setInvCity(s.location); }
+              } else {
+                setInvGA(''); setInvCity('');
+              }
+            }}
             style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
                 fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
           >
-            <option value="">— Select GA Location —</option>
-            {invGAOptions.map(g => <option key={g.id} value={g.id}>{g.label || g.name}</option>)}
-          </select>
-        )}
-        {/* City — locked for single pair, read-only for multi-pair, open for admin */}
-        {!isAdmin && assignedPairs.length === 1 ? (
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
-            {assignedPairs[0].cityLabel}
-          </span>
-        ) : !isAdmin && assignedPairs.length > 1 ? (
-          // City shown as read-only label (set by combined GA—City dropdown above)
-          <span style={{ fontSize: 12, fontWeight: 600, color: invCity ? '#1f4e1a' : '#94a3b8', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px', fontStyle: invCity ? 'normal' : 'italic' }}>
-            {invCity || 'Select above ↑'}
-          </span>
-        ) : (
-          // Admin: full open city dropdown
-          <select
-            id="inv-city-filter"
-            value={invCity}
-            onChange={e => setInvCity(e.target.value)}
-            disabled={!invGA}
-            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-                fontSize: 12, background: invGA ? '#fff' : '#f8faf7', color: '#1f4e1a',
-                cursor: invGA ? 'pointer' : 'not-allowed', opacity: invGA ? 1 : 0.6 }}
-          >
-            <option value="">— Select City —</option>
-            {invCityOptions.map(c => <option key={c.id} value={c.id}>{c.label || c.name}</option>)}
+            <option value="">— All Sites (Global View) —</option>
+            {siteList.map(s => (
+              <option key={s.id} value={s.id}>
+                {s.name || `${s.gaName || ''} — ${s.chargeArea || s.location || ''}`}
+              </option>
+            ))}
           </select>
         )}
         {invGA && invCity && (

@@ -12,7 +12,10 @@ export const getConsumptionLogs = async (req: AuthenticatedRequest, res: Respons
     const siteId = req.params.siteId as string;
     const { from, to, page = '1', limit = '50' } = req.query;
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (from || to) {
       where.date = {};
       if (from) where.date.gte = new Date(String(from));
@@ -126,8 +129,12 @@ export const submitConsumptionLog = async (req: AuthenticatedRequest, res: Respo
 export const getPEReturns = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const siteId = req.params.siteId as string;
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     const logs = await prisma.pEReturnLog.findMany({
-      where: { siteId },
+      where,
       include: { user: { select: { id: true, name: true } } },
       orderBy: { date: 'desc' },
     });
@@ -206,8 +213,12 @@ export const submitPEReturn = async (req: AuthenticatedRequest, res: Response, n
 export const getGIReturns = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const siteId = req.params.siteId as string;
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     const logs = await prisma.gIReturnLog.findMany({
-      where: { siteId },
+      where,
       include: { user: { select: { id: true, name: true } } },
       orderBy: { date: 'desc' },
     });
@@ -285,8 +296,12 @@ export const submitGIReturn = async (req: AuthenticatedRequest, res: Response, n
 export const getToolReturns = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const siteId = req.params.siteId as string;
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     const returns = await prisma.toolReturn.findMany({
-      where: { siteId },
+      where,
       orderBy: { date: 'desc' },
     });
     res.status(200).json({ success: true, returns });

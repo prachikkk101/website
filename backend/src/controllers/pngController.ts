@@ -16,7 +16,10 @@ export const getPNGConnections = async (req: AuthenticatedRequest, res: Response
     // Item 4 diagnostic log — confirm site-scoped (not user-scoped) query
     console.log('🔵 getPNGConnections — user:', req.user?.id, 'role:', req.user?.role, 'siteId:', siteId);
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (accountType) where.accountType = accountType as AccountType;
     if (bpNo) where.bpNo = { contains: String(bpNo), mode: 'insensitive' };
     if (houseNo) where.houseNo = { contains: String(houseNo), mode: 'insensitive' };

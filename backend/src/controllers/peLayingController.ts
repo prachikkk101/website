@@ -12,7 +12,10 @@ export const getPELaying = async (req: AuthenticatedRequest, res: Response, next
     // Admin visibility diagnostic — confirm query is site-scoped only (no createdBy filter)
     console.log(`\ud83d\udd35 getPELaying — user: ${req.user?.id} role: ${req.user?.role} siteId: ${siteId}`);
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (status) where.status = status as PEStatus;
     if (raBillNo) where.raBillNo = { contains: String(raBillNo), mode: 'insensitive' };
 

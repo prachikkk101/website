@@ -178,8 +178,12 @@ export const assignWorker = async (req: AuthenticatedRequest, res: Response, nex
 export const getSiteStock = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     const siteId = req.params.id as string;
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     const stock = await prisma.siteStock.findMany({
-      where: { siteId },
+      where,
       include: {
         material: true,
       },

@@ -8,7 +8,10 @@ export const getMeters = async (req: AuthenticatedRequest, res: Response, next: 
     const siteId = req.params.siteId;
     const { status, source } = req.query;
 
-    const where: any = { siteId };
+    const where: any = {};
+    if (siteId && siteId !== 'all') {
+      where.siteId = siteId;
+    }
     if (status) where.status = String(status);
     if (source) where.source = String(source);
 
