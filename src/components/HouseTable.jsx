@@ -299,15 +299,16 @@ export default function HouseTable() {
     ['oxygenprotech@gmail.com', 'radhe.sangwan1980@gmail.com']
       .includes((session.email || '').toLowerCase())
   );
-  // Each site in siteList IS one GA+City pair (backend already filtered to user's assigned sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName    || '',
-    cityName:  s.location  || '',
-    gaLabel:   s.gaName    || s.name || '',
-    cityLabel: s.location  || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
+  const assignedPairs = useMemo(() => {
+    return isAdmin ? [] : siteList.map(s => ({
+      siteId:    s.id,
+      gaName:    s.gaName   || '',
+      cityName:  s.location || '',
+      gaLabel:   s.gaName   || s.name || '',
+      cityLabel: s.location || '',
+      label:     `${s.gaName || ''} — ${s.location || ''}`,
+    }));
+  }, [isAdmin, siteList]);
 
   // Pre-fill and restrict GA / City / Area fields when panel opens or editEntry changes
   useEffect(() => {
@@ -1012,7 +1013,10 @@ export default function HouseTable() {
                       <Select
                         id="ht-field-area"
                         value={formArea}
-                        onChange={val => setFormArea(val)}
+                        onChange={val => {
+                          console.log('🔵 [PNG Connection] Area onChange fired, new value:', val);
+                          setFormArea(val);
+                        }}
                         error={errors.area}
                       >
                         <option value="">Select Area</option>

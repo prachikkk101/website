@@ -324,14 +324,16 @@ export default function Inventory() {
 
   // ── Assigned pairs (for non-admin locking) ──
   // Each site in siteList IS one GA+City pair (already filtered by backend to user's sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName   || '',
-    cityName:  s.location || '',
-    gaLabel:   s.gaName   || s.name || '',
-    cityLabel: s.location || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
+  const assignedPairs = useMemo(() => {
+    return isAdmin ? [] : siteList.map(s => ({
+      siteId:    s.id,
+      gaName:    s.gaName   || '',
+      cityName:  s.location || '',
+      gaLabel:   s.gaName   || s.name || '',
+      cityLabel: s.location || '',
+      label:     `${s.gaName || ''} — ${s.location || ''}`,
+    }));
+  }, [isAdmin, siteList]);
 
   // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
   useEffect(() => {
@@ -1332,7 +1334,10 @@ export default function Inventory() {
                   <Select
                     id="inv-field-area"
                     value={formArea}
-                    onChange={val => setFormArea(val)}
+                    onChange={val => {
+                      console.log('🔵 [Inventory Rcv] Area onChange fired, new value:', val);
+                      setFormArea(val);
+                    }}
                     error={formErr.area}
                   >
                     <option value="">Select Area</option>
@@ -1439,7 +1444,10 @@ export default function Inventory() {
                 <Field label="Area / Site" required error={retFormErr.area}>
                   <Select
                     value={formArea}
-                    onChange={val => setFormArea(val)}
+                    onChange={val => {
+                      console.log('🔵 [Inventory Ret] Area onChange fired, new value:', val);
+                      setFormArea(val);
+                    }}
                     error={retFormErr.area}
                   >
                     <option value="">Select Area</option>

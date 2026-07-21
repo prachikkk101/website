@@ -81,14 +81,16 @@ export default function PELaying() {
 
   // ── Assigned pairs (for non-admin GA+City locking) ──
   // Each site in siteList IS one GA+City pair (backend already filtered to user's actual assigned sites)
-  const assignedPairs = isAdmin ? [] : siteList.map(s => ({
-    siteId:    s.id,
-    gaName:    s.gaName   || '',
-    cityName:  s.location || '',
-    gaLabel:   s.gaName   || s.name || '',
-    cityLabel: s.location || '',
-    label:     `${s.gaName || ''} — ${s.location || ''}`,
-  }));
+  const assignedPairs = useMemo(() => {
+    return isAdmin ? [] : siteList.map(s => ({
+      siteId:    s.id,
+      gaName:    s.gaName   || '',
+      cityName:  s.location || '',
+      gaLabel:   s.gaName   || s.name || '',
+      cityLabel: s.location || '',
+      label:     `${s.gaName || ''} — ${s.location || ''}`,
+    }));
+  }, [isAdmin, siteList]);
 
   // ── Panel + edit state — MUST be declared BEFORE the useEffect that reads them ──
   const [panelOpen,  setPanelOpen]  = useState(false);
@@ -890,7 +892,10 @@ export default function PELaying() {
                 {areaOptions.length > 0 ? (
                   <Select
                     value={formArea}
-                    onChange={val => setFormArea(val)}
+                    onChange={val => {
+                      console.log('🔵 [PE Laying] Area onChange fired, new value:', val);
+                      setFormArea(val);
+                    }}
                     error={errors.area}
                   >
                     <option value="">Select Area</option>
