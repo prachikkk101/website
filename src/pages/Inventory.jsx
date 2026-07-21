@@ -249,25 +249,6 @@ export default function Inventory() {
   }, [invGA, mergedGAs]);
 
 
-  const [invSelectedSiteId, setInvSelectedSiteId] = useState(null);
-
-  // Derive siteId from selection or direct site pick.
-  const invSiteId = useMemo(() => {
-    if (invSelectedSiteId) return invSelectedSiteId;
-    if (!isAdmin && assignedPairs.length === 1) return assignedPairs[0].siteId;
-    if (!invGA || !invCity) return 'all';
-
-    const exactMatch = siteList.find(s =>
-      (s.gaName?.toLowerCase() === invGA.toLowerCase() ||
-       s.gaName?.toLowerCase().includes(invGA.toLowerCase()) ||
-       invGA.toLowerCase().includes((s.gaName || '').toLowerCase())) &&
-      s.location?.toLowerCase() === invCity.toLowerCase()
-    );
-    return exactMatch?.id || selectedSiteId || 'all';
-  }, [invSelectedSiteId, invGA, invCity, assignedPairs, siteList, selectedSiteId, isAdmin]);
-
-  // Keep currentSiteId pointing to the effective siteId for this page
-  const currentSiteId = invSiteId;
 
   const [stockData, setStockData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -322,6 +303,29 @@ export default function Inventory() {
       label:     `${s.gaName || ''} — ${s.location || ''}`,
     }));
   }, [isAdmin, siteList]);
+
+  // Site picker state — persists selected siteId for admin multi-site view
+  const [invSelectedSiteId, setInvSelectedSiteId] = useState(null);
+
+  // Derive the effective siteId for stock loading. isAdmin and assignedPairs are in scope here.
+  const invSiteId = useMemo(() => {
+    // If a specific site was explicitly picked (admin or multi-site non-admin), use it directly.
+    if (invSelectedSiteId) return invSelectedSiteId;
+    // Single-site non-admin: resolve directly from their one assigned site — no GA/City fuzzy match needed.
+    if (!isAdmin && assignedPairs.length === 1) return assignedPairs[0].siteId;
+    // Admin with no explicit site pick: fuzzy match from invGA + invCity.
+    if (!invGA || !invCity) return null;
+    const exactMatch = siteList.find(s =>
+      (s.gaName?.toLowerCase() === invGA.toLowerCase() ||
+       s.gaName?.toLowerCase().includes(invGA.toLowerCase()) ||
+       invGA.toLowerCase().includes((s.gaName || '').toLowerCase())) &&
+      s.location?.toLowerCase() === invCity.toLowerCase()
+    );
+    return exactMatch?.id || selectedSiteId || null;
+  }, [invSelectedSiteId, invGA, invCity, assignedPairs, siteList, selectedSiteId, isAdmin]);
+
+  // Keep currentSiteId pointing to the effective siteId for this page
+  const currentSiteId = invSiteId;
 
   // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
   useEffect(() => {
@@ -408,19 +412,25 @@ export default function Inventory() {
 
   useEffect(() => {
     async function load() {
-      // Item 3: Inventory gated on GA + City selection
-      if (!invGA || !invCity) {
-        setLoading(false);
-        setStockData([]);
-        return;
-      }
-      // Guard: if sites haven't finished loading yet, wait
-      if (!invSiteId) {
-        if (!siteLoading) {
+      // For single-site non-admins, invSiteId is already the assigned site ID even before
+      // invGA/invCity are filled (those are set by a separate useEffect with one-render lag).
+      // So: if invSiteId is a concrete ID, proceed regardless of invGA/invCity state.
+      const hasDirectSiteId = invSiteId && invSiteId !== 'all' && invSiteId !== null;
+      if (!hasDirectSiteId) {
+        // Admin or multi-site path: require GA + City selection
+        if (!invGA || !invCity) {
           setLoading(false);
           setStockData([]);
+          return;
         }
-        return;
+        // Guard: if sites haven't finished loading yet, wait
+        if (!invSiteId) {
+          if (!siteLoading) {
+            setLoading(false);
+            setStockData([]);
+          }
+          return;
+        }
       }
       try {
         setLoading(true);
