@@ -53,6 +53,30 @@ const EMPTY_ENTRY = {
   workStatus: 'Laying',
 };
 
+function capitaliseStatus(s) {
+  if (!s) return 'Laying';
+  const m = {
+    LAYING:       'Laying',
+    HDD:          'HDD',
+    JOINT:        'Joint',
+    TESTING:      'Testing & Flushing',
+    COMMISSIONING:'Commissioning',
+  };
+  return m[s] || s;
+}
+
+// Map frontend workStatus display label → PEStatus DB enum value
+function statusToEnum(displayStatus) {
+  const m = {
+    'Laying':             'LAYING',
+    'HDD':               'HDD',
+    'Joint':             'JOINT',
+    'Testing & Flushing':'TESTING',
+    'Commissioning':     'COMMISSIONING',
+  };
+  return m[displayStatus] || 'LAYING';
+}
+
 export default function PELaying() {
   const { showToast } = useToast();
   const { user }      = useContext(AuthContext);
@@ -227,30 +251,6 @@ export default function PELaying() {
       setAllData([]);
     }
   }, [siteId, siteList, siteLoading, user?.role]);
-
-  function capitaliseStatus(s) {
-    if (!s) return 'Laying';
-    const m = {
-      LAYING:       'Laying',
-      HDD:          'HDD',
-      JOINT:        'Joint',
-      TESTING:      'Testing & Flushing',
-      COMMISSIONING:'Commissioning',
-    };
-    return m[s] || s;
-  }
-
-  // Map frontend workStatus display label → PEStatus DB enum value
-  function statusToEnum(displayStatus) {
-    const m = {
-      'Laying':             'LAYING',
-      'HDD':               'HDD',
-      'Joint':             'JOINT',
-      'Testing & Flushing':'TESTING',
-      'Commissioning':     'COMMISSIONING',
-    };
-    return m[displayStatus] || 'LAYING';
-  }
 
   // Filter / tab state
   const [activeTab, setActiveTab] = useState('Domestic');
