@@ -304,6 +304,11 @@ export default function Inventory() {
     }));
   }, [isAdmin, siteList]);
 
+  // Distinct GA names and city names across all assigned sites.
+  // Used to decide: lock (1 unique value) vs dropdown (multiple unique values).
+  const uniqueGAs    = useMemo(() => [...new Set(assignedPairs.map(p => p.gaName))],   [assignedPairs]);
+  const uniqueCities = useMemo(() => [...new Set(assignedPairs.map(p => p.cityName))], [assignedPairs]);
+
   // Site picker state — persists selected siteId for admin multi-site view
   const [invSelectedSiteId, setInvSelectedSiteId] = useState(null);
 
@@ -327,14 +332,14 @@ export default function Inventory() {
   // Keep currentSiteId pointing to the effective siteId for this page
   const currentSiteId = invSiteId;
 
-  // Auto-set invGA + invCity for non-admins with a single assigned site (via useEffect, not during render)
+  // Auto-set invGA + invCity for non-admins (via useEffect, not during render)
   useEffect(() => {
     if (isAdmin || siteList.length === 0) return;
-    if (assignedPairs.length === 1) {
-      setInvGA(assignedPairs[0].gaName);
-      setInvCity(assignedPairs[0].cityName);
-    }
-  }, [isAdmin, assignedPairs.length, siteList.length]); // eslint-disable-line react-hooks/exhaustive-deps
+    // If all assigned sites share a single GA, lock that in
+    if (uniqueGAs.length === 1) setInvGA(uniqueGAs[0]);
+    // If all assigned sites also share a single city, lock that in
+    if (uniqueCities.length === 1) setInvCity(uniqueCities[0]);
+  }, [isAdmin, uniqueGAs, uniqueCities, siteList.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Delivery form state
   const [challan, setChallan] = useState('');
@@ -740,27 +745,13 @@ export default function Inventory() {
           background: 'linear-gradient(135deg, #f0f7ee 0%, #e8f5e2 100%)',
           border: '1px solid #c6e0c0', borderRadius: 8, padding: '10px 14px' }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: '#2d6a27', whiteSpace: 'nowrap' }}>📍 View Stock For:</span>
-        {/* Site Selector — paired locking for non-admins, full site list for admin */}
-        {!isAdmin && assignedPairs.length === 1 ? (
+        {/* Site Selector — lock GA+City for non-admins if all sites share same values; show area picker if multiple sites */}
+        {!isAdmin && uniqueGAs.length >= 1 ? (
+          // Non-admin: show locked GA+City text. If multiple sites exist (different areas), no selector needed here
+          // because the stock load already uses invSiteId derived from the assigned site.
           <span style={{ fontSize: 12, fontWeight: 600, color: '#1f4e1a', background: '#e8f5e2', border: '1px solid #a7c4a3', borderRadius: 4, padding: '4px 10px' }}>
-            {assignedPairs[0].label || assignedPairs[0].gaLabel}
+            {uniqueGAs[0]}{uniqueCities.length === 1 ? ` — ${uniqueCities[0]}` : ''}
           </span>
-        ) : !isAdmin && assignedPairs.length > 1 ? (
-          <select
-            id="inv-ga-filter"
-            value={invSelectedSiteId || ''}
-            onChange={e => {
-              const val = e.target.value;
-              setInvSelectedSiteId(val || null);
-              const pair = assignedPairs.find(p => p.siteId === val);
-              if (pair) { setInvGA(pair.gaName); setInvCity(pair.cityName); }
-            }}
-            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-                fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
-          >
-            <option value="">— Select Site —</option>
-            {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
-          </select>
         ) : (
           // Admin: full site selector listing all sites explicitly
           <select
@@ -1259,22 +1250,19 @@ export default function Inventory() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={formErr.ga}>
-                {!isAdmin && assignedPairs.length === 1 ? (
+                {!isAdmin && uniqueGAs.length === 1 ? (
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                    {assignedPairs[0].gaLabel}
+                    {uniqueGAs[0]}
                   </div>
-                ) : !isAdmin && assignedPairs.length > 1 ? (
+                ) : !isAdmin && uniqueGAs.length > 1 ? (
                   <Select
                     id="inv-field-ga"
-                    value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
-                    onChange={val => {
-                      const pair = assignedPairs.find(p => p.siteId === val);
-                      if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
-                    }}
+                    value={formGA}
+                    onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
                     error={formErr.ga}
                   >
-                    <option value="">Select GA — City</option>
-                    {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                    <option value="">Select GA Location</option>
+                    {uniqueGAs.map(g => <option key={g} value={g}>{g}</option>)}
                   </Select>
                 ) : (
                   <Select
@@ -1294,14 +1282,20 @@ export default function Inventory() {
               </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={formErr.city}>
-                  {!isAdmin && assignedPairs.length === 1 ? (
+                  {!isAdmin && uniqueCities.length === 1 ? (
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                      {assignedPairs[0].cityLabel}
+                      {uniqueCities[0]}
                     </div>
-                  ) : !isAdmin && assignedPairs.length > 1 ? (
-                    <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
-                      {formCity || 'Select above ↑'}
-                    </div>
+                  ) : !isAdmin && uniqueCities.length > 1 ? (
+                    <Select
+                      id="inv-field-city"
+                      value={formCity}
+                      onChange={val => { setFormCity(val); setFormArea(''); }}
+                      error={formErr.city}
+                    >
+                      <option value="">Select City</option>
+                      {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                    </Select>
                   ) : (
                     <Select
                       id="inv-field-city"
@@ -1373,21 +1367,18 @@ export default function Inventory() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
               <Field label="GA Location" required error={retFormErr.ga}>
-                {!isAdmin && assignedPairs.length === 1 ? (
+                {!isAdmin && uniqueGAs.length === 1 ? (
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                    {assignedPairs[0].gaLabel}
+                    {uniqueGAs[0]}
                   </div>
-                ) : !isAdmin && assignedPairs.length > 1 ? (
+                ) : !isAdmin && uniqueGAs.length > 1 ? (
                   <Select
-                    value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
-                    onChange={val => {
-                      const pair = assignedPairs.find(p => p.siteId === val);
-                      if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
-                    }}
+                    value={formGA}
+                    onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
                     error={retFormErr.ga}
                   >
-                    <option value="">Select GA — City</option>
-                    {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                    <option value="">Select GA Location</option>
+                    {uniqueGAs.map(g => <option key={g} value={g}>{g}</option>)}
                   </Select>
                 ) : (
                   <Select
@@ -1406,14 +1397,19 @@ export default function Inventory() {
               </Field>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <Field label="City" required error={retFormErr.city}>
-                  {!isAdmin && assignedPairs.length === 1 ? (
+                  {!isAdmin && uniqueCities.length === 1 ? (
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                      {assignedPairs[0].cityLabel}
+                      {uniqueCities[0]}
                     </div>
-                  ) : !isAdmin && assignedPairs.length > 1 ? (
-                    <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
-                      {formCity || 'Select above ↑'}
-                    </div>
+                  ) : !isAdmin && uniqueCities.length > 1 ? (
+                    <Select
+                      value={formCity}
+                      onChange={val => { setFormCity(val); setFormArea(''); }}
+                      error={retFormErr.city}
+                    >
+                      <option value="">Select City</option>
+                      {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                    </Select>
                   ) : (
                     <Select
                       value={formCity}

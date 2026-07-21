@@ -310,6 +310,11 @@ export default function HouseTable() {
     }));
   }, [isAdmin, siteList]);
 
+  // Distinct GA names and city names across all assigned sites.
+  // Used to decide: lock (1 unique value) vs dropdown (multiple unique values).
+  const uniqueGAs    = useMemo(() => [...new Set(assignedPairs.map(p => p.gaName))],   [assignedPairs]);
+  const uniqueCities = useMemo(() => [...new Set(assignedPairs.map(p => p.cityName))], [assignedPairs]);
+
   // Pre-fill and restrict GA / City / Area fields when panel opens or editEntry changes
   useEffect(() => {
     if (panelOpen) {
@@ -345,10 +350,18 @@ export default function HouseTable() {
           setFormGA(ctx.gaId);
           setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
           setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
-        } else if (!isAdmin && assignedPairs.length === 1) {
-          // Single assigned site — auto-set both GA and City from the pair
-          setFormGA(assignedPairs[0].gaName);
-          setFormCity(assignedPairs[0].cityName);
+        } else if (!isAdmin && assignedPairs.length > 0) {
+          // Auto-set locked fields based on unique values across all assigned sites.
+          if (uniqueGAs.length === 1) {
+            setFormGA(uniqueGAs[0]);
+          } else {
+            setFormGA('');
+          }
+          if (uniqueCities.length === 1) {
+            setFormCity(uniqueCities[0]);
+          } else {
+            setFormCity('');
+          }
           setFormArea('');
         } else if (!isAdmin && mergedGAs.length === 1) {
           // Only one GA in system for this user
@@ -362,7 +375,7 @@ export default function HouseTable() {
         }
       }
     }
-  }, [panelOpen, editEntry, globalLocationContext, mergedGAs, assignedPairs, isAdmin]);
+  }, [panelOpen, editEntry, globalLocationContext, mergedGAs, assignedPairs, isAdmin, uniqueGAs, uniqueCities]);
 
 
   const isViewOnly   = !isAdmin && (!siteAccess || siteAccess === 'none' || siteAccess === null);
@@ -944,24 +957,21 @@ export default function HouseTable() {
              <Field label="Address Line 1" required error={errors.address1}><Input id="ht-field-address1" value={form.address1} onChange={val => f('address1', val)} error={errors.address1} /></Field>
              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                <Field label="GA Location" required error={errors.ga}>
-                 {!isAdmin && assignedPairs.length === 1 ? (
-                   // Single assigned GA+City pair — show both as locked text (no dropdown for either)
+                 {!isAdmin && uniqueGAs.length === 1 ? (
+                   // Single unique GA across all assigned sites — lock as text
                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                     {assignedPairs[0].gaLabel}
+                     {uniqueGAs[0]}
                    </div>
-                 ) : !isAdmin && assignedPairs.length > 1 ? (
-                   // Multiple assigned pairs — ONE combined dropdown "Hisar — PLA", "Hisar — UE-II"
+                 ) : !isAdmin && uniqueGAs.length > 1 ? (
+                   // Multiple different GAs — show GA dropdown limited to assigned GAs
                    <Select
                      id="ht-field-ga"
-                     value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
-                     onChange={val => {
-                       const pair = assignedPairs.find(p => p.siteId === val);
-                       if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
-                     }}
+                     value={formGA}
+                     onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
                      error={errors.ga}
                    >
-                     <option value="">Select GA — City</option>
-                     {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                     <option value="">Select GA Location</option>
+                     {uniqueGAs.map(g => <option key={g} value={g}>{g}</option>)}
                    </Select>
                  ) : (
                    // Admin: full open dropdown
@@ -982,16 +992,22 @@ export default function HouseTable() {
                </Field>
                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                  <Field label="City" required error={errors.city}>
-                   {!isAdmin && assignedPairs.length === 1 ? (
-                     // Single pair: City locked (formCity already auto-set by useEffect)
+                   {!isAdmin && uniqueCities.length === 1 ? (
+                     // Single unique city across all assigned sites — lock as text
                      <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                       {assignedPairs[0].cityLabel}
+                       {uniqueCities[0]}
                      </div>
-                   ) : !isAdmin && assignedPairs.length > 1 ? (
-                     // Multiple pairs: City is set together with GA in the combined dropdown above
-                     <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
-                       {formCity || 'Select above ↑'}
-                     </div>
+                   ) : !isAdmin && uniqueCities.length > 1 ? (
+                     // Multiple different cities — show City dropdown limited to assigned cities
+                     <Select
+                       id="ht-field-city"
+                       value={formCity}
+                       onChange={val => { setFormCity(val); setFormArea(''); }}
+                       error={errors.city}
+                     >
+                       <option value="">Select City</option>
+                       {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                     </Select>
                    ) : (
                      // Admin: full open city dropdown
                      <Select

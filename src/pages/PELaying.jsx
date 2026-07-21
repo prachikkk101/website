@@ -92,6 +92,11 @@ export default function PELaying() {
     }));
   }, [isAdmin, siteList]);
 
+  // Distinct GA names and city names across all assigned sites.
+  // Used to decide: lock (1 unique value) vs dropdown (multiple unique values).
+  const uniqueGAs    = useMemo(() => [...new Set(assignedPairs.map(p => p.gaName))],   [assignedPairs]);
+  const uniqueCities = useMemo(() => [...new Set(assignedPairs.map(p => p.cityName))], [assignedPairs]);
+
   // ── Panel + edit state — MUST be declared BEFORE the useEffect that reads them ──
   const [panelOpen,  setPanelOpen]  = useState(false);
   const [editingId,  setEditingId]  = useState(null);
@@ -128,10 +133,19 @@ export default function PELaying() {
           setFormGA(ctx.gaId);
           setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
           setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
-        } else if (!isAdmin && assignedPairs.length === 1) {
-          // Single assigned site — auto-set both GA and City from the pair
-          setFormGA(assignedPairs[0].gaName);
-          setFormCity(assignedPairs[0].cityName);
+        } else if (!isAdmin && assignedPairs.length > 0) {
+          // Auto-set locked fields: if all assigned sites share the same GA, pre-fill it.
+          // If they also share the same city, pre-fill that too.
+          if (uniqueGAs.length === 1) {
+            setFormGA(uniqueGAs[0]);
+          } else {
+            setFormGA('');
+          }
+          if (uniqueCities.length === 1) {
+            setFormCity(uniqueCities[0]);
+          } else {
+            setFormCity('');
+          }
           setFormArea('');
         } else if (!isAdmin && mergedGAs.length === 1) {
           setFormGA(mergedGAs[0].id);
@@ -144,7 +158,7 @@ export default function PELaying() {
         }
       }
     }
-  }, [panelOpen, editingId, globalLocationContext, mergedGAs, allData, assignedPairs, isAdmin]);
+  }, [panelOpen, editingId, globalLocationContext, mergedGAs, allData, assignedPairs, isAdmin, uniqueGAs, uniqueCities]);
 
   useEffect(() => {
     document.title = 'GP-PMS — PE Laying';
@@ -828,22 +842,20 @@ export default function PELaying() {
               </div>
             </Field>
             <Field label="GA Location" required error={errors.ga}>
-              {!isAdmin && assignedPairs.length === 1 ? (
+              {!isAdmin && uniqueGAs.length === 1 ? (
+                // Single unique GA across all assigned sites — lock as text
                 <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                  {assignedPairs[0].gaLabel}
+                  {uniqueGAs[0]}
                 </div>
-              ) : !isAdmin && assignedPairs.length > 1 ? (
-                // Multiple assigned pairs — ONE combined dropdown
+              ) : !isAdmin && uniqueGAs.length > 1 ? (
+                // Multiple different GAs — show GA dropdown limited to assigned GAs
                 <Select
-                  value={assignedPairs.find(p => p.gaName === formGA && p.cityName === formCity)?.siteId || ''}
-                  onChange={val => {
-                    const pair = assignedPairs.find(p => p.siteId === val);
-                    if (pair) { setFormGA(pair.gaName); setFormCity(pair.cityName); setFormArea(''); }
-                  }}
+                  value={formGA}
+                  onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
                   error={errors.ga}
                 >
-                  <option value="">Select GA — City</option>
-                  {assignedPairs.map(p => <option key={p.siteId} value={p.siteId}>{p.label}</option>)}
+                  <option value="">Select GA Location</option>
+                  {uniqueGAs.map(g => <option key={g} value={g}>{g}</option>)}
                 </Select>
               ) : (
                 // Admin: full open dropdown
@@ -863,16 +875,21 @@ export default function PELaying() {
             </Field>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="City" required error={errors.city}>
-                {!isAdmin && assignedPairs.length === 1 ? (
-                  // Single pair: City locked text
+                {!isAdmin && uniqueCities.length === 1 ? (
+                  // Single unique city across all assigned sites — lock as text
                   <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
-                    {assignedPairs[0].cityLabel}
+                    {uniqueCities[0]}
                   </div>
-                ) : !isAdmin && assignedPairs.length > 1 ? (
-                  // Multiple pairs: City shown as read-only (set by the combined GA—City dropdown above)
-                  <div style={{ fontSize: 13, fontWeight: 600, color: formCity ? '#1f4e1a' : '#94a3b8', padding: '8px 10px', background: '#f8faf7', border: '1px solid #c6e0c0', borderRadius: 5, fontStyle: formCity ? 'normal' : 'italic' }}>
-                    {formCity || 'Select above ↑'}
-                  </div>
+                ) : !isAdmin && uniqueCities.length > 1 ? (
+                  // Multiple different cities — show City dropdown limited to user's assigned cities
+                  <Select
+                    value={formCity}
+                    onChange={val => { setFormCity(val); setFormArea(''); }}
+                    error={errors.city}
+                  >
+                    <option value="">Select City</option>
+                    {uniqueCities.map(c => <option key={c} value={c}>{c}</option>)}
+                  </Select>
                 ) : (
                   // Admin: full open city dropdown
                   <Select
