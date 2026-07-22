@@ -356,6 +356,23 @@ export default function Inventory() {
   const [formGA, setFormGA] = useState('');
   const [formCity, setFormCity] = useState('');
 
+  // Resolve siteId from form's GA + City selection.
+  // Falls back to currentSiteId (top-bar derived) when form values aren't set yet.
+  // When GA+City matches multiple sites (e.g. Hisar has PLA+UE-II), uses the first
+  // assigned site for non-admins, or the first overall match for admins.
+  const resolveFormSiteId = () => {
+    if (!formGA && !formCity) return currentSiteId;
+    const gaVal  = formGA.trim().toLowerCase();
+    const cityVal = formCity.trim().toLowerCase();
+    // For non-admin: search within their assigned sites only
+    const searchList = isAdmin ? siteList : siteList.filter(s => assignedPairs.some(p => p.siteId === s.id));
+    const match = searchList.find(s =>
+      (s.gaName  || '').toLowerCase() === gaVal  &&
+      (s.location || '').toLowerCase() === cityVal
+    );
+    return match?.id || currentSiteId || null;
+  };
+
   // Option lists
   const getAllCities = () => {
     return mergedGAs.flatMap(ga => ga.cities || []);
@@ -531,15 +548,16 @@ export default function Inventory() {
       return;
     }
 
-    if (!currentSiteId) {
+    const saveSiteId = resolveFormSiteId();
+    if (!saveSiteId) {
       showToast('✗ No site selected', 'error');
       return;
     }
 
     try {
       const itemsToSend = returnedItems.map(item => ({ material: item.name, qty: item.qty }));
-      await stockAPI.returnStock(currentSiteId, itemsToSend);
-      const refreshed = await stockAPI.getAll(currentSiteId);
+      await stockAPI.returnStock(saveSiteId, itemsToSend);
+      const refreshed = await stockAPI.getAll(saveSiteId);
       setStockData(mapStockData(refreshed));
       showToast('✓ Stock returned');
 
@@ -607,7 +625,8 @@ export default function Inventory() {
       return;
     }
 
-    if (!currentSiteId) {
+    const saveSiteId = resolveFormSiteId();
+    if (!saveSiteId) {
       showToast('✗ No site selected', 'error');
       return;
     }
@@ -623,8 +642,8 @@ export default function Inventory() {
         unit: 'pcs',
         category: item.category,
       }));
-      await stockAPI.receiveStock(currentSiteId, itemsToSend, uploadedChallanUrl, challan || null, dateRcv || null);
-      const refreshed = await stockAPI.getAll(currentSiteId);
+      await stockAPI.receiveStock(saveSiteId, itemsToSend, uploadedChallanUrl, challan || null, dateRcv || null);
+      const refreshed = await stockAPI.getAll(saveSiteId);
       setStockData(mapStockData(refreshed));
       showToast('✓ Stock received');
       setChallanPhotoUrl('');
