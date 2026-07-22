@@ -352,22 +352,15 @@ export default function Inventory() {
   const [openCategory, setOpenCategory] = useState(null);
   const [quantities, setQuantities] = useState({});
 
-  // 3-level form states for GA Location, City, Area
+  // 2-level form states for GA Location + City only (Area NOT used in Inventory)
   const [formGA, setFormGA] = useState('');
   const [formCity, setFormCity] = useState('');
-  const [formArea, setFormArea] = useState('');
 
   // Option lists
   const getAllCities = () => {
     return mergedGAs.flatMap(ga => ga.cities || []);
   };
   const cityOptions = formGA !== '' ? getCitiesForGA(formGA) : getAllCities();
-  // For non-admin users, derive area options from formCity (set when panel opens).
-  // Fallback: if formCity is still empty (one-render lag), use the single shared city
-  // when ALL assigned sites share the same city (covers both 1-site and multi-site same-city users).
-  const _areaCityId = formCity ||
-    (!isAdmin && uniqueCities.length === 1 ? uniqueCities[0] : '');
-  const areaOptions = _areaCityId ? getAreasForCity(_areaCityId) : [];
 
   // Summary accordion & return stock states
   const [openCategoryAccordion, setOpenCategoryAccordion] = useState(null);
@@ -459,17 +452,13 @@ export default function Inventory() {
       if (ctx.gaId !== 'all') {
         setFormGA(ctx.gaId);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-        setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
       } else if (!isAdmin && assignedPairs.length > 0) {
-        // Pre-fill locked fields based on unique values across all assigned sites.
-        // Works for 1 site OR multiple sites that share the same GA/City (e.g. Atul Kumar).
+        // Pre-fill locked GA+City fields from unique values across all assigned sites.
         if (uniqueGAs.length === 1)    setFormGA(uniqueGAs[0]);    else setFormGA('');
         if (uniqueCities.length === 1) setFormCity(uniqueCities[0]); else setFormCity('');
-        setFormArea('');
       } else {
         setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-        setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }
     }
   }, [panelOpen, globalLocationContext, isAdmin, assignedPairs.length, uniqueGAs, uniqueCities]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -480,16 +469,12 @@ export default function Inventory() {
       if (ctx.gaId !== 'all') {
         setFormGA(ctx.gaId);
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-        setFormArea(ctx.area   !== 'all' ? ctx.area   : '');
       } else if (!isAdmin && assignedPairs.length > 0) {
-        // Same fix as panelOpen: pre-fill locked fields from unique values.
         if (uniqueGAs.length === 1)    setFormGA(uniqueGAs[0]);    else setFormGA('');
         if (uniqueCities.length === 1) setFormCity(uniqueCities[0]); else setFormCity('');
-        setFormArea('');
       } else {
         setFormGA(ctx.gaId !== 'all' ? ctx.gaId : '');
         setFormCity(ctx.cityId !== 'all' ? ctx.cityId : '');
-        setFormArea(ctx.area !== 'all' ? ctx.area : '');
       }
     }
   }, [returnStockOpen, globalLocationContext, isAdmin, assignedPairs.length, uniqueGAs, uniqueCities]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -524,7 +509,6 @@ export default function Inventory() {
     const e = {};
     if (!formGA) e.ga = 'GA Location is required';
     if (!formCity) e.city = 'City is required';
-    if (!formArea) e.area = 'Area is required';
     if (!retRemark.trim()) e.retRemark = 'Remark/Reason is required';
     if (remarkWordCount > 30) e.retRemark = 'Remark cannot exceed 30 words';
     setRetFormErr(e);
@@ -583,7 +567,6 @@ export default function Inventory() {
     if (!dateRcv) e.dateRcv = 'Date is required';
     if (!formGA) e.ga = 'GA Location is required';
     if (!formCity) e.city = 'City is required';
-    if (!formArea) e.area = 'Area is required';
     setFormErr(e);
 
     // Scroll & focus to first invalid field
@@ -591,7 +574,6 @@ export default function Inventory() {
       { key: 'dateRcv', id: 'inv-field-date' },
       { key: 'ga', id: 'inv-field-ga' },
       { key: 'city', id: 'inv-field-city' },
-      { key: 'area', id: 'inv-field-area' },
     ];
     const first = fieldOrder.find(f => e[f.key]);
     if (first) {
@@ -1262,7 +1244,7 @@ export default function Inventory() {
                   <Select
                     id="inv-field-ga"
                     value={formGA}
-                    onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
+                    onChange={val => { setFormGA(val); setFormCity(''); }}
                     error={formErr.ga}
                   >
                     <option value="">Select GA Location</option>
@@ -1275,7 +1257,6 @@ export default function Inventory() {
                     onChange={val => {
                       setFormGA(val);
                       setFormCity('');
-                      setFormArea('');
                     }}
                     error={formErr.ga}
                   >
@@ -1284,7 +1265,7 @@ export default function Inventory() {
                   </Select>
                 )}
               </Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
                 <Field label="City" required error={formErr.city}>
                   {!isAdmin && uniqueCities.length === 1 ? (
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
@@ -1294,7 +1275,7 @@ export default function Inventory() {
                     <Select
                       id="inv-field-city"
                       value={formCity}
-                      onChange={val => { setFormCity(val); setFormArea(''); }}
+                      onChange={val => setFormCity(val)}
                       error={formErr.city}
                     >
                       <option value="">Select City</option>
@@ -1304,30 +1285,13 @@ export default function Inventory() {
                     <Select
                       id="inv-field-city"
                       value={formCity}
-                      onChange={val => {
-                        setFormCity(val);
-                        setFormArea('');
-                      }}
+                      onChange={val => setFormCity(val)}
                       error={formErr.city}
                     >
                       <option value="">Select City</option>
                       {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </Select>
                   )}
-                </Field>
-                <Field label="Area / Site" required error={formErr.area}>
-                  <Select
-                    id="inv-field-area"
-                    value={formArea}
-                    onChange={val => {
-                      console.log('🔵 [Inventory Rcv] Area onChange fired, new value:', val);
-                      setFormArea(val);
-                    }}
-                    error={formErr.area}
-                  >
-                    <option value="">Select Area</option>
-                    {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                  </Select>
                 </Field>
               </div>
             </div>
@@ -1378,7 +1342,7 @@ export default function Inventory() {
                 ) : !isAdmin && uniqueGAs.length > 1 ? (
                   <Select
                     value={formGA}
-                    onChange={val => { setFormGA(val); setFormCity(''); setFormArea(''); }}
+                    onChange={val => { setFormGA(val); setFormCity(''); }}
                     error={retFormErr.ga}
                   >
                     <option value="">Select GA Location</option>
@@ -1390,7 +1354,6 @@ export default function Inventory() {
                     onChange={val => {
                       setFormGA(val);
                       setFormCity('');
-                      setFormArea('');
                     }}
                     error={retFormErr.ga}
                   >
@@ -1399,7 +1362,7 @@ export default function Inventory() {
                   </Select>
                 )}
               </Field>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
                 <Field label="City" required error={retFormErr.city}>
                   {!isAdmin && uniqueCities.length === 1 ? (
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#1f4e1a', padding: '8px 10px', background: '#f0f7ee', border: '1px solid #c6e0c0', borderRadius: 5 }}>
@@ -1408,7 +1371,7 @@ export default function Inventory() {
                   ) : !isAdmin && uniqueCities.length > 1 ? (
                     <Select
                       value={formCity}
-                      onChange={val => { setFormCity(val); setFormArea(''); }}
+                      onChange={val => setFormCity(val)}
                       error={retFormErr.city}
                     >
                       <option value="">Select City</option>
@@ -1417,29 +1380,13 @@ export default function Inventory() {
                   ) : (
                     <Select
                       value={formCity}
-                      onChange={val => {
-                        setFormCity(val);
-                        setFormArea('');
-                      }}
+                      onChange={val => setFormCity(val)}
                       error={retFormErr.city}
                     >
                       <option value="">Select City</option>
                       {cityOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
                     </Select>
                   )}
-                </Field>
-                <Field label="Area / Site" required error={retFormErr.area}>
-                  <Select
-                    value={formArea}
-                    onChange={val => {
-                      console.log('🔵 [Inventory Ret] Area onChange fired, new value:', val);
-                      setFormArea(val);
-                    }}
-                    error={retFormErr.area}
-                  >
-                    <option value="">Select Area</option>
-                    {areaOptions.map(a => <option key={a} value={a}>{a}</option>)}
-                  </Select>
                 </Field>
               </div>
             </div>
