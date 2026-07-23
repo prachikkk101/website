@@ -343,5 +343,12 @@ export const dataAPI = {
       throw err;
     });
   },
-};
 
+  /** Admin only: create a new stock category. */
+  addStockCategory: (name, parentGroup) =>
+    api.post('/stock-categories', { name, parentGroup }).then(r => r.data.category),
+
+  /** Admin only: add a material item to an existing StockCategory. */
+  addStockMaterial: (categoryId, name) =>
+    api.post(`/stock-categories/${categoryId}/materials`, { name }).then(r => r.data.material),
+};

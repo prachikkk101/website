@@ -5,7 +5,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
-import { peLayingAPI, columnConfigAPI, uploadAPI } from '../utils/api';
+import { peLayingAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import PhotoViewer from '../components/PhotoViewer';
 
 function initStore(key, defaults) {
@@ -284,6 +284,37 @@ export default function PELaying() {
       })
       .catch(() => { /* no config yet — start with empty */ });
   }, [siteId]);
+
+  // Pipe stock availability: fetch site stock when panel opens to show available pipe quantities
+  // pipeStockMap: { '32': inStore, '63': inStore, '90': inStore, '125': inStore } (metres)
+  const [pipeStockMap, setPipeStockMap] = useState({});
+  useEffect(() => {
+    if (!panelOpen || !siteId) { setPipeStockMap({}); return; }
+    stockAPI.getAll(siteId)
+      .then(items => {
+        // Match pipe materials by name — look for "32mm", "63mm", "90mm", "125mm" in the item name
+        const map = {};
+        items.forEach(item => {
+          const name = (item.material || item.mat || item.name || '').toLowerCase();
+          const inStore = Math.max(0, item.inStore ?? ((item.received ?? 0) - (item.issued ?? 0) - (item.returned ?? 0)));
+          if (name.includes('32mm') || name.includes('32 mm') || name.includes('ø32') || (name.includes('32') && name.includes('pipe'))) {
+            map['32'] = (map['32'] || 0) + inStore;
+          }
+          if (name.includes('63mm') || name.includes('63 mm') || name.includes('ø63') || (name.includes('63') && name.includes('pipe'))) {
+            map['63'] = (map['63'] || 0) + inStore;
+          }
+          if (name.includes('90mm') || name.includes('90 mm') || name.includes('ø90') || (name.includes('90') && name.includes('pipe'))) {
+            map['90'] = (map['90'] || 0) + inStore;
+          }
+          if (name.includes('125mm') || name.includes('125 mm') || name.includes('ø125') || (name.includes('125') && name.includes('pipe'))) {
+            map['125'] = (map['125'] || 0) + inStore;
+          }
+        });
+        setPipeStockMap(map);
+      })
+      .catch(() => setPipeStockMap({}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOpen, siteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
@@ -941,7 +972,30 @@ export default function PELaying() {
 
         <div>
           <SectionTitle>PE Laying (metres)</SectionTitle>
-          
+
+          {/* Stock availability indicator bar */}
+          {Object.keys(pipeStockMap).length > 0 && (
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 8, marginTop: 4 }}>
+              {[32, 63, 90, 125].filter(d => pipeStockMap[String(d)] !== undefined).map(d => {
+                const avail = pipeStockMap[String(d)] ?? 0;
+                const totals = { 32: d32Total, 63: d63Total, 90: d90Total, 125: d125Total };
+                const used = totals[d] || 0;
+                const over = used > avail;
+                return (
+                  <span key={d} style={{
+                    fontSize: 11, padding: '2px 8px', borderRadius: 4,
+                    background: over ? '#fee2e2' : '#f0fdf4',
+                    color: over ? '#dc2626' : '#16a34a',
+                    border: `1px solid ${over ? '#fca5a5' : '#bbf7d0'}`,
+                    fontWeight: 600,
+                  }}>
+                    Ø{d}mm: {avail}m avail{over ? ` ⚠ (need ${used}m)` : ''}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           <div style={{ display: 'grid', gridTemplateColumns: '70px 1fr 1fr 1fr 1fr', gap: '8px 10px', alignItems: 'center', marginTop: 10 }}>
             {/* Row 1: Headers */}
             <div />
@@ -967,7 +1021,7 @@ export default function PELaying() {
               onBlur={e => { if (e.target.value === '') f('d32hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
-            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d32Total}</div>
+            <div style={{ height: 28, border: `1px solid ${pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#dc2626' : '#1f4e1a' }}>{d32Total}</div>
 
             {/* Row 3: Ø63 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø63mm</div>
@@ -986,7 +1040,7 @@ export default function PELaying() {
               onBlur={e => { if (e.target.value === '') f('d63hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
-            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d63Total}</div>
+            <div style={{ height: 28, border: `1px solid ${pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#dc2626' : '#1f4e1a' }}>{d63Total}</div>
 
             {/* Row 4: Ø90 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø90mm</div>
@@ -1005,7 +1059,7 @@ export default function PELaying() {
               onBlur={e => { if (e.target.value === '') f('d90hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
-            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d90Total}</div>
+            <div style={{ height: 28, border: `1px solid ${pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#dc2626' : '#1f4e1a' }}>{d90Total}</div>
 
             {/* Row 5: Ø125 */}
             <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø125mm</div>
@@ -1024,7 +1078,7 @@ export default function PELaying() {
               onBlur={e => { if (e.target.value === '') f('d125hdd', 0); }}
               placeholder="0"
               style={{ textAlign: 'center', height: 28 }} />
-            <div style={{ height: 28, border: '1px solid #e2e8f0', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f0f7ee', fontSize: 12, fontWeight: 700, color: '#1f4e1a' }}>{d125Total}</div>
+            <div style={{ height: 28, border: `1px solid ${pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#dc2626' : '#1f4e1a' }}>{d125Total}</div>
           </div>
         </div>
 

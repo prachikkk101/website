@@ -159,19 +159,30 @@ export const CAT_COLORS = {
 
 /**
  * Build the accordion category objects from an API response.
- * @param {Array<{id: number, name: string}>} cats - from dataAPI.getStockCategories()
+ * @param {Array<{id: number, name: string, materials?: Array<{id:number,name:string}>}>} cats - from dataAPI.getStockCategories()
  * @param {Array<object>|null} stockItems - existing site InventoryItem rows for Return mode
  * @returns {Array<{id: string, label: string, color: string, items: string[]}>}
  */
 export function buildAccordionCategories(cats, stockItems = null) {
-  const allDefaultItems = Object.values(DEFAULT_MATERIALS_BY_CATEGORY).flat();
-
-  // Normalize: lowercase + trim, for case/whitespace-insensitive matching
   const normalize = (s) => (s || '').toLowerCase().trim();
-  const normalizedAllDefaults = allDefaultItems.map(normalize);
 
   return cats.map((c, i) => {
+    // Hardcoded defaults for this category (empty array if newly admin-created)
     const defaultItems = DEFAULT_MATERIALS_BY_CATEGORY[c.name] || [];
+
+    // Admin-added DB materials for this category (from StockMaterial table)
+    const dbMaterialNames = (c.materials || []).map(m => m.name);
+
+    // Merged full item list for this category (deduplicated, preserving default order first)
+    const defaultNorm = defaultItems.map(normalize);
+    const extraDbItems = dbMaterialNames.filter(m => !defaultNorm.includes(normalize(m)));
+    const allCatItems = [...defaultItems, ...extraDbItems];
+
+    // All default items across ALL categories (for orphan detection)
+    const allDefaultItems = Object.values(DEFAULT_MATERIALS_BY_CATEGORY).flat();
+    const normalizedAllDefaults = allDefaultItems.map(normalize);
+    const allDbMats = cats.flatMap(cat => (cat.materials || []).map(m => m.name));
+    const normalizedAllDbMats = allDbMats.map(normalize);
 
     let items;
     if (stockItems !== null) {
@@ -179,20 +190,23 @@ export function buildAccordionCategories(cats, stockItems = null) {
       const siteMatNames = stockItems.map(s => s.mat || s.material).filter(Boolean);
       const normalizedSiteNames = siteMatNames.map(normalize);
 
-      // Match using normalized comparison (handles trailing spaces, case diffs)
-      const knownInCat = defaultItems.filter(m => normalizedSiteNames.includes(normalize(m)));
+      // Match using normalized comparison
+      const knownInCat = allCatItems.filter(m => normalizedSiteNames.includes(normalize(m)));
 
-      // Orphan items (custom materials not in any default category)
-      const orphans = siteMatNames.filter(m => !normalizedAllDefaults.includes(normalize(m)));
+      // Orphan items: in site inventory but not in any default or DB category
+      const orphans = siteMatNames.filter(m =>
+        !normalizedAllDefaults.includes(normalize(m)) &&
+        !normalizedAllDbMats.includes(normalize(m))
+      );
       items = i === cats.length - 1 ? [...knownInCat, ...orphans] : knownInCat;
     } else {
-      items = defaultItems;
+      items = allCatItems;
     }
 
     return {
       id: String(c.id),
       label: c.name,
-      color: CAT_COLORS[c.name] || '#1f4e1a',
+      color: CAT_COLORS[c.name] || '#4b5563',
       items,
     };
   });

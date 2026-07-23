@@ -6,7 +6,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
 import { useToast } from './Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
-import { pngAPI, dataAPI, columnConfigAPI, uploadAPI } from '../utils/api';
+import { pngAPI, dataAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
 import PhotoViewer from './PhotoViewer';
 
@@ -412,6 +412,23 @@ export default function HouseTable() {
       .then(cats => setStockCatData(buildAccordionCategories(cats, null)))
       .catch(() => setStockCatData([]));
   }, []);
+
+  // Site stock availability map: { materialName -> inStore qty } — fetched when panel opens
+  const [siteStockMap, setSiteStockMap] = useState({}); // { matName: inStore }
+  useEffect(() => {
+    if (!panelOpen || !siteId) { setSiteStockMap({}); return; }
+    stockAPI.getAll(siteId)
+      .then(items => {
+        const map = {};
+        items.forEach(item => {
+          const name = item.material || item.mat || item.name;
+          if (name) map[name] = Math.max(0, (item.inStore ?? (item.received ?? 0) - (item.issued ?? 0) - (item.returned ?? 0)));
+        });
+        setSiteStockMap(map);
+      })
+      .catch(() => setSiteStockMap({}));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOpen, siteId]);
 
   // Add a material permanently to the global list (component state only, not persisted)
   function addMaterialGlobal() {
@@ -1240,22 +1257,37 @@ export default function HouseTable() {
                         {cat.items.map(item => {
                           const key = `${cat.id}__${item}`;
                           const val = catQtys[key] || 0;
+                          // Lookup how many are available in site stock
+                          const normalize = s => (s || '').toLowerCase().trim();
+                          const available = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
                           return (
                             <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>{item}</label>
+                              <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>
+                                {item}
+                                {available !== null && (
+                                  <span style={{ fontSize: 10, color: available > 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
+                                    (Avail: {available})
+                                  </span>
+                                )}
+                              </label>
                               <input
-                                type="number" min={0}
+                                type="number" min={0} max={available !== null ? available : undefined}
                                 value={val === 0 ? '' : val}
                                 onFocus={e => e.target.select()}
                                 onChange={e => {
                                   const num = e.target.value === '' ? 0 : Number(e.target.value);
-                                  setCatQtys(prev => ({ ...prev, [key]: num }));
+                                  const capped = available !== null ? Math.min(num, available) : num;
+                                  setCatQtys(prev => ({ ...prev, [key]: capped }));
                                 }}
                                 onBlur={e => {
                                   if (e.target.value === '') setCatQtys(prev => ({ ...prev, [key]: 0 }));
                                 }}
                                 placeholder="0"
-                                style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
+                                style={{
+                                  width: 70, height: 28,
+                                  border: available !== null && val > available ? '1px solid #dc2626' : '1px solid #d1d5db',
+                                  borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right',
+                                }}
                               />
                             </div>
                           );

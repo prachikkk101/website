@@ -442,3 +442,24 @@ model StockReceipt {
 
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
+
+// Admin-managed stock category master data (not site-specific)
+model StockCategory {
+  id          Int             @id @default(autoincrement())
+  name        String          @unique  // e.g. "Copper Fitting"
+  parentGroup String?         // optional grouping label e.g. "GI Fitting"
+  isDefault   Boolean         @default(false)
+  createdAt   DateTime        @default(now())
+  materials   StockMaterial[]
+}
+
+// Admin-managed material items under a StockCategory (not site-specific)
+model StockMaterial {
+  id         Int           @id @default(autoincrement())
+  name       String        // e.g. "½\" GI Elbow"
+  categoryId Int
+  createdAt  DateTime      @default(now())
+  category   StockCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([name, categoryId])
+}

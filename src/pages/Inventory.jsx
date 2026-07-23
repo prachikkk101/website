@@ -51,6 +51,10 @@ function CategoryAccordion({
   // stockStats: { itemName -> { recv, issued, ret, inStore } } — used for availability lookup in return mode
   // If not provided, falls back to quantities (for readOnly/summary mode).
   stockStats = null,
+  // Admin-only: callbacks to add new category or add item to existing category
+  isAdmin = false,
+  onAddItem,
+  onCategoriesChanged = null, // called after admin adds a category or item to refresh cats
 }) {
   // Step 1: fetch raw category definitions ONCE (they don’t change per-site)
   const [rawCats, setRawCats] = useState([]);
@@ -67,7 +71,7 @@ function CategoryAccordion({
         setRawCats([]);
       })
       .finally(() => setCatLoading(false));
-  }, []); // only fetch category definitions once — they’re global, not per-site
+  }, [onCategoriesChanged]); // re-fetch when admin adds a category/item
 
   // Step 2: BUILD the accordion items reactively whenever rawCats OR stockItems changes.
   // CRITICAL: this was previously inside the useEffect above with [] deps, which meant
@@ -99,6 +103,34 @@ function CategoryAccordion({
 
   function updateQty(catId, item, qty) {
     setQuantities(prev => ({ ...prev, [`${catId}__${item}`]: qty }));
+  }
+
+  // Admin: Add Item to category inline modal state
+  const [addItemCat, setAddItemCat] = useState(null); // { id, label } of category
+  const [addItemName, setAddItemName] = useState('');
+  const [addItemSaving, setAddItemSaving] = useState(false);
+
+  function handleAddItemClick(cat) {
+    setAddItemCat(cat);
+    setAddItemName('');
+  }
+
+  async function handleSaveNewItem() {
+    if (!addItemName.trim() || !addItemCat) return;
+    setAddItemSaving(true);
+    try {
+      await dataAPI.addStockMaterial(Number(addItemCat.id), addItemName.trim());
+      setAddItemCat(null);
+      setAddItemName('');
+      // Refresh categories by re-fetching
+      const refreshed = await dataAPI.getStockCategories();
+      setRawCats(refreshed);
+      if (onCategoriesChanged) onCategoriesChanged();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Failed to add item.');
+    } finally {
+      setAddItemSaving(false);
+    }
   }
 
   if (catLoading) return <p style={{ color: '#64748b', fontSize: 13 }}>Loading categories…</p>;
@@ -146,7 +178,23 @@ function CategoryAccordion({
               }}
             >
               <span>{cat.label}</span>
-              <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* Admin-only: add item to this category */}
+                {isAdmin && !readOnly && (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); handleAddItemClick(cat); }}
+                    title={`Add new item to ${cat.label}`}
+                    style={{
+                      height: 22, padding: '0 8px', fontSize: 11, fontWeight: 700,
+                      background: 'rgba(255,255,255,0.2)', color: isOpen ? 'white' : '#1f4e1a',
+                      border: isOpen ? '1px solid rgba(255,255,255,0.4)' : '1px solid #a7c4a3',
+                      borderRadius: 4, cursor: 'pointer', lineHeight: 1,
+                    }}
+                  >+ Item</button>
+                )}
+                <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+              </div>
             </div>
 
             {/* Expanded items */}
@@ -227,6 +275,48 @@ function CategoryAccordion({
           </div>
         );
       })}
+
+      {/* Admin Add Item inline modal */}
+      {isAdmin && addItemCat && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 10, padding: 24, width: 360,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1f4e1a' }}>
+              Add New Item
+            </h3>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>
+              Adding to: <b>{addItemCat.label}</b>
+            </p>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Item name (e.g. GI Fitting — 2 inch)"
+              value={addItemName}
+              onChange={e => setAddItemName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); if (e.key === 'Escape') setAddItemCat(null); }}
+              style={{
+                width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6,
+                padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button
+                type="button" onClick={() => setAddItemCat(null)}
+                style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}
+              >Cancel</button>
+              <button
+                type="button" onClick={handleSaveNewItem} disabled={addItemSaving || !addItemName.trim()}
+                style={{ height: 34, padding: '0 16px', background: '#2d6a27', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: addItemSaving ? 0.6 : 1 }}
+              >{addItemSaving ? 'Saving…' : 'Add Item'}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -290,6 +380,29 @@ export default function Inventory() {
       .includes((user?.email || '').toLowerCase())
   );
   const canWrite = isAdmin || user?.role === 'SUPERVISOR' || user?.role === 'WORKER';
+
+  // Admin: Add Category modal state
+  const [addCatOpen, setAddCatOpen] = useState(false);
+  const [addCatName, setAddCatName] = useState('');
+  const [addCatSaving, setAddCatSaving] = useState(false);
+  // Incremented whenever admin adds a category/item so CategoryAccordion re-fetches
+  const [catRefreshKey, setCatRefreshKey] = useState(0);
+
+  async function handleSaveNewCategory() {
+    if (!addCatName.trim()) return;
+    setAddCatSaving(true);
+    try {
+      await dataAPI.addStockCategory(addCatName.trim());
+      setAddCatOpen(false);
+      setAddCatName('');
+      setCatRefreshKey(k => k + 1);
+      showToast('✓ Category added');
+    } catch (err) {
+      showToast(`✗ ${err?.response?.data?.error || 'Failed to add category'}`, 'error');
+    } finally {
+      setAddCatSaving(false);
+    }
+  }
 
   // ── Assigned pairs (for non-admin locking) ──
   // Each site in siteList IS one GA+City pair (already filtered by backend to user's sites)
@@ -871,10 +984,63 @@ export default function Inventory() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
                 Receive Stock
               </button>
+              {/* Admin-only: Add Category button */}
+              {isAdmin && (
+                <button
+                  onClick={() => { setAddCatOpen(true); setAddCatName(''); }}
+                  style={{
+                    height: 32, padding: '0 14px', fontSize: 12, fontWeight: 600,
+                    background: '#1e3a5f', color: 'white', border: 'none', borderRadius: 6,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                  title="Add a new stock category (admin only)"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                  Add Category
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
+
+      {/* Admin Add Category modal */}
+      {isAdmin && addCatOpen && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 10, padding: 24, width: 380,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
+          }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1e3a5f' }}>Add New Stock Category</h3>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>
+              New category will appear immediately in all users' Receive/Return Stock dropdowns.
+            </p>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Category name (e.g. Copper Fitting)"
+              value={addCatName}
+              onChange={e => setAddCatName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveNewCategory(); if (e.key === 'Escape') setAddCatOpen(false); }}
+              style={{
+                width: '100%', height: 36, border: '1px solid #93c5fd', borderRadius: 6,
+                padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14,
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setAddCatOpen(false)}
+                style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}
+              >Cancel</button>
+              <button type="button" onClick={handleSaveNewCategory} disabled={addCatSaving || !addCatName.trim()}
+                style={{ height: 34, padding: '0 16px', background: '#1e3a5f', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: addCatSaving ? 0.6 : 1 }}
+              >{addCatSaving ? 'Saving…' : 'Add Category'}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading && (
         <div style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 14 }}>
@@ -1326,6 +1492,8 @@ export default function Inventory() {
             setOpenCategory={setOpenCategory}
             quantities={quantities}
             setQuantities={setQuantities}
+            isAdmin={isAdmin}
+            onCategoriesChanged={() => setCatRefreshKey(k => k + 1)}
           />
         </div>
         <div>

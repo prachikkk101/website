@@ -357,7 +357,15 @@ const DEFAULT_STOCK_CATEGORIES = [
 
 export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // Pull all distinct category values already in use from InventoryItem rows
+    // 1. Pull admin-created categories from StockCategory table
+    const dbCats = await prisma.stockCategory.findMany({
+      orderBy: { name: 'asc' },
+      include: { materials: { orderBy: { name: 'asc' } } },
+    }).catch(() => [] as any[]);
+
+    const dbCatNames = dbCats.map((c: any) => c.name);
+
+    // 2. Pull all distinct category values from InventoryItem rows (legacy source)
     const rows = await prisma.inventoryItem.findMany({
       distinct: ['category'],
       select: { category: true },
@@ -365,14 +373,73 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
       orderBy: { category: 'asc' },
     }).catch(() => [] as { category: string }[]);
 
-    const dbCategories = rows.map(r => r.category).filter(Boolean);
+    const legacyCategories = rows.map((r: any) => r.category).filter(Boolean);
 
-    // Merge defaults with DB-derived categories (deduplicated, sorted)
-    const merged = Array.from(new Set([...DEFAULT_STOCK_CATEGORIES, ...dbCategories])).sort();
+    // 3. Merge: DEFAULT_STOCK_CATEGORIES + DB StockCategory names + legacy InventoryItem categories
+    const allNames = Array.from(new Set([
+      ...DEFAULT_STOCK_CATEGORIES,
+      ...dbCatNames,
+      ...legacyCategories,
+    ])).sort();
 
-    const categories = merged.map((name, i) => ({ id: i + 1, name }));
+    // 4. Build response: for each category, include its admin-managed materials list
+    const dbCatByName = Object.fromEntries(dbCats.map((c: any) => [c.name, c]));
+    const categories = allNames.map((name, i) => {
+      const dbCat = dbCatByName[name];
+      return {
+        id: dbCat ? dbCat.id : i + 1,
+        name,
+        materials: dbCat ? dbCat.materials.map((m: any) => ({ id: m.id, name: m.name })) : [],
+      };
+    });
 
     res.status(200).json({ success: true, categories });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addStockCategory = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can add new stock categories.' });
+    }
+    const { name, parentGroup } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Category name is required.' });
+    }
+    const cat = await prisma.stockCategory.upsert({
+      where: { name: String(name).trim() },
+      update: {},
+      create: { name: String(name).trim(), parentGroup: parentGroup ? String(parentGroup).trim() : null },
+    });
+    res.status(201).json({ success: true, category: cat });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const addStockMaterial = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can add new materials.' });
+    }
+    const categoryId = Number(req.params.categoryId);
+    const { name } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Material name is required.' });
+    }
+    // Ensure category exists (create it if it's a default category not yet in DB)
+    const cat = await prisma.stockCategory.findUnique({ where: { id: categoryId } });
+    if (!cat) {
+      return res.status(404).json({ success: false, error: 'Category not found.' });
+    }
+    const mat = await prisma.stockMaterial.upsert({
+      where: { name_categoryId: { name: String(name).trim(), categoryId } },
+      update: {},
+      create: { name: String(name).trim(), categoryId },
+    });
+    res.status(201).json({ success: true, material: mat });
   } catch (error) {
     next(error);
   }
