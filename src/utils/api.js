@@ -351,4 +351,12 @@ export const dataAPI = {
   /** Admin only: add a material item to an existing StockCategory. */
   addStockMaterial: (categoryId, name) =>
     api.post(`/stock-categories/${categoryId}/materials`, { name }).then(r => r.data.material),
+
+  /** Admin only: rename an existing material. */
+  updateStockMaterial: (categoryId, materialId, name) =>
+    api.patch(`/stock-categories/${categoryId}/materials/${materialId}`, { name }).then(r => r.data.material),
+
+  /** Admin only: delete a material from a StockCategory. */
+  deleteStockMaterial: (categoryId, materialId) =>
+    api.delete(`/stock-categories/${categoryId}/materials/${materialId}`).then(r => r.data),
 };

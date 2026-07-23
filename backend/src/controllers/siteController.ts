@@ -445,6 +445,39 @@ export const addStockMaterial = async (req: AuthenticatedRequest, res: Response,
   }
 };
 
+export const updateStockMaterial = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can edit materials.' });
+    }
+    const matId = Number(req.params.materialId);
+    const { name } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Material name is required.' });
+    }
+    const mat = await prisma.stockMaterial.update({
+      where: { id: matId },
+      data: { name: String(name).trim() },
+    });
+    res.status(200).json({ success: true, material: mat });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const deleteStockMaterial = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can delete materials.' });
+    }
+    const matId = Number(req.params.materialId);
+    await prisma.stockMaterial.delete({ where: { id: matId } });
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 export const updateSite = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const schema = z.object({

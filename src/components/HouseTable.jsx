@@ -1266,7 +1266,7 @@ export default function HouseTable() {
                                 {item}
                                 {available !== null && (
                                   <span style={{ fontSize: 10, color: available > 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
-                                    (Avail: {available})
+                                    (max: {available})
                                   </span>
                                 )}
                               </label>

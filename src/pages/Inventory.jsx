@@ -105,10 +105,15 @@ function CategoryAccordion({
     setQuantities(prev => ({ ...prev, [`${catId}__${item}`]: qty }));
   }
 
-  // Admin: Add Item to category inline modal state
-  const [addItemCat, setAddItemCat] = useState(null); // { id, label } of category
+  // ── Admin item management state ──
+  // Add item
+  const [addItemCat, setAddItemCat] = useState(null); // { id, label, dbId? }
   const [addItemName, setAddItemName] = useState('');
   const [addItemSaving, setAddItemSaving] = useState(false);
+  // Edit item
+  const [editItem, setEditItem] = useState(null); // { catDbId, matDbId, currentName }
+  const [editItemName, setEditItemName] = useState('');
+  const [editItemSaving, setEditItemSaving] = useState(false);
 
   function handleAddItemClick(cat) {
     setAddItemCat(cat);
@@ -122,7 +127,6 @@ function CategoryAccordion({
       await dataAPI.addStockMaterial(Number(addItemCat.id), addItemName.trim());
       setAddItemCat(null);
       setAddItemName('');
-      // Refresh categories by re-fetching
       const refreshed = await dataAPI.getStockCategories();
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
@@ -130,6 +134,41 @@ function CategoryAccordion({
       alert(err?.response?.data?.error || 'Failed to add item.');
     } finally {
       setAddItemSaving(false);
+    }
+  }
+
+  function handleEditItemClick(cat, itemName, matDbId) {
+    setEditItem({ catDbId: cat.id, matDbId, currentName: itemName });
+    setEditItemName(itemName);
+  }
+
+  async function handleSaveEditItem() {
+    if (!editItemName.trim() || !editItem) return;
+    setEditItemSaving(true);
+    try {
+      await dataAPI.updateStockMaterial(Number(editItem.catDbId), Number(editItem.matDbId), editItemName.trim());
+      setEditItem(null);
+      setEditItemName('');
+      const refreshed = await dataAPI.getStockCategories();
+      setRawCats(refreshed);
+      if (onCategoriesChanged) onCategoriesChanged();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Failed to rename item.');
+    } finally {
+      setEditItemSaving(false);
+    }
+  }
+
+  async function handleDeleteItem(cat, itemName, matDbId) {
+    if (!matDbId) { alert('Cannot delete a default (built-in) item.'); return; }
+    if (!window.confirm(`Remove "${itemName}" from "${cat.label}"? This cannot be undone.`)) return;
+    try {
+      await dataAPI.deleteStockMaterial(Number(cat.id), Number(matDbId));
+      const refreshed = await dataAPI.getStockCategories();
+      setRawCats(refreshed);
+      if (onCategoriesChanged) onCategoriesChanged();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Failed to delete item.');
     }
   }
 
@@ -162,7 +201,7 @@ function CategoryAccordion({
               const inStore = stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
               return inStore > 0;
             })
-          : cat.items;
+          : cat.matItems;
         return (
           <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
             {/* Accordion header */}
@@ -179,20 +218,6 @@ function CategoryAccordion({
             >
               <span>{cat.label}</span>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {/* Admin-only: add item to this category */}
-                {isAdmin && !readOnly && (
-                  <button
-                    type="button"
-                    onClick={(e) => { e.stopPropagation(); handleAddItemClick(cat); }}
-                    title={`Add new item to ${cat.label}`}
-                    style={{
-                      height: 22, padding: '0 8px', fontSize: 11, fontWeight: 700,
-                      background: 'rgba(255,255,255,0.2)', color: isOpen ? 'white' : '#1f4e1a',
-                      border: isOpen ? '1px solid rgba(255,255,255,0.4)' : '1px solid #a7c4a3',
-                      borderRadius: 4, cursor: 'pointer', lineHeight: 1,
-                    }}
-                  >+ Item</button>
-                )}
                 <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
               </div>
             </div>
@@ -210,7 +235,9 @@ function CategoryAccordion({
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {itemsToShow.map(item => {
+                    {itemsToShow.map(matItem => {
+                      const item = typeof matItem === 'string' ? matItem : matItem.name;
+                      const matDbId = typeof matItem === 'object' ? matItem.dbId : null;
                       if (readOnly) {
                         const stats = (stockStats || quantities)[item]
                           || Object.entries(stockStats || quantities).find(([k]) => normalize(k) === normalize(item))?.[1]
@@ -238,7 +265,6 @@ function CategoryAccordion({
                       }
                       // Edit mode (return stock or receive stock)
                       const val = quantities[`${cat.id}__${item}`] ?? 0;
-                      // In return mode, show max available for guidance — use stockStats, not user-input quantities
                       const maxAvail = stockItems !== null ? (() => {
                         const st = stockStats || quantities;
                         const stats = st[item]
@@ -247,7 +273,7 @@ function CategoryAccordion({
                         return stats.inStore ?? Math.max(0, (stats.recv ?? 0) - (stats.issued ?? 0) - (stats.ret ?? 0));
                       })() : null;
                       return (
-                        <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <label style={{ fontSize: 11.5, flex: 1, color: '#374151', lineHeight: 1.3 }}>
                             {item}
                             {maxAvail !== null && <span style={{ fontSize: 10, color: '#64748b', marginLeft: 4 }}>(max: {maxAvail})</span>}
@@ -265,10 +291,41 @@ function CategoryAccordion({
                             placeholder="0"
                             style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
                           />
+                          {/* Admin per-item edit/delete (only in Receive mode, not Return) */}
+                          {isAdmin && stockItems === null && (
+                            <>
+                              <button
+                                type="button"
+                                title="Rename this item"
+                                onClick={() => handleEditItemClick(cat, item, matDbId)}
+                                style={{ width: 24, height: 24, border: '1px solid #93c5fd', borderRadius: 4, background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontSize: 12, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                              >✎</button>
+                              {matDbId && (
+                                <button
+                                  type="button"
+                                  title="Remove this item"
+                                  onClick={() => handleDeleteItem(cat, item, matDbId)}
+                                  style={{ width: 24, height: 24, border: '1px solid #fca5a5', borderRadius: 4, background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                                >×</button>
+                              )}
+                            </>
+                          )}
                         </div>
                       );
                     })}
                   </div>
+                )}
+                {/* Admin: Add Item at BOTTOM of open category */}
+                {isAdmin && !readOnly && (
+                  <button
+                    type="button"
+                    onClick={() => handleAddItemClick(cat)}
+                    style={{
+                      marginTop: 10, width: '100%', height: 30, border: '1px dashed #a7c4a3',
+                      borderRadius: 5, background: 'transparent', color: '#2d6a27',
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >+ Add Item to {cat.label}</button>
                 )}
               </div>
             )}
@@ -276,43 +333,43 @@ function CategoryAccordion({
         );
       })}
 
-      {/* Admin Add Item inline modal */}
+      {/* Admin Add Item modal */}
       {isAdmin && addItemCat && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-        }}>
-          <div style={{
-            background: 'white', borderRadius: 10, padding: 24, width: 360,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.25)',
-          }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1f4e1a' }}>
-              Add New Item
-            </h3>
-            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>
-              Adding to: <b>{addItemCat.label}</b>
-            </p>
-            <input
-              autoFocus
-              type="text"
-              placeholder="Item name (e.g. GI Fitting — 2 inch)"
-              value={addItemName}
-              onChange={e => setAddItemName(e.target.value)}
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1f4e1a' }}>Add New Item</h3>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>Adding to: <b>{addItemCat.label}</b></p>
+            <input autoFocus type="text" placeholder="Item name (e.g. GI Fitting — 2 inch)"
+              value={addItemName} onChange={e => setAddItemName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); if (e.key === 'Escape') setAddItemCat(null); }}
-              style={{
-                width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6,
-                padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14,
-              }}
+              style={{ width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6, padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14 }}
             />
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button
-                type="button" onClick={() => setAddItemCat(null)}
-                style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}
-              >Cancel</button>
-              <button
-                type="button" onClick={handleSaveNewItem} disabled={addItemSaving || !addItemName.trim()}
-                style={{ height: 34, padding: '0 16px', background: '#2d6a27', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: addItemSaving ? 0.6 : 1 }}
-              >{addItemSaving ? 'Saving…' : 'Add Item'}</button>
+              <button type="button" onClick={() => setAddItemCat(null)}
+                style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={handleSaveNewItem} disabled={addItemSaving || !addItemName.trim()}
+                style={{ height: 34, padding: '0 16px', background: '#2d6a27', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: addItemSaving ? 0.6 : 1 }}>{addItemSaving ? 'Saving…' : 'Add Item'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Admin Edit Item modal */}
+      {isAdmin && editItem && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1e3a5f' }}>Rename Item</h3>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>Current name: <b>{editItem.currentName}</b></p>
+            <input autoFocus type="text" placeholder="New item name"
+              value={editItemName} onChange={e => setEditItemName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveEditItem(); if (e.key === 'Escape') setEditItem(null); }}
+              style={{ width: '100%', height: 36, border: '1px solid #93c5fd', borderRadius: 6, padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14 }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setEditItem(null)}
+                style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={handleSaveEditItem} disabled={editItemSaving || !editItemName.trim()}
+                style={{ height: 34, padding: '0 16px', background: '#1e3a5f', color: 'white', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: editItemSaving ? 0.6 : 1 }}>{editItemSaving ? 'Saving…' : 'Save'}</button>
             </div>
           </div>
         </div>
@@ -871,30 +928,47 @@ export default function Inventory() {
             {uniqueGAs[0]}{uniqueCities.length === 1 ? ` — ${uniqueCities[0]}` : ''}
           </span>
         ) : (
-          // Admin: full site selector listing all sites explicitly
-          <select
-            id="inv-site-filter"
-            value={invSelectedSiteId || ''}
-            onChange={e => {
-              const val = e.target.value;
-              setInvSelectedSiteId(val || null);
-              if (val) {
-                const s = siteList.find(x => x.id === val);
-                if (s) { setInvGA(s.gaName); setInvCity(s.location); }
-              } else {
-                setInvGA(''); setInvCity('');
-              }
-            }}
-            style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
-                fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
-          >
-            <option value="">— All Sites (Global View) —</option>
-            {siteList.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name || `${s.gaName || ''} — ${s.chargeArea || s.location || ''}`}
-              </option>
-            ))}
-          </select>
+          // Admin: site selector grouped by GA — City (no area in label, no global view)
+          (() => {
+            // Build deduplicated list of GA+City entries
+            const seen = new Set();
+            const gaCityOptions = siteList
+              .map(s => {
+                const label = s.gaName && s.location
+                  ? (s.gaName.trim() === s.location.trim() ? s.gaName.trim() : `${s.gaName.trim()} — ${s.location.trim()}`)
+                  : (s.gaName || s.location || s.name || '');
+                const key = label.toLowerCase();
+                if (seen.has(key)) return null;
+                seen.add(key);
+                // Pick the siteId of the first site matching this GA+City
+                return { label, siteId: s.id, gaName: s.gaName, location: s.location };
+              })
+              .filter(Boolean);
+
+            return (
+              <select
+                id="inv-site-filter"
+                value={invSelectedSiteId || ''}
+                onChange={e => {
+                  const val = e.target.value;
+                  setInvSelectedSiteId(val || null);
+                  if (val) {
+                    const s = siteList.find(x => x.id === val);
+                    if (s) { setInvGA(s.gaName); setInvCity(s.location); }
+                  } else {
+                    setInvGA(''); setInvCity('');
+                  }
+                }}
+                style={{ height: 32, border: '1px solid #a7c4a3', borderRadius: 4, padding: '0 8px',
+                    fontSize: 12, background: '#fff', color: '#1f4e1a', cursor: 'pointer' }}
+              >
+                <option value="">— Select GA / City —</option>
+                {gaCityOptions.map(opt => (
+                  <option key={opt.siteId} value={opt.siteId}>{opt.label}</option>
+                ))}
+              </select>
+            );
+          })()
         )}
         {invGA && invCity && (
           <span style={{ fontSize: 11, color: '#16a34a', fontWeight: 600 }}>
