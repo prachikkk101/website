@@ -290,7 +290,9 @@ export default function PELaying() {
   const [pipeStockMap, setPipeStockMap] = useState({});
 
   // Derive the siteId from the currently filled-in form fields (matches save logic)
+  // IMPORTANT: admin uses GA/city IDs (from mergedGAs dropdowns), non-admin uses name strings
   const formSiteId = useMemo(() => {
+    // Non-admin: formGA = GA name, formCity = city name
     if (!isAdmin && assignedPairs.length > 0) {
       const pair = assignedPairs.find(p =>
         p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
@@ -300,18 +302,24 @@ export default function PELaying() {
       if (assignedPairs.length === 1) return assignedPairs[0].siteId;
     }
     if (formGA && formCity) {
+      // Admin: formGA = GA id, formCity = city id — resolve to names via mergedGAs
+      const gaEntry   = mergedGAs.find(g => g.id === formGA);
+      const gaLabel   = gaEntry?.label  || formGA;
+      const cityEntry = gaEntry?.cities?.find(c => c.id === formCity);
+      const cityLabel = cityEntry?.label || formCity;
       const match = siteList.find(s =>
-        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
-        s.location?.toLowerCase() === formCity?.toLowerCase() &&
+        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
+        s.location?.toLowerCase() === cityLabel?.toLowerCase() &&
         (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
       ) || siteList.find(s =>
-        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
-        s.location?.toLowerCase() === formCity?.toLowerCase()
+        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
+        s.location?.toLowerCase() === cityLabel?.toLowerCase()
       );
       if (match) return match.id;
     }
     return siteId || null;
-  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId]);
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId, mergedGAs]);
+
 
   useEffect(() => {
     if (!panelOpen || !formSiteId) { setPipeStockMap({}); return; }

@@ -419,8 +419,9 @@ export default function HouseTable() {
   const [siteStockMap, setSiteStockMap] = useState({}); // { matName: inStore }
 
   // Derive the siteId from the currently filled-in form fields (mirrors save logic)
+  // IMPORTANT: admin uses GA/city IDs (from mergedGAs dropdowns), non-admin uses name strings
   const formSiteId = useMemo(() => {
-    // Non-admin with assigned pairs: direct lookup
+    // Non-admin with assigned pairs: formGA = GA name, formCity = city name
     if (!isAdmin && assignedPairs.length > 0) {
       const pair = assignedPairs.find(p =>
         p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
@@ -429,21 +430,25 @@ export default function HouseTable() {
       if (pair) return pair.siteId;
       if (assignedPairs.length === 1) return assignedPairs[0].siteId;
     }
-    // Admin or fallback: 3-field match on siteList
     if (formGA && formCity) {
+      // Admin: formGA = GA id, formCity = city id — resolve to names via mergedGAs
+      const gaEntry  = mergedGAs.find(g => g.id === formGA);
+      const gaLabel  = gaEntry?.label  || formGA;   // GA name
+      const cityEntry = gaEntry?.cities?.find(c => c.id === formCity);
+      const cityLabel = cityEntry?.label || formCity; // city name
       const match = siteList.find(s =>
-        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
-        s.location?.toLowerCase() === formCity?.toLowerCase() &&
+        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
+        s.location?.toLowerCase() === cityLabel?.toLowerCase() &&
         (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
       ) || siteList.find(s =>
-        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
-        s.location?.toLowerCase() === formCity?.toLowerCase()
+        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
+        s.location?.toLowerCase() === cityLabel?.toLowerCase()
       );
       if (match) return match.id;
     }
-    // Last resort: global context
+    // Last resort: global context siteId
     return siteId || null;
-  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId]);
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId, mergedGAs]);
 
   useEffect(() => {
     if (!panelOpen || !formSiteId) { setSiteStockMap({}); return; }
