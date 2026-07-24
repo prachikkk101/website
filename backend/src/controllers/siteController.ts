@@ -358,14 +358,35 @@ const DEFAULT_STOCK_CATEGORIES = [
 export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     // 1. Pull admin-created categories from StockCategory table
-    const dbCats = await prisma.stockCategory.findMany({
+    let dbCats = await prisma.stockCategory.findMany({
       orderBy: { name: 'asc' },
       include: { materials: { orderBy: { name: 'asc' } } },
     }).catch(() => [] as any[]);
 
     const dbCatNames = dbCats.map((c: any) => c.name);
 
-    // 2. Pull all distinct category values from InventoryItem rows (legacy source)
+    // 2. Auto-upsert any DEFAULT_STOCK_CATEGORIES that aren't in DB yet.
+    //    This guarantees every accordion category has a REAL DB id — fixes "Category not found"
+    //    when addStockMaterial is called on a default category that was never explicitly created.
+    const missingDefaults = DEFAULT_STOCK_CATEGORIES.filter(n => !dbCatNames.includes(n));
+    if (missingDefaults.length > 0) {
+      await Promise.all(
+        missingDefaults.map(name =>
+          prisma.stockCategory.upsert({
+            where: { name },
+            update: {},
+            create: { name, isDefault: true },
+          })
+        )
+      );
+      // Re-fetch so response includes newly created records with their real ids
+      dbCats = await prisma.stockCategory.findMany({
+        orderBy: { name: 'asc' },
+        include: { materials: { orderBy: { name: 'asc' } } },
+      }).catch(() => [] as any[]);
+    }
+
+    // 3. Pull all distinct category values from InventoryItem rows (legacy source)
     const rows = await prisma.inventoryItem.findMany({
       distinct: ['category'],
       select: { category: true },
@@ -375,23 +396,27 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
 
     const legacyCategories = rows.map((r: any) => r.category).filter(Boolean);
 
-    // 3. Merge: DEFAULT_STOCK_CATEGORIES + DB StockCategory names + legacy InventoryItem categories
+    // 4. Merge: all DB StockCategory names + legacy InventoryItem categories
+    const dbCatNames2 = dbCats.map((c: any) => c.name);
     const allNames = Array.from(new Set([
+      ...dbCatNames2,
       ...DEFAULT_STOCK_CATEGORIES,
-      ...dbCatNames,
       ...legacyCategories,
     ])).sort();
 
-    // 4. Build response: for each category, include its admin-managed materials list
+    // 5. Build response: every category now has a guaranteed real DB id
     const dbCatByName = Object.fromEntries(dbCats.map((c: any) => [c.name, c]));
-    const categories = allNames.map((name, i) => {
-      const dbCat = dbCatByName[name];
-      return {
-        id: dbCat ? dbCat.id : i + 1,
-        name,
-        materials: dbCat ? dbCat.materials.map((m: any) => ({ id: m.id, name: m.name })) : [],
-      };
-    });
+    const categories = allNames
+      .map(name => {
+        const dbCat = dbCatByName[name];
+        if (!dbCat) return null; // legacy-only categories without a DB record are skipped
+        return {
+          id: dbCat.id,
+          name,
+          materials: dbCat.materials.map((m: any) => ({ id: m.id, name: m.name })),
+        };
+      })
+      .filter(Boolean);
 
     res.status(200).json({ success: true, categories });
   } catch (error) {

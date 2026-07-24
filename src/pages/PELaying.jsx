@@ -288,11 +288,35 @@ export default function PELaying() {
   // Pipe stock availability: fetch site stock when panel opens to show available pipe quantities
   // pipeStockMap: { '32': inStore, '63': inStore, '90': inStore, '125': inStore } (metres)
   const [pipeStockMap, setPipeStockMap] = useState({});
+
+  // Derive the siteId from the currently filled-in form fields (matches save logic)
+  const formSiteId = useMemo(() => {
+    if (!isAdmin && assignedPairs.length > 0) {
+      const pair = assignedPairs.find(p =>
+        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
+        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+      );
+      if (pair) return pair.siteId;
+      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
+    }
+    if (formGA && formCity) {
+      const match = siteList.find(s =>
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase() &&
+        (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
+      ) || siteList.find(s =>
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase()
+      );
+      if (match) return match.id;
+    }
+    return siteId || null;
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId]);
+
   useEffect(() => {
-    if (!panelOpen || !siteId) { setPipeStockMap({}); return; }
-    stockAPI.getAll(siteId)
+    if (!panelOpen || !formSiteId) { setPipeStockMap({}); return; }
+    stockAPI.getAll(formSiteId)
       .then(items => {
-        // Match pipe materials by name — look for "32mm", "63mm", "90mm", "125mm" in the item name
         const map = {};
         items.forEach(item => {
           const name = (item.material || item.mat || item.name || '').toLowerCase();
@@ -314,7 +338,7 @@ export default function PELaying() {
       })
       .catch(() => setPipeStockMap({}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelOpen, siteId]);
+  }, [panelOpen, formSiteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
@@ -1005,7 +1029,14 @@ export default function PELaying() {
             <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textAlign: 'center' }}>Total</div>
 
             {/* Row 2: Ø32 */}
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø32mm</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a', lineHeight: 1.3 }}>
+              Ø32mm
+              {pipeStockMap['32'] !== undefined && (
+                <div style={{ fontSize: 10, fontWeight: 500, color: d32Total > pipeStockMap['32'] ? '#dc2626' : '#16a34a' }}>
+                  (max: {pipeStockMap['32']}m)
+                </div>
+              )}
+            </div>
             <Input type="number" min={0} value={form.d32oc === 0 || form.d32oc === '' ? '' : form.d32oc}
               onChange={val => { f('d32oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d32oc', 0); }}
@@ -1024,7 +1055,14 @@ export default function PELaying() {
             <div style={{ height: 28, border: `1px solid ${pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['32'] !== undefined && d32Total > pipeStockMap['32'] ? '#dc2626' : '#1f4e1a' }}>{d32Total}</div>
 
             {/* Row 3: Ø63 */}
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø63mm</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a', lineHeight: 1.3 }}>
+              Ø63mm
+              {pipeStockMap['63'] !== undefined && (
+                <div style={{ fontSize: 10, fontWeight: 500, color: d63Total > pipeStockMap['63'] ? '#dc2626' : '#16a34a' }}>
+                  (max: {pipeStockMap['63']}m)
+                </div>
+              )}
+            </div>
             <Input type="number" min={0} value={form.d63oc === 0 || form.d63oc === '' ? '' : form.d63oc}
               onChange={val => { f('d63oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d63oc', 0); }}
@@ -1043,7 +1081,14 @@ export default function PELaying() {
             <div style={{ height: 28, border: `1px solid ${pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['63'] !== undefined && d63Total > pipeStockMap['63'] ? '#dc2626' : '#1f4e1a' }}>{d63Total}</div>
 
             {/* Row 4: Ø90 */}
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø90mm</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a', lineHeight: 1.3 }}>
+              Ø90mm
+              {pipeStockMap['90'] !== undefined && (
+                <div style={{ fontSize: 10, fontWeight: 500, color: d90Total > pipeStockMap['90'] ? '#dc2626' : '#16a34a' }}>
+                  (max: {pipeStockMap['90']}m)
+                </div>
+              )}
+            </div>
             <Input type="number" min={0} value={form.d90oc === 0 || form.d90oc === '' ? '' : form.d90oc}
               onChange={val => { f('d90oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d90oc', 0); }}
@@ -1062,7 +1107,14 @@ export default function PELaying() {
             <div style={{ height: 28, border: `1px solid ${pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['90'] !== undefined && d90Total > pipeStockMap['90'] ? '#dc2626' : '#1f4e1a' }}>{d90Total}</div>
 
             {/* Row 5: Ø125 */}
-            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a' }}>Ø125mm</div>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: '#1f4e1a', lineHeight: 1.3 }}>
+              Ø125mm
+              {pipeStockMap['125'] !== undefined && (
+                <div style={{ fontSize: 10, fontWeight: 500, color: d125Total > pipeStockMap['125'] ? '#dc2626' : '#16a34a' }}>
+                  (max: {pipeStockMap['125']}m)
+                </div>
+              )}
+            </div>
             <Input type="number" min={0} value={form.d125oc === 0 || form.d125oc === '' ? '' : form.d125oc}
               onChange={val => { f('d125oc', val === '' ? 0 : Number(val)); }}
               onBlur={e => { if (e.target.value === '') f('d125oc', 0); }}

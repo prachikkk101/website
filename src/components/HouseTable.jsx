@@ -414,10 +414,40 @@ export default function HouseTable() {
   }, []);
 
   // Site stock availability map: { materialName -> inStore qty } — fetched when panel opens
+  // Uses the form-resolved siteId (from formGA+formCity+formArea) NOT the global selectedSiteId,
+  // so admin users also get availability data as soon as they fill in GA+City+Area.
   const [siteStockMap, setSiteStockMap] = useState({}); // { matName: inStore }
+
+  // Derive the siteId from the currently filled-in form fields (mirrors save logic)
+  const formSiteId = useMemo(() => {
+    // Non-admin with assigned pairs: direct lookup
+    if (!isAdmin && assignedPairs.length > 0) {
+      const pair = assignedPairs.find(p =>
+        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
+        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+      );
+      if (pair) return pair.siteId;
+      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
+    }
+    // Admin or fallback: 3-field match on siteList
+    if (formGA && formCity) {
+      const match = siteList.find(s =>
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase() &&
+        (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
+      ) || siteList.find(s =>
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase()
+      );
+      if (match) return match.id;
+    }
+    // Last resort: global context
+    return siteId || null;
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId]);
+
   useEffect(() => {
-    if (!panelOpen || !siteId) { setSiteStockMap({}); return; }
-    stockAPI.getAll(siteId)
+    if (!panelOpen || !formSiteId) { setSiteStockMap({}); return; }
+    stockAPI.getAll(formSiteId)
       .then(items => {
         const map = {};
         items.forEach(item => {
@@ -428,7 +458,7 @@ export default function HouseTable() {
       })
       .catch(() => setSiteStockMap({}));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panelOpen, siteId]);
+  }, [panelOpen, formSiteId]);
 
   // Add a material permanently to the global list (component state only, not persisted)
   function addMaterialGlobal() {
@@ -1229,6 +1259,18 @@ export default function HouseTable() {
                 <p style={{ color: '#94a3b8', fontSize: 12, margin: '4px 0' }}>No stock categories loaded from server.</p>
               ) : stockCatData.map(cat => {
                 const isOpen = catOpen === cat.id;
+                // Filter items: only show those with available stock > 0
+                // (When siteStockMap is empty/not loaded yet, show all items so the form isn't blank)
+                const normalize = s => (s || '').toLowerCase().trim();
+                const hasStockData = Object.keys(siteStockMap).length > 0;
+                const visibleItems = hasStockData
+                  ? cat.items.filter(item => {
+                      const avail = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
+                      return avail > 0;
+                    })
+                  : cat.items;
+                // Skip categories with no available items when stock data is loaded
+                if (hasStockData && visibleItems.length === 0) return null;
                 return (
                   <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
                     {/* Category header */}
@@ -1254,11 +1296,9 @@ export default function HouseTable() {
                     {/* Items */}
                     {isOpen && (
                       <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {cat.items.map(item => {
+                        {visibleItems.map(item => {
                           const key = `${cat.id}__${item}`;
                           const val = catQtys[key] || 0;
-                          // Lookup how many are available in site stock
-                          const normalize = s => (s || '').toLowerCase().trim();
                           const available = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
                           return (
                             <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
