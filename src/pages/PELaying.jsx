@@ -289,36 +289,38 @@ export default function PELaying() {
   // pipeStockMap: { '32': inStore, '63': inStore, '90': inStore, '125': inStore } (metres)
   const [pipeStockMap, setPipeStockMap] = useState({});
 
-  // Derive the siteId from the currently filled-in form fields (matches save logic)
-  // IMPORTANT: admin uses GA/city IDs (from mergedGAs dropdowns), non-admin uses name strings
+  // Derive siteId from form fields; loads stock as soon as GA is selected.
+  // ga.id = ga.name = city.id = city.name (backend uses name as id).
   const formSiteId = useMemo(() => {
-    // Non-admin: formGA = GA name, formCity = city name
     if (!isAdmin && assignedPairs.length > 0) {
+      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
       const pair = assignedPairs.find(p =>
         p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
         p.cityName.toLowerCase() === (formCity || '').toLowerCase()
       );
       if (pair) return pair.siteId;
-      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
+      const gaOnly = assignedPairs.find(p => p.gaName.toLowerCase() === (formGA || '').toLowerCase());
+      if (gaOnly) return gaOnly.siteId;
+      return assignedPairs[0].siteId;
     }
     if (formGA && formCity) {
-      // Admin: formGA = GA id, formCity = city id — resolve to names via mergedGAs
-      const gaEntry   = mergedGAs.find(g => g.id === formGA);
-      const gaLabel   = gaEntry?.label  || formGA;
-      const cityEntry = gaEntry?.cities?.find(c => c.id === formCity);
-      const cityLabel = cityEntry?.label || formCity;
       const match = siteList.find(s =>
-        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
-        s.location?.toLowerCase() === cityLabel?.toLowerCase() &&
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase() &&
         (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
       ) || siteList.find(s =>
-        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
-        s.location?.toLowerCase() === cityLabel?.toLowerCase()
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase()
       );
       if (match) return match.id;
     }
-    return siteId || null;
-  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId, mergedGAs]);
+    if (formGA) {
+      const match = siteList.find(s => s.gaName?.toLowerCase() === formGA?.toLowerCase());
+      if (match) return match.id;
+    }
+    return selectedSiteId || null;
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, selectedSiteId]);
+
 
 
   useEffect(() => {

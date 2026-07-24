@@ -418,37 +418,44 @@ export default function HouseTable() {
   // so admin users also get availability data as soon as they fill in GA+City+Area.
   const [siteStockMap, setSiteStockMap] = useState({}); // { matName: inStore }
 
-  // Derive the siteId from the currently filled-in form fields (mirrors save logic)
-  // IMPORTANT: admin uses GA/city IDs (from mergedGAs dropdowns), non-admin uses name strings
+  // Derive the siteId from the currently filled-in form fields.
+  // Triggers stock load as soon as GA is selected (GA-only fallback), not just GA+City.
+  // ga.id = ga.name = city.id = city.name = the actual string name (backend returns name as id).
   const formSiteId = useMemo(() => {
-    // Non-admin with assigned pairs: formGA = GA name, formCity = city name
+    // Non-admin: always resolve from assigned pairs
     if (!isAdmin && assignedPairs.length > 0) {
+      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
       const pair = assignedPairs.find(p =>
         p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
         p.cityName.toLowerCase() === (formCity || '').toLowerCase()
       );
       if (pair) return pair.siteId;
-      if (assignedPairs.length === 1) return assignedPairs[0].siteId;
+      const gaOnly = assignedPairs.find(p => p.gaName.toLowerCase() === (formGA || '').toLowerCase());
+      if (gaOnly) return gaOnly.siteId;
+      return assignedPairs[0].siteId;
     }
+    // Admin: exact GA+City+Area match first (most precise)
     if (formGA && formCity) {
-      // Admin: formGA = GA id, formCity = city id — resolve to names via mergedGAs
-      const gaEntry  = mergedGAs.find(g => g.id === formGA);
-      const gaLabel  = gaEntry?.label  || formGA;   // GA name
-      const cityEntry = gaEntry?.cities?.find(c => c.id === formCity);
-      const cityLabel = cityEntry?.label || formCity; // city name
+      // ga.id === ga.name (backend returns name as id), so formGA IS the GA name.
+      // city.id === city.name === s.location, so formCity IS the city name.
       const match = siteList.find(s =>
-        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
-        s.location?.toLowerCase() === cityLabel?.toLowerCase() &&
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase() &&
         (!formArea || s.chargeArea?.toLowerCase() === formArea?.toLowerCase())
       ) || siteList.find(s =>
-        s.gaName?.toLowerCase() === gaLabel?.toLowerCase() &&
-        s.location?.toLowerCase() === cityLabel?.toLowerCase()
+        s.gaName?.toLowerCase() === formGA?.toLowerCase() &&
+        s.location?.toLowerCase() === formCity?.toLowerCase()
       );
       if (match) return match.id;
     }
-    // Last resort: global context siteId
-    return siteId || null;
-  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, siteId, mergedGAs]);
+    // Admin: GA-only fallback — load stock from first site in selected GA
+    if (formGA) {
+      const match = siteList.find(s => s.gaName?.toLowerCase() === formGA?.toLowerCase());
+      if (match) return match.id;
+    }
+    // Last resort: global selected site from context
+    return selectedSiteId || null;
+  }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, selectedSiteId]);
 
   useEffect(() => {
     if (!panelOpen || !formSiteId) { setSiteStockMap({}); return; }
@@ -1262,86 +1269,93 @@ export default function HouseTable() {
               </p>
               {stockCatData.length === 0 ? (
                 <p style={{ color: '#94a3b8', fontSize: 12, margin: '4px 0' }}>No stock categories loaded from server.</p>
-              ) : stockCatData.map(cat => {
-                const isOpen = catOpen === cat.id;
-                // Filter items: only show those with available stock > 0
-                // (When siteStockMap is empty/not loaded yet, show all items so the form isn't blank)
+              ) : (() => {
                 const normalize = s => (s || '').toLowerCase().trim();
                 const hasStockData = Object.keys(siteStockMap).length > 0;
-                const visibleItems = hasStockData
-                  ? cat.items.filter(item => {
-                      const avail = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
-                      return avail > 0;
-                    })
-                  : cat.items;
-                // Skip categories with no available items when stock data is loaded
-                if (hasStockData && visibleItems.length === 0) return null;
-                return (
-                  <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
-                    {/* Category header */}
-                    <div
-                      onClick={() => setCatOpen(prev => prev === cat.id ? null : cat.id)}
-                      style={{
-                        background: isOpen ? cat.color : '#f8fafc',
-                        color: isOpen ? 'white' : '#1e293b',
-                        padding: '9px 12px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        fontWeight: 600,
-                        fontSize: 12,
-                        transition: 'background 0.15s',
-                      }}
-                    >
-                      <span>{cat.label}</span>
-                      <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
-                    </div>
-
-                    {/* Items */}
-                    {isOpen && (
-                      <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                        {visibleItems.map(item => {
-                          const key = `${cat.id}__${item}`;
-                          const val = catQtys[key] || 0;
-                          const available = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
-                          return (
-                            <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>
-                                {item}
-                                {available !== null && (
-                                  <span style={{ fontSize: 10, color: available > 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
-                                    (max: {available})
-                                  </span>
-                                )}
-                              </label>
-                              <input
-                                type="number" min={0} max={available !== null ? available : undefined}
-                                value={val === 0 ? '' : val}
-                                onFocus={e => e.target.select()}
-                                onChange={e => {
-                                  const num = e.target.value === '' ? 0 : Number(e.target.value);
-                                  const capped = available !== null ? Math.min(num, available) : num;
-                                  setCatQtys(prev => ({ ...prev, [key]: capped }));
-                                }}
-                                onBlur={e => {
-                                  if (e.target.value === '') setCatQtys(prev => ({ ...prev, [key]: 0 }));
-                                }}
-                                placeholder="0"
-                                style={{
-                                  width: 70, height: 28,
-                                  border: available !== null && val > available ? '1px solid #dc2626' : '1px solid #d1d5db',
-                                  borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right',
-                                }}
-                              />
-                            </div>
-                          );
-                        })}
+                return stockCatData.map(cat => {
+                  const isOpen = catOpen === cat.id;
+                  // Filter items: only show those with available stock > 0 when stock is loaded.
+                  // When stock isn't loaded yet, show all items.
+                  const visibleItems = hasStockData
+                    ? cat.items.filter(item => {
+                        const avail = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
+                        return avail > 0;
+                      })
+                    : cat.items;
+                  // Skip whole category if stock loaded but none of its items have stock
+                  if (hasStockData && visibleItems.length === 0) return null;
+                  return (
+                    <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
+                      {/* Category header */}
+                      <div
+                        onClick={() => setCatOpen(prev => prev === cat.id ? null : cat.id)}
+                        style={{
+                          background: isOpen ? cat.color : '#f8fafc',
+                          color: isOpen ? 'white' : '#1e293b',
+                          padding: '9px 12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontWeight: 600,
+                          fontSize: 12,
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        <span>{cat.label}</span>
+                        <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
                       </div>
-                    )}
-                  </div>
-                );
-              })}
+
+                      {/* Items */}
+                      {isOpen && (
+                        <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                          {!hasStockData && !formSiteId && (
+                            <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px', fontStyle: 'italic' }}>
+                              📋 Select GA Location to see available stock only
+                            </p>
+                          )}
+                          {visibleItems.map(item => {
+                            const key = `${cat.id}__${item}`;
+                            const val = catQtys[key] || 0;
+                            const available = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
+                            return (
+                              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>
+                                  {item}
+                                  {available !== null && (
+                                    <span style={{ fontSize: 10, color: available > 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
+                                      (max: {available})
+                                    </span>
+                                  )}
+                                </label>
+                                <input
+                                  type="number" min={0} max={available !== null ? available : undefined}
+                                  value={val === 0 ? '' : val}
+                                  onFocus={e => e.target.select()}
+                                  onChange={e => {
+                                    const num = e.target.value === '' ? 0 : Number(e.target.value);
+                                    const capped = available !== null ? Math.min(num, available) : num;
+                                    setCatQtys(prev => ({ ...prev, [key]: capped }));
+                                  }}
+                                  onBlur={e => {
+                                    if (e.target.value === '') setCatQtys(prev => ({ ...prev, [key]: 0 }));
+                                  }}
+                                  placeholder="0"
+                                  style={{
+                                    width: 70, height: 28,
+                                    border: available !== null && val > available ? '1px solid #dc2626' : '1px solid #d1d5db',
+                                    borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right',
+                                  }}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
 
             {/* Add persistent material to global list */}
