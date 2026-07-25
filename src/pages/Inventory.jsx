@@ -146,7 +146,15 @@ function CategoryAccordion({
     if (!editItemName.trim() || !editItem) return;
     setEditItemSaving(true);
     try {
-      await dataAPI.updateStockMaterial(Number(editItem.catDbId), Number(editItem.matDbId), editItemName.trim());
+      if (editItem.matDbId) {
+        // Admin-added item — has a real DB record, just PATCH the name
+        await dataAPI.updateStockMaterial(Number(editItem.catDbId), Number(editItem.matDbId), editItemName.trim());
+      } else {
+        // Default (seeded) item — no DB record exists yet.
+        // Rename = soft-delete old name + add new name as a fresh DB item.
+        await dataAPI.hideDefaultItem(Number(editItem.catDbId), editItem.currentName);
+        await dataAPI.addStockMaterial(Number(editItem.catDbId), editItemName.trim());
+      }
       setEditItem(null);
       setEditItemName('');
       const refreshed = await dataAPI.getStockCategories();
