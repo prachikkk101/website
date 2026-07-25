@@ -159,7 +159,7 @@ export const CAT_COLORS = {
 
 /**
  * Build the accordion category objects from an API response.
- * @param {Array<{id: number, name: string, materials?: Array<{id:number,name:string}>}>} cats - from dataAPI.getStockCategories()
+ * @param {Array<{id: number, name: string, materials?: Array<{id:number,name:string}>, hiddenDefaults?: string[]}>} cats - from dataAPI.getStockCategories()
  * @param {Array<object>|null} stockItems - existing site InventoryItem rows for Return mode
  * @returns {Array<{id: string, label: string, color: string, items: string[], matItems: {name:string,dbId:number|null}[]}>}
  */
@@ -170,23 +170,25 @@ export function buildAccordionCategories(cats, stockItems = null) {
     // Hardcoded defaults for this category (empty array if newly admin-created)
     const defaultItems = DEFAULT_MATERIALS_BY_CATEGORY[c.name] || [];
 
-    // Admin-added DB materials for this category (from StockMaterial table)
-    const dbMaterials = (c.materials || []); // [{id, name}]
-    const dbMaterialNames = dbMaterials.map(m => m.name);
+    // Items that the admin has soft-deleted (hidden) — exclude from defaults list
+    const hiddenSet = new Set((c.hiddenDefaults || []).map(normalize));
 
-    // Build rich matItems list: default items have dbId=null, DB items carry their id
+    // Admin-added DB materials for this category (from StockMaterial table, isHidden=false only)
+    const dbMaterials = (c.materials || []); // [{id, name}]
+
+    // Build rich matItems list: visible default items first, then DB extras
     const dbByName = Object.fromEntries(dbMaterials.map(m => [normalize(m.name), m.id]));
-    const defaultNorm = defaultItems.map(normalize);
+    const visibleDefaults = defaultItems.filter(name => !hiddenSet.has(normalize(name)));
+    const visibleDefaultNorm = visibleDefaults.map(normalize);
 
     // DB items that aren't already in defaults (extras added by admin)
-    const extraDbMaterials = dbMaterials.filter(m => !defaultNorm.includes(normalize(m.name)));
+    const extraDbMaterials = dbMaterials.filter(m => !visibleDefaultNorm.includes(normalize(m.name)));
 
-    // Merge: defaults first, then extras
+    // Merge: visible defaults first, then extras
     const richItems = [
-      ...defaultItems.map(name => ({ name, dbId: dbByName[normalize(name)] ?? null })),
+      ...visibleDefaults.map(name => ({ name, dbId: dbByName[normalize(name)] ?? null })),
       ...extraDbMaterials.map(m => ({ name: m.name, dbId: m.id })),
     ];
-    const allCatItems = richItems.map(r => r.name);
 
     // All default items across ALL categories (for orphan detection)
     const allDefaultItems = Object.values(DEFAULT_MATERIALS_BY_CATEGORY).flat();
@@ -224,3 +226,4 @@ export function buildAccordionCategories(cats, stockItems = null) {
     };
   });
 }
+

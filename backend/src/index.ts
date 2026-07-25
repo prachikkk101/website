@@ -53,7 +53,7 @@ app.get('/api/health', (_req: import('express').Request, res: import('express').
 });
 
 import { authenticate } from './middlewares/auth';
-import { getGALocations, getCities, getAreas, getStockCategories, addStockCategory, addStockMaterial, updateStockMaterial, deleteStockMaterial } from './controllers/siteController';
+import { getGALocations, getCities, getAreas, getStockCategories, addStockCategory, addStockMaterial, updateStockMaterial, deleteStockMaterial, hideDefaultItem, deleteStockCategory } from './controllers/siteController';
 import { getDailyReports, createDailyReport, deleteDailyReport } from './controllers/reportDiaryController';
 
 // ── Routes ────────────────────────────────────────────────
@@ -67,7 +67,9 @@ app.get('/api/cities', authenticate, getCities);
 app.get('/api/areas', authenticate, getAreas);
 app.get('/api/stock-categories', authenticate, getStockCategories);
 app.post('/api/stock-categories', authenticate, addStockCategory);
+app.delete('/api/stock-categories/:id', authenticate, deleteStockCategory);
 app.post('/api/stock-categories/:categoryId/materials', authenticate, addStockMaterial);
+app.post('/api/stock-categories/:categoryId/materials/hide', authenticate, hideDefaultItem);
 app.patch('/api/stock-categories/:categoryId/materials/:materialId', authenticate, updateStockMaterial);
 app.delete('/api/stock-categories/:categoryId/materials/:materialId', authenticate, deleteStockMaterial);
 

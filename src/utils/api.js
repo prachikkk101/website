@@ -356,7 +356,16 @@ export const dataAPI = {
   updateStockMaterial: (categoryId, materialId, name) =>
     api.patch(`/stock-categories/${categoryId}/materials/${materialId}`, { name }).then(r => r.data.material),
 
-  /** Admin only: delete a material from a StockCategory. */
+  /** Admin only: delete an admin-added material from a StockCategory (hard delete). */
   deleteStockMaterial: (categoryId, materialId) =>
     api.delete(`/stock-categories/${categoryId}/materials/${materialId}`).then(r => r.data),
+
+  /** Admin only: soft-delete a seeded/default item by name (no existing DB record).
+   *  Creates a StockMaterial row with isHidden=true so it's filtered from the accordion. */
+  hideDefaultItem: (categoryId, name) =>
+    api.post(`/stock-categories/${categoryId}/materials/hide`, { name }).then(r => r.data),
+
+  /** Admin only: soft-delete an entire category (default or admin-added). */
+  deleteStockCategory: (categoryId) =>
+    api.delete(`/stock-categories/${categoryId}`).then(r => r.data),
 };

@@ -449,6 +449,7 @@ model StockCategory {
   name        String          @unique  // e.g. "Copper Fitting"
   parentGroup String?         // optional grouping label e.g. "GI Fitting"
   isDefault   Boolean         @default(false)
+  isHidden    Boolean         @default(false) // soft-delete: admin can hide any category
   createdAt   DateTime        @default(now())
   materials   StockMaterial[]
 }
@@ -458,6 +459,7 @@ model StockMaterial {
   id         Int           @id @default(autoincrement())
   name       String        // e.g. "½\" GI Elbow"
   categoryId Int
+  isHidden   Boolean       @default(false) // soft-delete: used to hide seeded default items
   createdAt  DateTime      @default(now())
   category   StockCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 

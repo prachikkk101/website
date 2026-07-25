@@ -160,15 +160,33 @@ function CategoryAccordion({
   }
 
   async function handleDeleteItem(cat, itemName, matDbId) {
-    if (!matDbId) { alert('Cannot delete a default (built-in) item.'); return; }
-    if (!window.confirm(`Remove "${itemName}" from "${cat.label}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Remove "${itemName}" from "${cat.label}"?\n\nThis will hide the item from all users. It can be re-added via "+ Add Item".`)) return;
     try {
-      await dataAPI.deleteStockMaterial(Number(cat.id), Number(matDbId));
+      if (matDbId) {
+        // Admin-added item with a real DB record — hard delete
+        await dataAPI.deleteStockMaterial(Number(cat.id), Number(matDbId));
+      } else {
+        // Default (seeded) item — soft-delete via hide endpoint
+        await dataAPI.hideDefaultItem(Number(cat.id), itemName);
+      }
       const refreshed = await dataAPI.getStockCategories();
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
     } catch (err) {
+      // 409 = stock-record safety block; show the clear backend message
       alert(err?.response?.data?.error || 'Failed to delete item.');
+    }
+  }
+
+  async function handleDeleteCategory(cat) {
+    if (!window.confirm(`Delete category "${cat.label}"?\n\nThis will hide the entire category from all users. It can be re-added via "+ Add Category".\n\nNote: will be blocked if any items in this category have received stock.`)) return;
+    try {
+      await dataAPI.deleteStockCategory(Number(cat.id));
+      const refreshed = await dataAPI.getStockCategories();
+      setRawCats(refreshed);
+      if (onCategoriesChanged) onCategoriesChanged();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'Failed to delete category.');
     }
   }
 
@@ -204,23 +222,39 @@ function CategoryAccordion({
           : cat.matItems;
         return (
           <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 8 }}>
-            {/* Accordion header */}
-            <div
-              onClick={() => toggleCategory(cat.id)}
-              style={{
-                background: isOpen ? cat.color : '#f8fafc',
-                color: isOpen ? 'white' : '#1e293b',
-                padding: '12px 16px', cursor: 'pointer',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                fontWeight: 600, fontSize: 13,
-                transition: 'background 0.2s',
-              }}
-            >
-              <span>{cat.label}</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+              {/* Accordion header */}
+              <div
+                onClick={() => toggleCategory(cat.id)}
+                style={{
+                  background: isOpen ? cat.color : '#f8fafc',
+                  color: isOpen ? 'white' : '#1e293b',
+                  padding: '12px 16px', cursor: 'pointer',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  fontWeight: 600, fontSize: 13,
+                  transition: 'background 0.2s',
+                }}
+              >
+                <span>{cat.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  {/* Admin: delete category button in header */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      title={`Delete category "${cat.label}"`}
+                      onClick={(e) => { e.stopPropagation(); handleDeleteCategory(cat); }}
+                      style={{
+                        width: 22, height: 22, border: '1px solid rgba(255,255,255,0.5)',
+                        borderRadius: 4,
+                        background: isOpen ? 'rgba(255,255,255,0.18)' : '#fee2e2',
+                        color: isOpen ? 'white' : '#dc2626',
+                        cursor: 'pointer', fontSize: 13, padding: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                      }}
+                    >🗑</button>
+                  )}
+                  <span style={{ fontSize: 14 }}>{isOpen ? '▲' : '▼'}</span>
+                </div>
               </div>
-            </div>
 
             {/* Expanded items */}
             {isOpen && (
@@ -260,6 +294,23 @@ function CategoryAccordion({
                               <span style={{ color: '#64748b' }}>Returned: <b style={{ color: '#3b82f6' }}>{ret}</b></span>
                               <span style={{ color: '#64748b' }}>Available: <b style={{ color: inStore > 0 ? '#16a34a' : '#dc2626' }}>{inStore}</b></span>
                             </div>
+                            {/* Admin per-item management in readOnly (main grid) mode */}
+                            {isAdmin && (
+                              <div style={{ display: 'flex', gap: 4, marginLeft: 8, flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  title="Rename this item"
+                                  onClick={() => handleEditItemClick(cat, item, matDbId)}
+                                  style={{ width: 22, height: 22, border: '1px solid #93c5fd', borderRadius: 4, background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontSize: 11, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                >✎</button>
+                                <button
+                                  type="button"
+                                  title="Remove this item"
+                                  onClick={() => handleDeleteItem(cat, item, matDbId)}
+                                  style={{ width: 22, height: 22, border: '1px solid #fca5a5', borderRadius: 4, background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontSize: 12, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                >×</button>
+                              </div>
+                            )}
                           </div>
                         );
                       }
@@ -291,7 +342,7 @@ function CategoryAccordion({
                             placeholder="0"
                             style={{ width: 70, height: 28, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right' }}
                           />
-                          {/* Admin per-item edit/delete (only in Receive mode, not Return) */}
+                          {/* Admin per-item edit/delete — visible in both receive mode and readOnly mode */}
                           {isAdmin && stockItems === null && (
                             <>
                               <button
@@ -300,14 +351,12 @@ function CategoryAccordion({
                                 onClick={() => handleEditItemClick(cat, item, matDbId)}
                                 style={{ width: 24, height: 24, border: '1px solid #93c5fd', borderRadius: 4, background: '#eff6ff', color: '#1d4ed8', cursor: 'pointer', fontSize: 12, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
                               >✎</button>
-                              {matDbId && (
-                                <button
-                                  type="button"
-                                  title="Remove this item"
-                                  onClick={() => handleDeleteItem(cat, item, matDbId)}
-                                  style={{ width: 24, height: 24, border: '1px solid #fca5a5', borderRadius: 4, background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                                >×</button>
-                              )}
+                              <button
+                                type="button"
+                                title="Remove this item"
+                                onClick={() => handleDeleteItem(cat, item, matDbId)}
+                                style={{ width: 24, height: 24, border: '1px solid #fca5a5', borderRadius: 4, background: '#fee2e2', color: '#dc2626', cursor: 'pointer', fontSize: 13, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                              >×</button>
                             </>
                           )}
                         </div>
@@ -315,8 +364,8 @@ function CategoryAccordion({
                     })}
                   </div>
                 )}
-                {/* Admin: Add Item at BOTTOM of open category */}
-                {isAdmin && !readOnly && (
+                {/* Admin: Add Item at BOTTOM of open category — shown regardless of readOnly */}
+                {isAdmin && (
                   <button
                     type="button"
                     onClick={() => handleAddItemClick(cat)}
@@ -1161,6 +1210,8 @@ export default function Inventory() {
               quantities={summaryQuantities}
               setQuantities={() => { }}
               readOnly={true}
+              isAdmin={isAdmin}
+              onCategoriesChanged={() => setCatRefreshKey(k => k + 1)}
             />
           </div>
 

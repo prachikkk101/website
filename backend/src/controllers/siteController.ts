@@ -357,7 +357,7 @@ const DEFAULT_STOCK_CATEGORIES = [
 
 export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // 1. Pull admin-created categories from StockCategory table
+    // 1. Pull ALL categories from DB (including hidden) so auto-upsert doesn't recreate them
     let dbCats = await prisma.stockCategory.findMany({
       orderBy: { name: 'asc' },
       include: { materials: { orderBy: { name: 'asc' } } },
@@ -366,8 +366,7 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
     const dbCatNames = dbCats.map((c: any) => c.name);
 
     // 2. Auto-upsert any DEFAULT_STOCK_CATEGORIES that aren't in DB yet.
-    //    This guarantees every accordion category has a REAL DB id — fixes "Category not found"
-    //    when addStockMaterial is called on a default category that was never explicitly created.
+    //    Use update:{} so a soft-deleted (isHidden=true) default is NOT reset to visible.
     const missingDefaults = DEFAULT_STOCK_CATEGORIES.filter(n => !dbCatNames.includes(n));
     if (missingDefaults.length > 0) {
       await Promise.all(
@@ -379,14 +378,13 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
           })
         )
       );
-      // Re-fetch so response includes newly created records with their real ids
       dbCats = await prisma.stockCategory.findMany({
         orderBy: { name: 'asc' },
         include: { materials: { orderBy: { name: 'asc' } } },
       }).catch(() => [] as any[]);
     }
 
-    // 3. Pull all distinct category values from InventoryItem rows (legacy source)
+    // 3. Pull legacy InventoryItem category names
     const rows = await prisma.inventoryItem.findMany({
       distinct: ['category'],
       select: { category: true },
@@ -396,7 +394,7 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
 
     const legacyCategories = rows.map((r: any) => r.category).filter(Boolean);
 
-    // 4. Merge: all DB StockCategory names + legacy InventoryItem categories
+    // 4. Merge all names (DB + legacy) to build final list
     const dbCatNames2 = dbCats.map((c: any) => c.name);
     const allNames = Array.from(new Set([
       ...dbCatNames2,
@@ -404,16 +402,26 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
       ...legacyCategories,
     ])).sort();
 
-    // 5. Build response: every category now has a guaranteed real DB id
+    // 5. Build response: skip isHidden categories; split materials into visible + hiddenDefaults
     const dbCatByName = Object.fromEntries(dbCats.map((c: any) => [c.name, c]));
     const categories = allNames
       .map(name => {
         const dbCat = dbCatByName[name];
-        if (!dbCat) return null; // legacy-only categories without a DB record are skipped
+        if (!dbCat) return null;
+        if (dbCat.isHidden) return null; // soft-deleted category — hide from all users
+
+        // Visible admin-added materials (isHidden=false)
+        const visibleMaterials = (dbCat.materials || []).filter((m: any) => !m.isHidden);
+        // Hidden default item names (isHidden=true records representing soft-deleted defaults)
+        const hiddenDefaults = (dbCat.materials || [])
+          .filter((m: any) => m.isHidden)
+          .map((m: any) => m.name);
+
         return {
           id: dbCat.id,
           name,
-          materials: dbCat.materials.map((m: any) => ({ id: m.id, name: m.name })),
+          materials: visibleMaterials.map((m: any) => ({ id: m.id, name: m.name })),
+          hiddenDefaults, // list of default item names that admin has soft-deleted
         };
       })
       .filter(Boolean);
@@ -435,7 +443,8 @@ export const addStockCategory = async (req: AuthenticatedRequest, res: Response,
     }
     const cat = await prisma.stockCategory.upsert({
       where: { name: String(name).trim() },
-      update: {},
+      // Un-hide if it was previously soft-deleted (admin re-adding a deleted category)
+      update: { isHidden: false },
       create: { name: String(name).trim(), parentGroup: parentGroup ? String(parentGroup).trim() : null },
     });
     res.status(201).json({ success: true, category: cat });
@@ -454,14 +463,14 @@ export const addStockMaterial = async (req: AuthenticatedRequest, res: Response,
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'Material name is required.' });
     }
-    // Ensure category exists (create it if it's a default category not yet in DB)
     const cat = await prisma.stockCategory.findUnique({ where: { id: categoryId } });
     if (!cat) {
       return res.status(404).json({ success: false, error: 'Category not found.' });
     }
     const mat = await prisma.stockMaterial.upsert({
       where: { name_categoryId: { name: String(name).trim(), categoryId } },
-      update: {},
+      // Un-hide if admin re-adds a previously soft-deleted item
+      update: { isHidden: false },
       create: { name: String(name).trim(), categoryId },
     });
     res.status(201).json({ success: true, material: mat });
@@ -496,7 +505,92 @@ export const deleteStockMaterial = async (req: AuthenticatedRequest, res: Respon
       return res.status(403).json({ success: false, error: 'Only admins can delete materials.' });
     }
     const matId = Number(req.params.materialId);
+    const mat = await prisma.stockMaterial.findUnique({ where: { id: matId } });
+    if (!mat) {
+      return res.status(404).json({ success: false, error: 'Material not found.' });
+    }
+
+    // Safety check: block deletion if this material has received stock anywhere
+    const hasStock = await prisma.inventoryItem.findFirst({
+      where: { material: { equals: mat.name, mode: 'insensitive' }, received: { gt: 0 } },
+    });
+    if (hasStock) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete "${mat.name}" — this item has existing stock records (received > 0). Remove all stock first.`,
+      });
+    }
+
+    // Hard delete the DB record (admin-added items have no hardcoded fallback)
     await prisma.stockMaterial.delete({ where: { id: matId } });
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Soft-delete a DEFAULT (hardcoded) item that has no StockMaterial record yet.
+// Creates a StockMaterial row with isHidden=true so getStockCategories can filter it out.
+export const hideDefaultItem = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can delete items.' });
+    }
+    const categoryId = Number(req.params.categoryId);
+    const { name } = req.body;
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ success: false, error: 'Item name is required.' });
+    }
+    const itemName = String(name).trim();
+
+    // Safety check: block if received stock exists for this item name anywhere
+    const hasStock = await prisma.inventoryItem.findFirst({
+      where: { material: { equals: itemName, mode: 'insensitive' }, received: { gt: 0 } },
+    });
+    if (hasStock) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete "${itemName}" — this item has existing stock records (received > 0). Remove all stock first.`,
+      });
+    }
+
+    // Upsert with isHidden=true (creates if not exists, updates if exists)
+    await prisma.stockMaterial.upsert({
+      where: { name_categoryId: { name: itemName, categoryId } },
+      update: { isHidden: true },
+      create: { name: itemName, categoryId, isHidden: true },
+    });
+    res.status(200).json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Soft-delete an entire category (works for both default and admin-added categories).
+export const deleteStockCategory = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  try {
+    if (req.user?.role !== 'ADMIN') {
+      return res.status(403).json({ success: false, error: 'Only admins can delete categories.' });
+    }
+    const catId = Number(req.params.id);
+    const cat = await prisma.stockCategory.findUnique({ where: { id: catId } });
+    if (!cat) {
+      return res.status(404).json({ success: false, error: 'Category not found.' });
+    }
+
+    // Safety check: block if ANY InventoryItem in this category has received > 0
+    const hasStock = await prisma.inventoryItem.findFirst({
+      where: { category: { equals: cat.name, mode: 'insensitive' }, received: { gt: 0 } },
+    });
+    if (hasStock) {
+      return res.status(409).json({
+        success: false,
+        error: `Cannot delete "${cat.name}" — this category has existing stock records (received > 0). Remove all stock first.`,
+      });
+    }
+
+    // Soft-delete: mark as hidden (hard-delete would allow default cats to re-appear on next API call)
+    await prisma.stockCategory.update({ where: { id: catId }, data: { isHidden: true } });
     res.status(200).json({ success: true });
   } catch (error) {
     next(error);
