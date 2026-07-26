@@ -332,21 +332,21 @@ export const dataAPI = {
   },
 
   /** Returns all distinct stock categories for the given GA Location. */
-  getStockCategories: (gaName: string) => {
+  getStockCategories: (gaName) => {
     console.log('🔵 API CALL: GET /api/stock-categories?gaName=' + gaName);
-    return api.get('/stock-categories', { params: { gaName } }).then((r: any) => {
+    return api.get('/stock-categories', { params: { gaName } }).then((r) => {
       const data = r.data.categories || [];
       console.log('🟢 API RESPONSE: /stock-categories — count:', data.length, data);
       return data;
-    }).catch((err: any) => {
+    }).catch((err) => {
       console.error('❌ API ERROR: /stock-categories', err.response?.status, err.message);
       throw err;
     });
   },
 
   /** Admin only: create a new stock category scoped to a GA Location. */
-  addStockCategory: (name: string, parentGroup?: string, gaName?: string) =>
-    api.post('/stock-categories', { name, parentGroup, gaName }).then((r: any) => r.data.category),
+  addStockCategory: (name, parentGroup, gaName) =>
+    api.post('/stock-categories', { name, parentGroup, gaName }).then((r) => r.data.category),
 
   /** Admin only: add a material item to an existing StockCategory. */
   addStockMaterial: (categoryId, name) =>

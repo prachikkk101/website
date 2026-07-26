@@ -41,7 +41,8 @@ function getStatus(onSite, inStore, open, recv) {
 }
 
 
-/* ── Category Accordion for Receive Stock & Return Stock �function CategoryAccordion({
+/* ── Category Accordion for Receive Stock & Return Stock ── */
+function CategoryAccordion({
   openCategory, setOpenCategory,
   quantities, setQuantities,
   readOnly = false,
@@ -74,7 +75,6 @@ function getStatus(onSite, inStore, open, recv) {
       })
       .finally(() => setCatLoading(false));
   }, [gaName, onCategoriesChanged]); // re-fetch when GA changes OR admin adds a category/item
-ds a category/item
 
   // Step 2: BUILD the accordion items reactively whenever rawCats OR stockItems changes.
   // CRITICAL: this was previously inside the useEffect above with [] deps, which meant
