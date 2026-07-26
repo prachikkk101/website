@@ -515,7 +515,7 @@ export default function Inventory() {
     if (!addCatName.trim()) return;
     setAddCatSaving(true);
     try {
-      await dataAPI.addStockCategory(addCatName.trim());
+      await dataAPI.addStockCategory(addCatName.trim(), undefined, invGA);
       setAddCatOpen(false);
       setAddCatName('');
       setCatRefreshKey(k => k + 1);
@@ -1228,6 +1228,7 @@ export default function Inventory() {
               setQuantities={() => { }}
               readOnly={true}
               isAdmin={isAdmin}
+              gaName={invGA}
               onCategoriesChanged={() => setCatRefreshKey(k => k + 1)}
             />
           </div>
@@ -1635,6 +1636,7 @@ export default function Inventory() {
             quantities={quantities}
             setQuantities={setQuantities}
             isAdmin={isAdmin}
+            gaName={formGA || invGA}
             onCategoriesChanged={() => setCatRefreshKey(k => k + 1)}
           />
         </div>
@@ -1734,6 +1736,7 @@ export default function Inventory() {
             setQuantities={setRetQuantities}
             stockItems={stockData}
             stockStats={summaryQuantities}
+            gaName={formGA || invGA}
           />
         </div>
 
