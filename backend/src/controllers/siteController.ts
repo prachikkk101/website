@@ -344,8 +344,8 @@ export const getAreas = async (req: AuthenticatedRequest, res: Response, next: N
   }
 };
 
-/* Default stock categories — always returned so the accordion is never empty.
-   Additional categories appear automatically once stock items are received. */
+/* Default stock categories — always returned so the accordion is never empty
+   for each GA Location on first call. */
 const DEFAULT_STOCK_CATEGORIES = [
   'FIM Material',
   'GI Fitting — ½ inch',
@@ -357,71 +357,57 @@ const DEFAULT_STOCK_CATEGORIES = [
 
 export const getStockCategories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
-    // 1. Pull ALL categories from DB (including hidden) so auto-upsert doesn't recreate them
+    // gaName is required — each GA Location has its own category list.
+    const gaName = typeof req.query.gaName === 'string' ? req.query.gaName.trim() : '';
+    if (!gaName) {
+      return res.status(400).json({ success: false, error: 'gaName query parameter is required.' });
+    }
+
+    // 1. Pull all categories for this GA from DB (including hidden) so auto-upsert
+    //    doesn't recreate soft-deleted categories.
     let dbCats = await prisma.stockCategory.findMany({
+      where: { gaName },
       orderBy: { name: 'asc' },
       include: { materials: { orderBy: { name: 'asc' } } },
     }).catch(() => [] as any[]);
 
     const dbCatNames = dbCats.map((c: any) => c.name);
 
-    // 2. Auto-upsert any DEFAULT_STOCK_CATEGORIES that aren't in DB yet.
-    //    Use update:{} so a soft-deleted (isHidden=true) default is NOT reset to visible.
+    // 2. Auto-upsert any DEFAULT_STOCK_CATEGORIES missing for this GA.
+    //    Use update:{} so a soft-deleted default is NOT reset to visible.
     const missingDefaults = DEFAULT_STOCK_CATEGORIES.filter(n => !dbCatNames.includes(n));
     if (missingDefaults.length > 0) {
       await Promise.all(
         missingDefaults.map(name =>
           prisma.stockCategory.upsert({
-            where: { name },
+            where: { name_gaName: { name, gaName } },
             update: {},
-            create: { name, isDefault: true },
+            create: { name, gaName, isDefault: true },
           })
         )
       );
       dbCats = await prisma.stockCategory.findMany({
+        where: { gaName },
         orderBy: { name: 'asc' },
         include: { materials: { orderBy: { name: 'asc' } } },
       }).catch(() => [] as any[]);
     }
 
-    // 3. Pull legacy InventoryItem category names
-    const rows = await prisma.inventoryItem.findMany({
-      distinct: ['category'],
-      select: { category: true },
-      where: { category: { not: '' } },
-      orderBy: { category: 'asc' },
-    }).catch(() => [] as { category: string }[]);
+    // 3. Build response: skip isHidden categories; split materials into visible + hiddenDefaults
+    const categories = dbCats
+      .map((dbCat: any) => {
+        if (dbCat.isHidden) return null; // soft-deleted category — hide from accordion
 
-    const legacyCategories = rows.map((r: any) => r.category).filter(Boolean);
-
-    // 4. Merge all names (DB + legacy) to build final list
-    const dbCatNames2 = dbCats.map((c: any) => c.name);
-    const allNames = Array.from(new Set([
-      ...dbCatNames2,
-      ...DEFAULT_STOCK_CATEGORIES,
-      ...legacyCategories,
-    ])).sort();
-
-    // 5. Build response: skip isHidden categories; split materials into visible + hiddenDefaults
-    const dbCatByName = Object.fromEntries(dbCats.map((c: any) => [c.name, c]));
-    const categories = allNames
-      .map(name => {
-        const dbCat = dbCatByName[name];
-        if (!dbCat) return null;
-        if (dbCat.isHidden) return null; // soft-deleted category — hide from all users
-
-        // Visible admin-added materials (isHidden=false)
         const visibleMaterials = (dbCat.materials || []).filter((m: any) => !m.isHidden);
-        // Hidden default item names (isHidden=true records representing soft-deleted defaults)
-        const hiddenDefaults = (dbCat.materials || [])
+        const hiddenDefaults   = (dbCat.materials || [])
           .filter((m: any) => m.isHidden)
           .map((m: any) => m.name);
 
         return {
           id: dbCat.id,
-          name,
+          name: dbCat.name,
           materials: visibleMaterials.map((m: any) => ({ id: m.id, name: m.name })),
-          hiddenDefaults, // list of default item names that admin has soft-deleted
+          hiddenDefaults,
         };
       })
       .filter(Boolean);
@@ -437,21 +423,27 @@ export const addStockCategory = async (req: AuthenticatedRequest, res: Response,
     if (req.user?.role !== 'ADMIN') {
       return res.status(403).json({ success: false, error: 'Only admins can add new stock categories.' });
     }
-    const { name, parentGroup } = req.body;
+    const { name, parentGroup, gaName } = req.body;
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'Category name is required.' });
     }
+    if (!gaName || !String(gaName).trim()) {
+      return res.status(400).json({ success: false, error: 'gaName is required — categories must be scoped to a GA Location.' });
+    }
+    const cleanName   = String(name).trim();
+    const cleanGaName = String(gaName).trim();
     const cat = await prisma.stockCategory.upsert({
-      where: { name: String(name).trim() },
+      where: { name_gaName: { name: cleanName, gaName: cleanGaName } },
       // Un-hide if it was previously soft-deleted (admin re-adding a deleted category)
       update: { isHidden: false },
-      create: { name: String(name).trim(), parentGroup: parentGroup ? String(parentGroup).trim() : null },
+      create: { name: cleanName, gaName: cleanGaName, parentGroup: parentGroup ? String(parentGroup).trim() : null },
     });
     res.status(201).json({ success: true, category: cat });
   } catch (error) {
     next(error);
   }
 };
+
 
 export const addStockMaterial = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {

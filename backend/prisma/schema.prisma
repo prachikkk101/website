@@ -264,36 +264,37 @@ model MeterInstallation {
 }
 
 model PELaying {
-  id           String                 @id @default(uuid())
-  siteId       String
-  layingDate   DateTime               @db.Date
-  testingDate  DateTime?              @db.Date
-  chargingDate DateTime?              @db.Date
-  raBillNo     String?
-  reportNo     String?
-  status       PEStatus               @default(LAYING)
-  connType     String                 @default("Domestic")
-  area         String
-  coilNo       String
-  dprPhotoUrl  String?                // Cloudflare R2 URL for Daily Progress Report photo
-  d32oc        Decimal                @db.Decimal(10, 3) @default(0)
-  d32b         Decimal                @db.Decimal(10, 3) @default(0)
-  d32hdd       Decimal                @db.Decimal(10, 3) @default(0)
-  d63oc        Decimal                @db.Decimal(10, 3) @default(0)
-  d63b         Decimal                @db.Decimal(10, 3) @default(0)
-  d63hdd       Decimal                @db.Decimal(10, 3) @default(0)
-  d90oc        Decimal                @db.Decimal(10, 3) @default(0)
-  d90b         Decimal                @db.Decimal(10, 3) @default(0)
-  d90hdd       Decimal                @db.Decimal(10, 3) @default(0)
-  d90tot       Decimal                @db.Decimal(10, 3) @default(0)
-  d125oc       Decimal                @db.Decimal(10, 3) @default(0)
-  d125b        Decimal                @db.Decimal(10, 3) @default(0)
-  d125hdd      Decimal                @db.Decimal(10, 3) @default(0)
-  d125tot      Decimal                @db.Decimal(10, 3) @default(0)
-  createdAt    DateTime               @default(now())
-  updatedAt    DateTime               @updatedAt
+  id             String                 @id @default(uuid())
+  siteId         String
+  layingDate     DateTime               @db.Date
+  testingDate    DateTime?              @db.Date
+  chargingDate   DateTime?              @db.Date
+  raBillNo       String?
+  reportNo       String?
+  status         PEStatus               @default(LAYING)
+  connType       String                 @default("Domestic")
+  area           String
+  coilNo         String
+  dprPhotoUrl    String?                // Cloudflare R2 URL for Daily Progress Report photo
+  d32oc          Decimal                @db.Decimal(10, 3) @default(0)
+  d32b           Decimal                @db.Decimal(10, 3) @default(0)
+  d32hdd         Decimal                @db.Decimal(10, 3) @default(0)
+  d63oc          Decimal                @db.Decimal(10, 3) @default(0)
+  d63b           Decimal                @db.Decimal(10, 3) @default(0)
+  d63hdd         Decimal                @db.Decimal(10, 3) @default(0)
+  d90oc          Decimal                @db.Decimal(10, 3) @default(0)
+  d90b           Decimal                @db.Decimal(10, 3) @default(0)
+  d90hdd         Decimal                @db.Decimal(10, 3) @default(0)
+  d90tot         Decimal                @db.Decimal(10, 3) @default(0)
+  d125oc         Decimal                @db.Decimal(10, 3) @default(0)
+  d125b          Decimal                @db.Decimal(10, 3) @default(0)
+  d125hdd        Decimal                @db.Decimal(10, 3) @default(0)
+  d125tot        Decimal                @db.Decimal(10, 3) @default(0)
+  mdpeMaterials  Json?                  // [{material: string, qty: number}] — MDPE fittings used in this entry
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
   
-  site         Site                   @relation(fields: [siteId], references: [id])
+  site           Site                   @relation(fields: [siteId], references: [id])
 }
 
 model LMCWork {
@@ -443,15 +444,18 @@ model StockReceipt {
   site        Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
 }
 
-// Admin-managed stock category master data (not site-specific)
+// Admin-managed stock category master data — scoped per GA Location
 model StockCategory {
   id          Int             @id @default(autoincrement())
-  name        String          @unique  // e.g. "Copper Fitting"
+  name        String          // e.g. "Copper Fitting" — unique per GA, not globally
+  gaName      String          @default("") // GA Location name (Site.gaName). "" = legacy/global placeholder
   parentGroup String?         // optional grouping label e.g. "GI Fitting"
   isDefault   Boolean         @default(false)
   isHidden    Boolean         @default(false) // soft-delete: admin can hide any category
   createdAt   DateTime        @default(now())
   materials   StockMaterial[]
+
+  @@unique([name, gaName])    // same category name can exist independently per GA Location
 }
 
 // Admin-managed material items under a StockCategory (not site-specific)

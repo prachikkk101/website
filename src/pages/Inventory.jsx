@@ -41,29 +41,31 @@ function getStatus(onSite, inStore, open, recv) {
 }
 
 
-/* ── Category Accordion for Receive Stock & Return Stock ── */
-function CategoryAccordion({
+/* ── Category Accordion for Receive Stock & Return Stock �function CategoryAccordion({
   openCategory, setOpenCategory,
   quantities, setQuantities,
   readOnly = false,
   // stockItems: raw site stock array — used for filtering which materials appear in return mode
   stockItems = null,
   // stockStats: { itemName -> { recv, issued, ret, inStore } } — used for availability lookup in return mode
-  // If not provided, falls back to quantities (for readOnly/summary mode).
   stockStats = null,
   // Admin-only: callbacks to add new category or add item to existing category
   isAdmin = false,
   onAddItem,
   onCategoriesChanged = null, // called after admin adds a category or item to refresh cats
+  // GA Location name — REQUIRED for GA-scoped category fetching
+  gaName = '',
 }) {
-  // Step 1: fetch raw category definitions ONCE (they don’t change per-site)
+  // Step 1: fetch raw category definitions for this GA (re-fetch when gaName changes)
   const [rawCats, setRawCats] = useState([]);
   const [catLoading, setCatLoading] = useState(true);
 
   useEffect(() => {
-    dataAPI.getStockCategories()
+    if (!gaName) { setRawCats([]); setCatLoading(false); return; }
+    setCatLoading(true);
+    dataAPI.getStockCategories(gaName)
       .then(cats => {
-        console.log('🔵 CategoryAccordion: fetched', cats.length, 'raw categories from API');
+        console.log('🔵 CategoryAccordion: fetched', cats.length, 'raw categories from API for GA:', gaName);
         setRawCats(cats);
       })
       .catch(err => {
@@ -71,7 +73,8 @@ function CategoryAccordion({
         setRawCats([]);
       })
       .finally(() => setCatLoading(false));
-  }, [onCategoriesChanged]); // re-fetch when admin adds a category/item
+  }, [gaName, onCategoriesChanged]); // re-fetch when GA changes OR admin adds a category/item
+ds a category/item
 
   // Step 2: BUILD the accordion items reactively whenever rawCats OR stockItems changes.
   // CRITICAL: this was previously inside the useEffect above with [] deps, which meant
@@ -127,7 +130,7 @@ function CategoryAccordion({
       await dataAPI.addStockMaterial(Number(addItemCat.id), addItemName.trim());
       setAddItemCat(null);
       setAddItemName('');
-      const refreshed = await dataAPI.getStockCategories();
+      const refreshed = await dataAPI.getStockCategories(gaName);
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
     } catch (err) {
@@ -157,7 +160,7 @@ function CategoryAccordion({
       }
       setEditItem(null);
       setEditItemName('');
-      const refreshed = await dataAPI.getStockCategories();
+      const refreshed = await dataAPI.getStockCategories(gaName);
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
     } catch (err) {
@@ -177,7 +180,7 @@ function CategoryAccordion({
         // Default (seeded) item — soft-delete via hide endpoint
         await dataAPI.hideDefaultItem(Number(cat.id), itemName);
       }
-      const refreshed = await dataAPI.getStockCategories();
+      const refreshed = await dataAPI.getStockCategories(gaName);
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
     } catch (err) {
@@ -190,7 +193,7 @@ function CategoryAccordion({
     if (!window.confirm(`Delete category "${cat.label}"?\n\nThis will hide the entire category from all users. It can be re-added via "+ Add Category".\n\nNote: will be blocked if any items in this category have received stock.`)) return;
     try {
       await dataAPI.deleteStockCategory(Number(cat.id));
-      const refreshed = await dataAPI.getStockCategories();
+      const refreshed = await dataAPI.getStockCategories(gaName);
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
     } catch (err) {
@@ -199,6 +202,12 @@ function CategoryAccordion({
   }
 
   if (catLoading) return <p style={{ color: '#64748b', fontSize: 13 }}>Loading categories…</p>;
+
+  if (!gaName) return (
+    <p style={{ color: '#94a3b8', fontSize: 12, padding: '8px 0' }}>
+      Select a GA Location to view its stock categories.
+    </p>
+  );
 
   if (categories.length === 0) {
     return (

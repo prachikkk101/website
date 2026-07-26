@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthenticatedRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import prisma from '../config/db';
-import { PEStatus } from '@prisma/client';
+import { PEStatus, Prisma } from '@prisma/client';
 
 export const getPELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -83,6 +83,11 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
     d125tot: z.number().nonnegative().nullable().optional(),
     // DPR photo — Cloudflare R2 URL uploaded by frontend before save
     dprPhotoUrl: z.string().url().nullable().optional(),
+    // MDPE Fittings used in this entry: [{material: string, qty: number}]
+    mdpeMaterials: z.array(z.object({
+      material: z.string().min(1),
+      qty: z.number().nonnegative(),
+    })).nullable().optional(),
   });
 
   try {
@@ -112,14 +117,20 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
       // ── PRE-FLIGHT: Stock sufficiency check before creating ──
       // Reject if: (a) item doesn't exist in inventory, OR (b) available qty < requested qty.
+      // Checked for both pipe sizes AND MDPE fittings.
+      const mdpeUsage: { material: string; qty: number }[] = (data.mdpeMaterials || [])
+        .filter((m: any) => m.qty > 0)
+        .map((m: any) => ({ material: m.material, qty: Math.round(m.qty) }));
+
+      const allMaterialsToCheck = [...pipeUsage, ...mdpeUsage];
       const insufficientItems: { name: string; requested: number; available: number }[] = [];
-      for (const pipe of pipeUsage) {
+      for (const item of allMaterialsToCheck) {
         const inv = await prisma.inventoryItem.findUnique({
-          where: { siteId_material: { siteId, material: pipe.material } },
+          where: { siteId_material: { siteId, material: item.material } },
         });
         const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        if (!inv || pipe.qty > available) {
-          insufficientItems.push({ name: pipe.material, requested: pipe.qty, available });
+        if (!inv || item.qty > available) {
+          insufficientItems.push({ name: item.material, requested: item.qty, available });
         }
       }
       if (insufficientItems.length > 0) {
@@ -163,35 +174,38 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
           d125tot: data.d125tot ?? ((data.d125oc ?? 0) + (data.d125b ?? 0) + (data.d125hdd ?? 0)),
           // DPR photo URL (null if none uploaded)
           dprPhotoUrl: data.dprPhotoUrl || null,
+          // Store MDPE materials used (non-zero qty only) for reversal on update/delete
+          mdpeMaterials: mdpeUsage.length > 0 ? mdpeUsage : Prisma.JsonNull,
         },
       });
 
       console.log('🟢 PE Laying created successfully. ID:', record.id);
 
       // ── STEP 2: Deduct stock (fire-and-forget) ──
-      // pipeUsage is already computed above; skip the re-computation.
-      if (pipeUsage.length > 0) {
+      // Deduct both pipe sizes AND MDPE fittings.
+      const allDeductions = [...pipeUsage, ...mdpeUsage];
+      if (allDeductions.length > 0) {
         const siteIdSnapshot = siteId;
         setImmediate(async () => {
-          console.log(`[PE create] 🟡 Background stock deduction starting for ${pipeUsage.length} pipe size(s)...`);
-          for (const pipe of pipeUsage) {
+          console.log(`[PE create] 🟡 Background stock deduction starting for ${pipeUsage.length} pipe(s) + ${mdpeUsage.length} MDPE fitting(s)...`);
+          for (const item of allDeductions) {
             try {
               const invItem = await prisma.inventoryItem.findUnique({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: pipe.material } },
+                where: { siteId_material: { siteId: siteIdSnapshot, material: item.material } },
               });
               if (!invItem) {
-                console.warn(`[PE create] ⚠ Material NOT FOUND in inventory: "${pipe.material}" — skipping`);
+                console.warn(`[PE create] ⚠ Material NOT FOUND in inventory: "${item.material}" — skipping`);
                 continue;
               }
-              const newIssued  = invItem.issued + pipe.qty;
+              const newIssued  = invItem.issued + item.qty;
               const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
               await prisma.inventoryItem.update({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: pipe.material } },
+                where: { siteId_material: { siteId: siteIdSnapshot, material: item.material } },
                 data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
               });
-              console.log(`[PE create] ✅ Deducted ${pipe.qty}m from "${pipe.material}" → issued now ${newIssued}, inStore now ${newInStore}`);
+              console.log(`[PE create] ✅ Deducted ${item.qty} from "${item.material}" → issued now ${newIssued}, inStore now ${newInStore}`);
             } catch (stockErr: any) {
-              console.error(`[PE create] ❌ Stock deduction failed for "${pipe.material}":`, stockErr.message);
+              console.error(`[PE create] ❌ Stock deduction failed for "${item.material}":`, stockErr.message);
             }
           }
           console.log('[PE create] 🟢 Background stock deduction complete.');
@@ -238,6 +252,11 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
     d125tot: z.number().nonnegative().nullable().optional(),
     // DPR photo URL update
     dprPhotoUrl: z.string().url().nullable().optional(),
+    // MDPE Fittings update: pass the NEW complete list; controller computes deltas
+    mdpeMaterials: z.array(z.object({
+      material: z.string().min(1),
+      qty: z.number().nonnegative(),
+    })).nullable().optional(),
   });
 
   try {
@@ -273,16 +292,45 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
 
     // ── PRE-FLIGHT: Check materials with net positive delta exist AND have sufficient available stock ──
     const siteId = existing.siteId;
+
+    // Compute MDPE material deltas (new qty − old qty for each material name)
+    const oldMdpe: { material: string; qty: number }[] = Array.isArray((existing as any).mdpeMaterials)
+      ? (existing as any).mdpeMaterials
+      : [];
+    const newMdpe: { material: string; qty: number }[] = data.mdpeMaterials !== undefined
+      ? (data.mdpeMaterials || [])
+      : oldMdpe; // not updated — keep existing
+
+    // Build delta map for MDPE: positive = more used, negative = less used (stock restored)
+    const mdpeDeltaMap: Map<string, number> = new Map();
+    for (const item of oldMdpe) mdpeDeltaMap.set(item.material, -(item.qty));
+    for (const item of newMdpe) mdpeDeltaMap.set(item.material, (mdpeDeltaMap.get(item.material) ?? 0) + item.qty);
+    const mdpeDeltas = Array.from(mdpeDeltaMap.entries())
+      .map(([material, delta]) => ({ material, delta: Math.round(delta) }))
+      .filter(d => d.delta !== 0);
+
     const insufficientItems: { name: string; requested: number; available: number }[] = [];
+    // Check pipe deltas
     for (const p of pipeDeltas) {
       if (p.delta > 0) {
         const inv = await prisma.inventoryItem.findUnique({
           where: { siteId_material: { siteId, material: p.material } },
         });
         const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        // delta is the NET increase needed — available stock covers the increase only
         if (!inv || p.delta > available) {
           insufficientItems.push({ name: p.material, requested: p.delta, available });
+        }
+      }
+    }
+    // Check MDPE deltas
+    for (const d of mdpeDeltas) {
+      if (d.delta > 0) {
+        const inv = await prisma.inventoryItem.findUnique({
+          where: { siteId_material: { siteId, material: d.material } },
+        });
+        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
+        if (!inv || d.delta > available) {
+          insufficientItems.push({ name: d.material, requested: d.delta, available });
         }
       }
     }
@@ -324,17 +372,23 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
         d125hdd: data.d125hdd !== undefined ? (data.d125hdd ?? 0) : undefined,
         d125tot: data.d125tot !== undefined ? (data.d125tot ?? 0) : data.d125oc !== undefined ? ((data.d125oc ?? 0) + (data.d125b ?? 0) + (data.d125hdd ?? 0)) : undefined,
         dprPhotoUrl: data.dprPhotoUrl !== undefined ? data.dprPhotoUrl : undefined,
+        // Update stored MDPE list if caller sent a new one
+        ...(data.mdpeMaterials !== undefined ? { mdpeMaterials: newMdpe.length > 0 ? newMdpe : Prisma.JsonNull } : {}),
         updatedAt: new Date(),
       },
     });
 
     // ── Diff-based stock adjustment (fire-and-forget) ──
-    const adjustments = pipeDeltas.filter(p => p.delta !== 0);
-    if (adjustments.length > 0) {
+    // Handles both pipe size deltas AND MDPE fitting deltas.
+    const allAdjustments = [
+      ...pipeDeltas.filter(p => p.delta !== 0),
+      ...mdpeDeltas,
+    ];
+    if (allAdjustments.length > 0) {
       const siteIdSnapshot = siteId;
       setImmediate(async () => {
-        console.log(`[PE update] 🟡 Stock diff-adjustment: ${adjustments.length} pipe(s) changed`);
-        for (const adj of adjustments) {
+        console.log(`[PE update] 🟡 Stock diff-adjustment: ${pipeDeltas.filter(p => p.delta !==0).length} pipe(s) + ${mdpeDeltas.length} MDPE fitting(s) changed`);
+        for (const adj of allAdjustments) {
           try {
             const inv = await prisma.inventoryItem.findUnique({
               where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
@@ -357,7 +411,7 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
         console.log('[PE update] 🟢 Stock diff-adjustment complete.');
       });
     } else {
-      console.log('[PE update] ⚪ Pipe quantities unchanged — no inventory adjustments needed.');
+      console.log('[PE update] ⚪ No material quantities changed — no inventory adjustments needed.');
     }
 
     res.status(200).json({ success: true, record: updated });
@@ -380,6 +434,7 @@ export const deletePELaying = async (req: AuthenticatedRequest, res: Response, n
         d32oc: true, d32b: true, d32hdd: true,
         d63oc: true, d63b: true, d63hdd: true,
         d90tot: true, d125tot: true,
+        mdpeMaterials: true,  // needed to reverse MDPE stock deductions
       },
     });
 
@@ -418,7 +473,35 @@ export const deletePELaying = async (req: AuthenticatedRequest, res: Response, n
           console.error(`[PE delete] ❌ Stock reversal failed for "${pipe.material}":`, stockErr.message);
         }
       }
-      console.log('[PE delete] 🟢 Stock reversal complete.');
+    }
+
+    // Also reverse MDPE fittings stock deductions
+    const mdpeReversal: { material: string; qty: number }[] = Array.isArray((existing as any).mdpeMaterials)
+      ? (existing as any).mdpeMaterials.filter((m: any) => m.qty > 0)
+      : [];
+    if (mdpeReversal.length > 0) {
+      console.log(`[PE delete] 🟡 Reversing MDPE fittings stock for ${mdpeReversal.length} item(s)...`);
+      for (const item of mdpeReversal) {
+        try {
+          const invItem = await prisma.inventoryItem.findUnique({
+            where: { siteId_material: { siteId: existing.siteId, material: item.material } },
+          });
+          if (!invItem) {
+            console.warn(`[PE delete] ⚠ MDPE "${item.material}" not found in inventory — skipping reversal`);
+            continue;
+          }
+          const newIssued  = Math.max(0, invItem.issued - item.qty);
+          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
+          await prisma.inventoryItem.update({
+            where: { siteId_material: { siteId: existing.siteId, material: item.material } },
+            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
+          });
+          console.log(`[PE delete] ✅ Reversed MDPE "${item.material}" −${item.qty} issued → ${newIssued} total issued`);
+        } catch (stockErr: any) {
+          console.error(`[PE delete] ❌ MDPE stock reversal failed for "${item.material}":`, stockErr.message);
+        }
+      }
+      console.log('[PE delete] 🟢 MDPE stock reversal complete.');
     }
 
     const deleted = await prisma.pELaying.delete({ where: { id: recordId } });
