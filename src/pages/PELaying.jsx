@@ -1174,9 +1174,9 @@ export default function PELaying() {
           </div>
         </div>
 
-        {/* MDPE Fittings Used section — live-connected to inventory for selected GA */}
+        {/* Materials Used section — all stock categories live-connected to inventory for selected GA (ditto same as PNG Connection) */}
         <div style={{ marginTop: 16 }}>
-          <SectionTitle>MDPE Fittings Used</SectionTitle>
+          <SectionTitle>Materials Used</SectionTitle>
           <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, background: '#fef3c7', padding: '6px 10px', borderRadius: 4 }}>
             ⚠ Quantities entered here will be deducted from site inventory stock.
           </p>
@@ -1187,7 +1187,6 @@ export default function PELaying() {
             setCatQtys={setCatQtys}
             catOpen={catOpen}
             setCatOpen={setCatOpen}
-            categoryFilter="MDPE Fittings"
           />
         </div>
 
