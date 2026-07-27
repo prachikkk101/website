@@ -17,7 +17,7 @@
  *   setCatOpen   {function} Updater for catOpen.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { dataAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
 
@@ -28,12 +28,11 @@ export default function StockCategoryAccordion({
   setCatQtys,
   catOpen,
   setCatOpen,
+  categoryFilter, // optional string or string[] e.g. "MDPE Fittings"
 }) {
   const [categories, setCategories] = useState([]);
 
   // Re-fetch whenever the GA Location changes.
-  // gaName is ALWAYS passed — this prevents the "400 gaName required" silent failure
-  // that caused the regression in HouseTable.
   useEffect(() => {
     if (!gaName) {
       console.log('📋 StockCategoryAccordion: no gaName yet — clearing categories');
@@ -55,11 +54,18 @@ export default function StockCategoryAccordion({
   const normalize = s => (s || '').toLowerCase().trim();
   const hasStockData = Object.keys(siteStockMap).length > 0;
 
-  if (categories.length === 0) {
+  const filteredCategories = useMemo(() => {
+    if (!categoryFilter) return categories;
+    const filterArray = (Array.isArray(categoryFilter) ? categoryFilter : [categoryFilter])
+      .map(s => (s || '').toLowerCase().trim());
+    return categories.filter(c => filterArray.includes((c.label || '').toLowerCase().trim()));
+  }, [categories, categoryFilter]);
+
+  if (filteredCategories.length === 0) {
     return (
       <p style={{ color: '#94a3b8', fontSize: 12, margin: '4px 0', fontStyle: 'italic' }}>
         {gaName
-          ? 'No stock categories loaded from server.'
+          ? 'No matching stock categories loaded from server.'
           : '📋 Select GA Location to see stock categories.'}
       </p>
     );
@@ -67,7 +73,7 @@ export default function StockCategoryAccordion({
 
   return (
     <>
-      {categories.map(cat => {
+      {filteredCategories.map(cat => {
         const isOpen = catOpen === cat.id;
 
         // When stock is loaded: show only items with available > 0.
@@ -127,7 +133,7 @@ export default function StockCategoryAccordion({
 
                 {visibleItems.map(item => {
                   const key = `${cat.id}__${item}`;
-                  const val = catQtys[key] || 0;
+                  const val = catQtys[key] ?? catQtys[item] ?? 0;
                   const available =
                     Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
 

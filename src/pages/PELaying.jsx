@@ -7,6 +7,7 @@ import { useSite } from '../context/SiteContext';
 import { AuthContext } from '../context/AuthContext';
 import { peLayingAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import PhotoViewer from '../components/PhotoViewer';
+import StockCategoryAccordion from '../components/StockCategoryAccordion';
 
 function initStore(key, defaults) {
   try {
@@ -211,6 +212,7 @@ export default function PELaying() {
             d90oc:  Number(r.d90oc)  || 0, d90b:  Number(r.d90b)  || 0, d90hdd:  Number(r.d90hdd)  || 0, d90tot:  Number(r.d90tot)  || 0,
             d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
             workStatus: capitaliseStatus(r.status) || 'Laying',
+            mdpeMaterials: r.mdpeMaterials || [],
           }));
           setAllData(mapped);
         })
@@ -239,6 +241,7 @@ export default function PELaying() {
             d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
             // Map DB status enum back to display label for the form
             workStatus: capitaliseStatus(r.status) || 'Laying',
+            mdpeMaterials: r.mdpeMaterials || [],
           }));
           setAllData(mapped);
         })
@@ -288,9 +291,11 @@ export default function PELaying() {
       .catch(() => { /* no config yet — start with empty */ });
   }, [siteId]);
 
-  // Pipe stock availability: fetch site stock when panel opens to show available pipe quantities
-  // pipeStockMap: { '32': inStore, '63': inStore, '90': inStore, '125': inStore } (metres)
+  // Pipe stock availability & Category Accordion state
   const [pipeStockMap, setPipeStockMap] = useState({});
+  const [siteStockMap, setSiteStockMap] = useState({});
+  const [catQtys, setCatQtys] = useState({});
+  const [catOpen, setCatOpen] = useState(null);
 
   // Derive siteId from form fields; loads stock as soon as GA is selected.
   // ga.id = ga.name = city.id = city.name (backend uses name as id).
@@ -324,32 +329,34 @@ export default function PELaying() {
     return selectedSiteId || null;
   }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, selectedSiteId]);
 
-
-
   useEffect(() => {
-    if (!panelOpen || !formSiteId) { setPipeStockMap({}); return; }
+    if (!panelOpen || !formSiteId) { setPipeStockMap({}); setSiteStockMap({}); return; }
     stockAPI.getAll(formSiteId)
       .then(items => {
-        const map = {};
+        const pipeMap = {};
+        const matMap = {};
         items.forEach(item => {
-          const name = (item.material || item.mat || item.name || '').toLowerCase();
+          const rawName = item.material || item.mat || item.name || '';
+          const name = rawName.toLowerCase();
           const inStore = Math.max(0, item.inStore ?? ((item.received ?? 0) - (item.issued ?? 0) - (item.returned ?? 0)));
+          if (rawName) matMap[rawName] = inStore;
           if (name.includes('32mm') || name.includes('32 mm') || name.includes('ø32') || (name.includes('32') && name.includes('pipe'))) {
-            map['32'] = (map['32'] || 0) + inStore;
+            pipeMap['32'] = (pipeMap['32'] || 0) + inStore;
           }
           if (name.includes('63mm') || name.includes('63 mm') || name.includes('ø63') || (name.includes('63') && name.includes('pipe'))) {
-            map['63'] = (map['63'] || 0) + inStore;
+            pipeMap['63'] = (pipeMap['63'] || 0) + inStore;
           }
           if (name.includes('90mm') || name.includes('90 mm') || name.includes('ø90') || (name.includes('90') && name.includes('pipe'))) {
-            map['90'] = (map['90'] || 0) + inStore;
+            pipeMap['90'] = (pipeMap['90'] || 0) + inStore;
           }
           if (name.includes('125mm') || name.includes('125 mm') || name.includes('ø125') || (name.includes('125') && name.includes('pipe'))) {
-            map['125'] = (map['125'] || 0) + inStore;
+            pipeMap['125'] = (pipeMap['125'] || 0) + inStore;
           }
         });
-        setPipeStockMap(map);
+        setPipeStockMap(pipeMap);
+        setSiteStockMap(matMap);
       })
-      .catch(() => setPipeStockMap({}));
+      .catch(() => { setPipeStockMap({}); setSiteStockMap({}); });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panelOpen, formSiteId]);
 
@@ -423,6 +430,7 @@ export default function PELaying() {
 
   function openAddPanel() {
     setEditingId(null);
+    setCatQtys({});
     const initForm = { ...EMPTY_ENTRY };
     customCols.forEach(c => { initForm[c.key] = ''; });
     setForm(initForm);
@@ -432,6 +440,15 @@ export default function PELaying() {
 
   function openEditPanel(row) {
     setEditingId(row.id || row.sr);
+    const initQtys = {};
+    if (Array.isArray(row.mdpeMaterials)) {
+      row.mdpeMaterials.forEach(m => {
+        if (m.material && m.qty > 0) {
+          initQtys[m.material] = m.qty;
+        }
+      });
+    }
+    setCatQtys(initQtys);
     const initForm = {
       layDate:    row.layDate    || '',
       connType:   row.connType   || 'Domestic',
@@ -511,8 +528,17 @@ export default function PELaying() {
 
     // Backend-mode: POST / PATCH
     try {
+      const mdpeMaterialsPayload = [];
+      Object.entries(catQtys).forEach(([key, qty]) => {
+        const numQty = Number(qty);
+        if (numQty > 0) {
+          const itemName = key.includes('__') ? key.split('__').slice(1).join('__') : key;
+          mdpeMaterialsPayload.push({ material: itemName, qty: numQty });
+        }
+      });
+
       const payload = {
-              area:       entryBase.area,
+        area:       entryBase.area,
         coilNo:     entryBase.coil,
         layingDate: entryBase.layDate,
         // Map display label → valid PEStatus enum value
@@ -531,15 +557,16 @@ export default function PELaying() {
         d125tot: entryBase.d125oc + entryBase.d125b + entryBase.d125hdd,
         // Issue #3: DPR photo URL (R2)
         dprPhotoUrl: entryBase.dprPhotoUrl || null,
+        mdpeMaterials: mdpeMaterialsPayload,
       };
       if (editingId) {
         const updated = await peLayingAPI.update(resolvedSiteId, editingId, payload);
         setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
-          ? { ...r, ...entryBase, id: updated?.id || r.id } : r));
+          ? { ...r, ...entryBase, mdpeMaterials: mdpeMaterialsPayload, id: updated?.id || r.id } : r));
         showToast('✓ PE Laying entry updated');
       } else {
         const created = await peLayingAPI.create(resolvedSiteId, payload);
-        const newEntry = { ...entryBase, id: created?.id || Date.now(), sr: allData.length + 1 };
+        const newEntry = { ...entryBase, mdpeMaterials: mdpeMaterialsPayload, id: created?.id || Date.now(), sr: allData.length + 1 };
         setAllData(prev => [newEntry, ...prev]);
         showToast('✓ PE Laying entry added');
       }
@@ -1145,6 +1172,23 @@ export default function PELaying() {
               style={{ textAlign: 'center', height: 28 }} />
             <div style={{ height: 28, border: `1px solid ${pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#dc2626' : '#e2e8f0'}`, borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center', background: pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#fee2e2' : '#f0f7ee', fontSize: 12, fontWeight: 700, color: pipeStockMap['125'] !== undefined && d125Total > pipeStockMap['125'] ? '#dc2626' : '#1f4e1a' }}>{d125Total}</div>
           </div>
+        </div>
+
+        {/* MDPE Fittings Used section — live-connected to inventory for selected GA */}
+        <div style={{ marginTop: 16 }}>
+          <SectionTitle>MDPE Fittings Used</SectionTitle>
+          <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, background: '#fef3c7', padding: '6px 10px', borderRadius: 4 }}>
+            ⚠ Quantities entered here will be deducted from site inventory stock.
+          </p>
+          <StockCategoryAccordion
+            gaName={formGA}
+            siteStockMap={siteStockMap}
+            catQtys={catQtys}
+            setCatQtys={setCatQtys}
+            catOpen={catOpen}
+            setCatOpen={setCatOpen}
+            categoryFilter="MDPE Fittings"
+          />
         </div>
 
         {customCols.length > 0 && (
