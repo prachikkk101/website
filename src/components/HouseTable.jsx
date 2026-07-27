@@ -8,6 +8,7 @@ import { AuthContext } from '../context/AuthContext';
 import { useSite, useSiteAreas } from '../context/SiteContext';
 import { pngAPI, dataAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import { buildAccordionCategories } from '../utils/stockCategories';
+import StockCategoryAccordion from './StockCategoryAccordion';
 import PhotoViewer from './PhotoViewer';
 
 
@@ -405,13 +406,9 @@ export default function HouseTable() {
   const [customMaterials, setCustomMaterials] = useState([]); // [{label, unit, qty}] per-entry extras
   const [hiddenMaterials, setHiddenMaterials] = useState([]); // keys hidden for THIS entry only
 
-  // Stock categories from backend (for the materials accordion in the PNG Connection form)
-  const [stockCatData, setStockCatData] = useState([]);
-  useEffect(() => {
-    dataAPI.getStockCategories()
-      .then(cats => setStockCatData(buildAccordionCategories(cats, null)))
-      .catch(() => setStockCatData([]));
-  }, []);
+  // Stock categories are now fetched inside StockCategoryAccordion (via formGA prop).
+  // The old approach called getStockCategories() with no gaName, causing a 400 error.
+  const [stockCatData] = useState([]); // kept for edit-restore path at line 755; actual render uses StockCategoryAccordion
 
   // Site stock availability map: { materialName -> inStore qty } — fetched when panel opens
   // Uses the form-resolved siteId (from formGA+formCity+formArea) NOT the global selectedSiteId,
@@ -1262,100 +1259,19 @@ export default function HouseTable() {
               </div>
             ))}
 
-            {/* ── Stock Category Dropdowns ── */}
+            {/* ── Stock Category Dropdowns (shared component — fetches using formGA) ── */}
             <div style={{ marginTop: 12, borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
               <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>
                 Additional Materials from Stock Categories:
               </p>
-              {stockCatData.length === 0 ? (
-                <p style={{ color: '#94a3b8', fontSize: 12, margin: '4px 0' }}>No stock categories loaded from server.</p>
-              ) : (() => {
-                const normalize = s => (s || '').toLowerCase().trim();
-                const hasStockData = Object.keys(siteStockMap).length > 0;
-                return stockCatData.map(cat => {
-                  const isOpen = catOpen === cat.id;
-                  // Filter items: only show those with available stock > 0 when stock is loaded.
-                  // When stock isn't loaded yet, show all items.
-                  const visibleItems = hasStockData
-                    ? cat.items.filter(item => {
-                        const avail = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
-                        return avail > 0;
-                      })
-                    : cat.items;
-                  // Skip whole category if stock loaded but none of its items have stock
-                  if (hasStockData && visibleItems.length === 0) return null;
-                  return (
-                    <div key={cat.id} style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflow: 'hidden', marginBottom: 6 }}>
-                      {/* Category header */}
-                      <div
-                        onClick={() => setCatOpen(prev => prev === cat.id ? null : cat.id)}
-                        style={{
-                          background: isOpen ? cat.color : '#f8fafc',
-                          color: isOpen ? 'white' : '#1e293b',
-                          padding: '9px 12px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          fontWeight: 600,
-                          fontSize: 12,
-                          transition: 'background 0.15s',
-                        }}
-                      >
-                        <span>{cat.label}</span>
-                        <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
-                      </div>
-
-                      {/* Items */}
-                      {isOpen && (
-                        <div style={{ padding: '8px 12px', background: 'white', display: 'flex', flexDirection: 'column', gap: 5 }}>
-                          {!hasStockData && !formSiteId && (
-                            <p style={{ fontSize: 11, color: '#94a3b8', margin: '2px 0 6px', fontStyle: 'italic' }}>
-                              📋 Select GA Location to see available stock only
-                            </p>
-                          )}
-                          {visibleItems.map(item => {
-                            const key = `${cat.id}__${item}`;
-                            const val = catQtys[key] || 0;
-                            const available = Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
-                            return (
-                              <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <label style={{ flex: 1, fontSize: 11.5, color: '#374151', lineHeight: 1.3 }}>
-                                  {item}
-                                  {available !== null && (
-                                    <span style={{ fontSize: 10, color: available > 0 ? '#16a34a' : '#dc2626', marginLeft: 4 }}>
-                                      (max: {available})
-                                    </span>
-                                  )}
-                                </label>
-                                <input
-                                  type="number" min={0} max={available !== null ? available : undefined}
-                                  value={val === 0 ? '' : val}
-                                  onFocus={e => e.target.select()}
-                                  onChange={e => {
-                                    const num = e.target.value === '' ? 0 : Number(e.target.value);
-                                    const capped = available !== null ? Math.min(num, available) : num;
-                                    setCatQtys(prev => ({ ...prev, [key]: capped }));
-                                  }}
-                                  onBlur={e => {
-                                    if (e.target.value === '') setCatQtys(prev => ({ ...prev, [key]: 0 }));
-                                  }}
-                                  placeholder="0"
-                                  style={{
-                                    width: 70, height: 28,
-                                    border: available !== null && val > available ? '1px solid #dc2626' : '1px solid #d1d5db',
-                                    borderRadius: 4, padding: '0 6px', fontSize: 12, textAlign: 'right',
-                                  }}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
+              <StockCategoryAccordion
+                gaName={formGA}
+                siteStockMap={siteStockMap}
+                catQtys={catQtys}
+                setCatQtys={setCatQtys}
+                catOpen={catOpen}
+                setCatOpen={setCatOpen}
+              />
             </div>
 
             {/* Add persistent material to global list */}
