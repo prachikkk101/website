@@ -490,12 +490,30 @@ export default function Inventory() {
   const [panelOpen, setPanelOpen] = useState(false);
   const [exportDate, setExportDate] = useState(todayStr());
 
-  // Stock History modal state
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyDate, setHistoryDate] = useState(todayStr());
   const [historyData, setHistoryData] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [historyNote, setHistoryNote] = useState('');
+  const [historyExpandedDates, setHistoryExpandedDates] = useState({});
+
+  // Group receipt history logs by date (DD/MM/YYYY)
+  const historyByDate = useMemo(() => {
+    const groups = {};
+    (historyData || []).forEach(r => {
+      const d = r.receivedAt ? new Date(r.receivedAt) : null;
+      const dateStr = d
+        ? `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
+        : '—';
+      if (!groups[dateStr]) groups[dateStr] = [];
+      groups[dateStr].push(r);
+    });
+    return Object.entries(groups).map(([dateStr, items]) => ({
+      dateStr,
+      items,
+      totalQty: items.reduce((acc, i) => acc + (i.quantity || 0), 0),
+    }));
+  }, [historyData]);
 
   const isAdmin = (
     user?.role === 'ADMIN' || user?.role === 'admin' ||
@@ -1876,8 +1894,8 @@ export default function Inventory() {
               </span>
             </div>
 
-            {/* Table body */}
-            <div style={{ overflowY: 'auto', flex: 1, padding: '0 0 16px' }}>
+            {/* Table body with Date-grouped Dropdowns */}
+            <div style={{ overflowY: 'auto', flex: 1, padding: '16px' }}>
               {historyLoading ? (
                 <div style={{ padding: 32, textAlign: 'center', color: '#64748b', fontSize: 13 }}>Loading receipt history...</div>
               ) : historyData.length === 0 ? (
@@ -1887,46 +1905,86 @@ export default function Inventory() {
                   <span style={{ fontSize: 11, color: '#c0c0c0' }}>Receipts will appear here after you use "Receive Stock" from today.</span>
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: 'linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%)', color: '#fff', position: 'sticky', top: 0 }}>
-                      {['Date', 'Challan / DC No.', 'Material', 'Qty Received', 'Photo'].map(h => (
-                        <th key={h} style={{ padding: '12px 14px', textAlign: h === 'Material' || h === 'Challan / DC No.' ? 'left' : 'center', fontWeight: 700, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyData.map((r, i) => {
-                      const base = i % 2 === 0 ? '#fff' : '#f8fbf8';
-                      // Format date as DD/MM/YYYY
-                      const d = r.receivedAt ? new Date(r.receivedAt) : null;
-                      const dateStr = d
-                        ? `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()}`
-                        : '—';
-                      return (
-                        <tr key={r.id} style={{ background: base, borderBottom: '1px solid #f1f5f9' }}
-                          onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
-                          onMouseLeave={e => e.currentTarget.style.background = base}>
-                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>{dateStr}</td>
-                          <td style={{ padding: '11px 14px', color: '#64748b', fontStyle: r.challanNo ? 'normal' : 'italic' }}>
-                            {r.challanNo || <span style={{ color: '#c0c0c0' }}>—</span>}
-                          </td>
-                          <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1e293b' }}>{r.material}</td>
-                          <td style={{ padding: '11px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 700, fontSize: 13 }}>
-                            {r.quantity.toLocaleString()} <span style={{ fontWeight: 400, fontSize: 10, color: '#64748b' }}>{r.unit}</span>
-                          </td>
-                          <td style={{ padding: '11px 14px', textAlign: 'center' }}>
-                            {r.photoUrl ? (
-                              <PhotoViewer photoUrl={r.photoUrl} label="Challan Photo" />
-                            ) : (
-                              <span style={{ fontSize: 11, color: '#c0c0c0', fontStyle: 'italic' }}>No photo</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                historyByDate.map(({ dateStr, items, totalQty }, groupIdx) => {
+                  const isOpen = historyExpandedDates[dateStr] ?? (groupIdx === 0);
+                  return (
+                    <div key={dateStr} style={{ marginBottom: 10, border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                      {/* Date Header Dropdown Bar */}
+                      <div
+                        onClick={() => setHistoryExpandedDates(prev => ({ ...prev, [dateStr]: !(prev[dateStr] ?? (groupIdx === 0)) }))}
+                        style={{
+                          background: isOpen ? 'linear-gradient(135deg, #1e3a5f 0%, #0f2540 100%)' : '#f8fafc',
+                          color: isOpen ? '#ffffff' : '#1e293b',
+                          padding: '12px 16px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          fontWeight: 600,
+                          fontSize: 13,
+                          transition: 'background 0.15s',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                          <span>📅 Date: <strong>{dateStr}</strong></span>
+                          <span style={{
+                            fontSize: 11,
+                            background: isOpen ? 'rgba(255,255,255,0.2)' : '#e2e8f0',
+                            color: isOpen ? '#fff' : '#475569',
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            fontWeight: 500,
+                          }}>
+                            {items.length} item{items.length !== 1 ? 's' : ''} received
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12 }}>
+                          <span style={{ opacity: 0.9 }}>Total Qty: {totalQty.toLocaleString()} units</span>
+                          <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+                        </div>
+                      </div>
+
+                      {/* Receipt items for this date */}
+                      {isOpen && (
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                          <thead>
+                            <tr style={{ background: '#f1f5f9', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>
+                              {['Date', 'Challan / DC No.', 'Material', 'Qty Received', 'Photo'].map(h => (
+                                <th key={h} style={{ padding: '10px 14px', textAlign: h === 'Material' || h === 'Challan / DC No.' ? 'left' : 'center', fontWeight: 700, fontSize: 11, letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((r, i) => {
+                              const base = i % 2 === 0 ? '#fff' : '#f8fbf8';
+                              return (
+                                <tr key={r.id} style={{ background: base, borderBottom: '1px solid #f1f5f9' }}
+                                  onMouseEnter={e => e.currentTarget.style.background = '#eff6ff'}
+                                  onMouseLeave={e => e.currentTarget.style.background = base}>
+                                  <td style={{ padding: '11px 14px', textAlign: 'center', color: '#374151', fontWeight: 500, whiteSpace: 'nowrap' }}>{dateStr}</td>
+                                  <td style={{ padding: '11px 14px', color: '#64748b', fontStyle: r.challanNo ? 'normal' : 'italic' }}>
+                                    {r.challanNo || <span style={{ color: '#c0c0c0' }}>—</span>}
+                                  </td>
+                                  <td style={{ padding: '11px 14px', fontWeight: 600, color: '#1e293b' }}>{r.material}</td>
+                                  <td style={{ padding: '11px 14px', textAlign: 'center', color: '#2d6a27', fontWeight: 700, fontSize: 13 }}>
+                                    {r.quantity.toLocaleString()} <span style={{ fontWeight: 400, fontSize: 10, color: '#64748b' }}>{r.unit}</span>
+                                  </td>
+                                  <td style={{ padding: '11px 14px', textAlign: 'center' }}>
+                                    {r.photoUrl ? (
+                                      <PhotoViewer photoUrl={r.photoUrl} label="Challan Photo" />
+                                    ) : (
+                                      <span style={{ fontSize: 11, color: '#c0c0c0', fontStyle: 'italic' }}>No photo</span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
           </div>

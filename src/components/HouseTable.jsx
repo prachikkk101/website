@@ -1203,86 +1203,14 @@ export default function HouseTable() {
           <p style={{ fontSize: 11, color: '#64748b', marginBottom: 10, background: '#fef3c7', padding: '6px 10px', borderRadius: 4 }}>
             ⚠ Quantities entered here will be deducted from site stock.
           </p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {matList.filter(mat => !hiddenMaterials.includes(mat.key)).map(mat => (
-              <div key={mat.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <label style={{ flex: 1, fontSize: 12, color: '#374151' }}>{mat.label}</label>
-                <span style={{ fontSize: 11, color: '#94a3b8', width: 32 }}>{mat.unit}</span>
-                <input type="number" min={0}
-                  value={form[mat.key] !== undefined && form[mat.key] !== null && form[mat.key] !== 0 ? form[mat.key] : ''}
-                  onFocus={e => e.target.select()}
-                  onChange={e => f(mat.key, e.target.value === '' ? 0 : Number(e.target.value))}
-                  onBlur={e => { if (e.target.value === '') f(mat.key, 0); }}
-                  placeholder="0"
-                  style={{ width: 72, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 13 }} />
-                {/* × hide for this entry only */}
-                <button type="button"
-                  onClick={() => setHiddenMaterials(prev => [...prev, mat.key])}
-                  title="Hide for this entry only"
-                  style={{ width: 26, height: 30, background: '#fef9c3', color: '#92400e', border: '1px solid #fde68a', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700 }}
-                >−</button>
-                {/* 🗑 permanently delete from global list */}
-                <button type="button"
-                  onClick={() => removeMaterialGlobal(mat.key)}
-                  title="Permanently delete this material"
-                  style={{ width: 26, height: 30, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                >&#x1F5D1;</button>
-              </div>
-            ))}
-            {/* Custom per-entry materials */}
-            {customMaterials.map((mat, idx) => (
-              <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <input
-                  value={mat.label}
-                  onChange={e => setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, label: e.target.value } : m))}
-                  placeholder="Material name"
-                  style={{ flex: 1, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }}
-                />
-                <input
-                  value={mat.unit}
-                  onChange={e => setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, unit: e.target.value } : m))}
-                  placeholder="unit"
-                  style={{ width: 48, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 12 }}
-                />
-                <input
-                  type="number" min={0}
-                  value={mat.qty !== 0 ? mat.qty : ''}
-                  onFocus={e => e.target.select()}
-                  onChange={e => setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, qty: e.target.value === '' ? 0 : Number(e.target.value) } : m))}
-                  onBlur={e => { if (e.target.value === '') setCustomMaterials(prev => prev.map((m, i) => i === idx ? { ...m, qty: 0 } : m)); }}
-                  placeholder="0"
-                  style={{ width: 68, height: 30, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 6px', fontSize: 13 }}
-                />
-                <button type="button" onClick={() => setCustomMaterials(prev => prev.filter((_, i) => i !== idx))}
-                  style={{ width: 26, height: 30, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
-                >×</button>
-              </div>
-            ))}
-
-            {/* ── Stock Category Dropdowns (shared component — fetches using formGA) ── */}
-            <div style={{ marginTop: 12, borderTop: '1px solid #e2e8f0', paddingTop: 10 }}>
-              <p style={{ fontSize: 11, color: '#64748b', marginBottom: 8, fontWeight: 600 }}>
-                Additional Materials from Stock Categories:
-              </p>
-              <StockCategoryAccordion
-                gaName={formGA}
-                siteStockMap={siteStockMap}
-                catQtys={catQtys}
-                setCatQtys={setCatQtys}
-                catOpen={catOpen}
-                setCatOpen={setCatOpen}
-              />
-            </div>
-
-            {/* Add persistent material to global list */}
-            <button
-              type="button"
-              onClick={addMaterialGlobal}
-              style={{ marginTop: 4, height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
-            >
-              + Add Material to List
-            </button>
-          </div>
+          <StockCategoryAccordion
+            gaName={formGA}
+            siteStockMap={siteStockMap}
+            catQtys={catQtys}
+            setCatQtys={setCatQtys}
+            catOpen={catOpen}
+            setCatOpen={setCatOpen}
+          />
         </div>
       </>
     );
