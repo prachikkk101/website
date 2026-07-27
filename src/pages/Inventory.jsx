@@ -74,7 +74,7 @@ function CategoryAccordion({
         setRawCats([]);
       })
       .finally(() => setCatLoading(false));
-  }, [gaName, onCategoriesChanged]); // re-fetch when GA changes OR admin adds a category/item
+  }, [gaName]); // re-fetch only when GA changes; admin actions self-refresh inside their handlers
 
   // Step 2: BUILD the accordion items reactively whenever rawCats OR stockItems changes.
   // CRITICAL: this was previously inside the useEffect above with [] deps, which meant
@@ -697,7 +697,10 @@ export default function Inventory() {
       }
     }
     load();
-  }, [invSiteId, invGA, invCity, siteLoading]);
+  // siteLoading intentionally omitted: invSiteId recomputes when sites finish loading,
+  // so it already triggers a re-fetch. Including siteLoading caused 2-3 extra fires on mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invSiteId, invGA, invCity]);
 
   useEffect(() => {
     if (panelOpen) {

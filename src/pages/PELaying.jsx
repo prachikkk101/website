@@ -250,7 +250,10 @@ export default function PELaying() {
     } else {
       setAllData([]);
     }
-  }, [siteId, siteList, siteLoading, user?.role]);
+  // siteLoading intentionally omitted: siteList/siteId update when loading finishes,
+  // so they already re-trigger this effect. Including siteLoading caused double-fires.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [siteId, siteList, user?.role]);
 
   // Filter / tab state
   const [activeTab, setActiveTab] = useState('Domestic');

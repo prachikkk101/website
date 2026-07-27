@@ -524,28 +524,17 @@ export const deleteStockMaterial = async (req: AuthenticatedRequest, res: Respon
     if (!mat) {
       return res.status(404).json({ success: false, error: 'Material not found.' });
     }
-
-    // Safety check: block deletion if this material has received stock anywhere
-    const hasStock = await prisma.inventoryItem.findFirst({
-      where: { material: { equals: mat.name, mode: 'insensitive' }, received: { gt: 0 } },
-    });
-    if (hasStock) {
-      return res.status(409).json({
-        success: false,
-        error: `Cannot delete "${mat.name}" — this item has existing stock records (received > 0). Remove all stock first.`,
-      });
-    }
-
-    // Hard delete the DB record (admin-added items have no hardcoded fallback)
-    await prisma.stockMaterial.delete({ where: { id: matId } });
+    // Soft-delete: mark as hidden so it disappears from the accordion but InventoryItem
+    // history records are fully preserved. Re-adding via "+ Add Item" un-hides it.
+    await prisma.stockMaterial.update({ where: { id: matId }, data: { isHidden: true } });
     res.status(200).json({ success: true });
   } catch (error) {
     next(error);
   }
 };
 
-// Soft-delete a DEFAULT (hardcoded) item that has no StockMaterial record yet.
-// Creates a StockMaterial row with isHidden=true so getStockCategories can filter it out.
+// Soft-delete a DEFAULT (hardcoded) item by name.
+// Creates a StockMaterial row with isHidden=true so getStockCategories filters it out.
 export const hideDefaultItem = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
     if (req.user?.role !== 'ADMIN') {
@@ -557,17 +546,6 @@ export const hideDefaultItem = async (req: AuthenticatedRequest, res: Response, 
       return res.status(400).json({ success: false, error: 'Item name is required.' });
     }
     const itemName = String(name).trim();
-
-    // Safety check: block if received stock exists for this item name anywhere
-    const hasStock = await prisma.inventoryItem.findFirst({
-      where: { material: { equals: itemName, mode: 'insensitive' }, received: { gt: 0 } },
-    });
-    if (hasStock) {
-      return res.status(409).json({
-        success: false,
-        error: `Cannot delete "${itemName}" — this item has existing stock records (received > 0). Remove all stock first.`,
-      });
-    }
 
     // Upsert with isHidden=true (creates if not exists, updates if exists)
     await prisma.stockMaterial.upsert({
@@ -592,19 +570,7 @@ export const deleteStockCategory = async (req: AuthenticatedRequest, res: Respon
     if (!cat) {
       return res.status(404).json({ success: false, error: 'Category not found.' });
     }
-
-    // Safety check: block if ANY InventoryItem in this category has received > 0
-    const hasStock = await prisma.inventoryItem.findFirst({
-      where: { category: { equals: cat.name, mode: 'insensitive' }, received: { gt: 0 } },
-    });
-    if (hasStock) {
-      return res.status(409).json({
-        success: false,
-        error: `Cannot delete "${cat.name}" — this category has existing stock records (received > 0). Remove all stock first.`,
-      });
-    }
-
-    // Soft-delete: mark as hidden (hard-delete would allow default cats to re-appear on next API call)
+    // Soft-delete: mark as hidden. Historical InventoryItem records are fully preserved.
     await prisma.stockCategory.update({ where: { id: catId }, data: { isHidden: true } });
     res.status(200).json({ success: true });
   } catch (error) {
