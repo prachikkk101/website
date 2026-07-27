@@ -381,34 +381,11 @@ export const getStockCategories = async (req: AuthenticatedRequest, res: Respons
         missingDefaults.map(name =>
           prisma.stockCategory.upsert({
             where: { name_gaName: { name, gaName } },
-            // Always restore visibility if a default was accidentally soft-deleted
-            update: { isHidden: false },
+            update: {},
             create: { name, gaName, isDefault: true, isHidden: false },
           })
         )
       );
-      dbCats = await prisma.stockCategory.findMany({
-        where: { gaName },
-        orderBy: { name: 'asc' },
-        include: { materials: { orderBy: { name: 'asc' } } },
-      }).catch(() => [] as any[]);
-    }
-
-    // Also ensure ALL existing default categories are un-hidden
-    // (self-healing: restores any that were accidentally hidden)
-    const hiddenDefaults = dbCats.filter((c: any) =>
-      c.isHidden && DEFAULT_STOCK_CATEGORIES.includes(c.name)
-    );
-    if (hiddenDefaults.length > 0) {
-      await Promise.all(
-        hiddenDefaults.map((c: any) =>
-          prisma.stockCategory.update({
-            where: { id: c.id },
-            data: { isHidden: false },
-          })
-        )
-      );
-      // Reload after un-hiding
       dbCats = await prisma.stockCategory.findMany({
         where: { gaName },
         orderBy: { name: 'asc' },

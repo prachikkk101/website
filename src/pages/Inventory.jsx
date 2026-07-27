@@ -190,7 +190,7 @@ function CategoryAccordion({
   }
 
   async function handleDeleteCategory(cat) {
-    if (!window.confirm(`Delete category "${cat.label}"?\n\nThis will hide the entire category from all users. It can be re-added via "+ Add Category".\n\nNote: will be blocked if any items in this category have received stock.`)) return;
+    if (!window.confirm(`Delete category "${cat.label}" for ${gaName || 'this GA Location'}?\n\nThis will hide the category for this GA Location. It can be re-added anytime via "+ Add Category".`)) return;
     try {
       await dataAPI.deleteStockCategory(Number(cat.id));
       const refreshed = await dataAPI.getStockCategories(gaName);
