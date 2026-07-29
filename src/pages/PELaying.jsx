@@ -275,31 +275,6 @@ export default function PELaying() {
   const [showColManager, setShowColManager] = useState(false);
   const [newColNamePL, setNewColNamePL] = useState(''); // controlled input for col manager
 
-  // Effective siteId for column config persistence (handles ADMIN view where selectedSiteId is null)
-  const effectiveSiteId = useMemo(() => {
-    if (selectedSiteId) return selectedSiteId;
-    if (formSiteId) return formSiteId;
-    return siteList[0]?.id || null;
-  }, [selectedSiteId, formSiteId, siteList]);
-
-  // Helper — persist column config changes to backend so all users see the same columns
-  function saveColConfig(custom, hidden) {
-    const targetSiteId = effectiveSiteId || 'all';
-    columnConfigAPI.update(targetSiteId, 'pelaying', custom, hidden)
-      .catch(e => console.error('[PELaying] Failed to save column config:', e));
-  }
-
-  // Load column config from backend when effectiveSiteId changes
-  useEffect(() => {
-    const targetSiteId = effectiveSiteId || 'all';
-    columnConfigAPI.get(targetSiteId, 'pelaying')
-      .then(cfg => {
-        setCustomCols(cfg.customCols || []);
-        setHiddenCols(cfg.hiddenCols || []);
-      })
-      .catch(() => { /* no config yet — start with empty */ });
-  }, [effectiveSiteId]);
-
   // Pipe stock availability & Category Accordion state
   const [pipeStockMap, setPipeStockMap] = useState({});
   const [siteStockMap, setSiteStockMap] = useState({});
@@ -337,6 +312,31 @@ export default function PELaying() {
     }
     return selectedSiteId || null;
   }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, selectedSiteId]);
+
+  // Effective siteId for column config persistence (handles ADMIN view where selectedSiteId is null)
+  const effectiveSiteId = useMemo(() => {
+    if (selectedSiteId) return selectedSiteId;
+    if (formSiteId) return formSiteId;
+    return siteList[0]?.id || null;
+  }, [selectedSiteId, formSiteId, siteList]);
+
+  // Helper — persist column config changes to backend so all users see the same columns
+  function saveColConfig(custom, hidden) {
+    const targetSiteId = effectiveSiteId || 'all';
+    columnConfigAPI.update(targetSiteId, 'pelaying', custom, hidden)
+      .catch(e => console.error('[PELaying] Failed to save column config:', e));
+  }
+
+  // Load column config from backend when effectiveSiteId changes
+  useEffect(() => {
+    const targetSiteId = effectiveSiteId || 'all';
+    columnConfigAPI.get(targetSiteId, 'pelaying')
+      .then(cfg => {
+        setCustomCols(cfg.customCols || []);
+        setHiddenCols(cfg.hiddenCols || []);
+      })
+      .catch(() => { /* no config yet — start with empty */ });
+  }, [effectiveSiteId]);
 
   useEffect(() => {
     if (!panelOpen || !formSiteId) { setPipeStockMap({}); setSiteStockMap({}); return; }
