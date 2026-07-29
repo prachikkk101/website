@@ -349,16 +349,18 @@ export default function PELaying() {
           const name = rawName.toLowerCase();
           const inStore = Math.max(0, item.inStore ?? ((item.received ?? 0) - (item.issued ?? 0) - (item.returned ?? 0)));
           if (rawName) matMap[rawName] = inStore;
-          if (name.includes('32mm') || name.includes('32 mm') || name.includes('ø32') || (name.includes('32') && name.includes('pipe'))) {
+          // Only count actual pipe items (must contain 'pipe' in name) — exclude fittings, couplers, tees, etc.
+          const isPipe = name.includes('pipe');
+          if (isPipe && (name.includes('32mm') || name.includes('32 mm') || name.includes('ø32'))) {
             pipeMap['32'] = (pipeMap['32'] || 0) + inStore;
           }
-          if (name.includes('63mm') || name.includes('63 mm') || name.includes('ø63') || (name.includes('63') && name.includes('pipe'))) {
+          if (isPipe && (name.includes('63mm') || name.includes('63 mm') || name.includes('ø63'))) {
             pipeMap['63'] = (pipeMap['63'] || 0) + inStore;
           }
-          if (name.includes('90mm') || name.includes('90 mm') || name.includes('ø90') || (name.includes('90') && name.includes('pipe'))) {
+          if (isPipe && (name.includes('90mm') || name.includes('90 mm') || name.includes('ø90'))) {
             pipeMap['90'] = (pipeMap['90'] || 0) + inStore;
           }
-          if (name.includes('125mm') || name.includes('125 mm') || name.includes('ø125') || (name.includes('125') && name.includes('pipe'))) {
+          if (isPipe && (name.includes('125mm') || name.includes('125 mm') || name.includes('ø125'))) {
             pipeMap['125'] = (pipeMap['125'] || 0) + inStore;
           }
         });
@@ -818,7 +820,7 @@ export default function PELaying() {
                         ) : <span style={{ color: '#cbd5e1' }}>—</span>}
                       </td>
                     )}
-                    {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{r[col.key] || '—'}</td>)}
+                    {customCols.filter(c => !hiddenCols.includes(c.key)).map(col => <td key={col.key} style={{ whiteSpace: 'nowrap' }}>{r.customFields?.[col.key] || r[col.key] || '—'}</td>)}
                     <td style={{ textAlign: 'center' }}>
                       <button onClick={() => openEditPanel(r)}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 15, color: '#2d6a27', padding: 2 }} title="Edit entry">✏</button>

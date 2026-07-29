@@ -699,13 +699,13 @@ export const getColumnConfig = async (req: AuthenticatedRequest, res: Response, 
 
     let site = idStr !== 'all' ? await prisma.site.findUnique({
       where: { id: idStr },
-      select: { id: true, columnConfig: true },
+      select: { id: true, gaName: true, columnConfig: true },
     }) : null;
 
     if (!site) {
       site = await prisma.site.findFirst({
         where: { status: 'Active' },
-        select: { id: true, columnConfig: true },
+        select: { id: true, gaName: true, columnConfig: true },
       });
     }
 
@@ -713,10 +713,29 @@ export const getColumnConfig = async (req: AuthenticatedRequest, res: Response, 
       return res.status(404).json({ success: false, error: 'Site not found' });
     }
 
+    // Check this site's config first
     const config = (site.columnConfig as Record<string, any>) || {};
-    const tableConfig = config[table] || { customCols: [], hiddenCols: [] };
+    let tableConfig = config[table];
 
-    res.json({ success: true, data: tableConfig });
+    // GA-scoped fallback: if this site has no config for the table, check sibling sites in the same GA
+    if (!tableConfig || ((!tableConfig.customCols || tableConfig.customCols.length === 0) && (!tableConfig.hiddenCols || tableConfig.hiddenCols.length === 0))) {
+      if (site.gaName) {
+        const siblings = await prisma.site.findMany({
+          where: { gaName: site.gaName, id: { not: site.id } },
+          select: { columnConfig: true },
+        });
+        for (const sib of siblings) {
+          const sibConfig = (sib.columnConfig as Record<string, any>) || {};
+          const sibTableConfig = sibConfig[table];
+          if (sibTableConfig && ((sibTableConfig.customCols?.length || 0) > 0 || (sibTableConfig.hiddenCols?.length || 0) > 0)) {
+            tableConfig = sibTableConfig;
+            break;
+          }
+        }
+      }
+    }
+
+    res.json({ success: true, data: tableConfig || { customCols: [], hiddenCols: [] } });
   } catch (error) {
     next(error);
   }
@@ -736,13 +755,13 @@ export const updateColumnConfig = async (req: AuthenticatedRequest, res: Respons
 
     let site = idStr !== 'all' ? await prisma.site.findUnique({
       where: { id: idStr },
-      select: { id: true, columnConfig: true },
+      select: { id: true, gaName: true, columnConfig: true },
     }) : null;
 
     if (!site) {
       site = await prisma.site.findFirst({
         where: { status: 'Active' },
-        select: { id: true, columnConfig: true },
+        select: { id: true, gaName: true, columnConfig: true },
       });
     }
 
@@ -750,13 +769,25 @@ export const updateColumnConfig = async (req: AuthenticatedRequest, res: Respons
       return res.status(404).json({ success: false, error: 'Site not found' });
     }
 
-    const existing = (site.columnConfig as Record<string, any>) || {};
-    const merged = { ...existing, [table]: { customCols, hiddenCols } };
+    const tablePayload = { customCols, hiddenCols };
 
-    await prisma.site.update({
-      where: { id: site.id },
-      data: { columnConfig: merged },
-    });
+    // GA-scoped propagation: update ALL sites in the same GA so column config is consistent
+    if (site.gaName) {
+      const allGaSites = await prisma.site.findMany({
+        where: { gaName: site.gaName },
+        select: { id: true, columnConfig: true },
+      });
+      await Promise.all(allGaSites.map(s => {
+        const existing = (s.columnConfig as Record<string, any>) || {};
+        const merged = { ...existing, [table]: tablePayload };
+        return prisma.site.update({ where: { id: s.id }, data: { columnConfig: merged } });
+      }));
+    } else {
+      // Fallback: single-site update (no GA)
+      const existing = (site.columnConfig as Record<string, any>) || {};
+      const merged = { ...existing, [table]: tablePayload };
+      await prisma.site.update({ where: { id: site.id }, data: { columnConfig: merged } });
+    }
 
     res.json({ success: true });
   } catch (error) {
