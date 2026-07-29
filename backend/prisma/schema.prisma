@@ -291,6 +291,7 @@ model PELaying {
   d125hdd        Decimal                @db.Decimal(10, 3) @default(0)
   d125tot        Decimal                @db.Decimal(10, 3) @default(0)
   mdpeMaterials  Json?                  // [{material: string, qty: number}] — MDPE fittings used in this entry
+  customFields   Json?                  // { [colKey]: value } — user-defined custom column values
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
   

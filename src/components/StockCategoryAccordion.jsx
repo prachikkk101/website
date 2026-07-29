@@ -3,18 +3,22 @@
  *
  * Shared "available-stock" accordion used by:
  *   - HouseTable  (PNG Connection → Materials Used)
+ *   - PELaying    (PE Laying → Materials Used)
  *
  * Fetches GA-scoped stock categories internally (requires gaName).
  * Filters items to those with siteStockMap[item] > 0 when stock is loaded.
  * Shows (max: N) hint and caps number input at the available quantity.
  *
  * Props:
- *   gaName       {string}   GA Location name — required for the API call.
- *   siteStockMap {object}   { materialName: inStoreQty } from stockAPI.getAll(siteId).
- *   catQtys      {object}   { 'catId__itemName': qty } — controlled by parent.
- *   setCatQtys   {function} Updater for catQtys.
- *   catOpen      {string|null} Currently open category id.
- *   setCatOpen   {function} Updater for catOpen.
+ *   gaName        {string}   GA Location name — required for the API call.
+ *   siteStockMap  {object}   { materialName: inStoreQty } from stockAPI.getAll(siteId).
+ *   catQtys       {object}   { 'catId__itemName': qty } — controlled by parent.
+ *   setCatQtys    {function} Updater for catQtys.
+ *   catOpen       {string|null} Currently open category id.
+ *   setCatOpen    {function} Updater for catOpen.
+ *   initialQtys   {object}   { itemName: qty } — pre-filled quantities for edit mode.
+ *                            Items with initialQtys[item] > 0 are shown even if
+ *                            siteStockMap[item] === 0 (stock already consumed by this entry).
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -29,6 +33,7 @@ export default function StockCategoryAccordion({
   catOpen,
   setCatOpen,
   categoryFilter, // optional string or string[] e.g. "MDPE Fittings"
+  initialQtys = {}, // { itemName: qty } — quantities pre-filled from an existing saved entry
 }) {
   const [categories, setCategories] = useState([]);
 
@@ -76,13 +81,16 @@ export default function StockCategoryAccordion({
       {filteredCategories.map(cat => {
         const isOpen = catOpen === cat.id;
 
-        // When stock is loaded: show only items with available > 0.
-        // When stock hasn't loaded yet: show all items (so the accordion is usable).
+        // When stock is loaded: show items with available > 0 OR that have a pre-filled
+        // initialQty > 0 (items used by the entry being edited — stock already deducted).
+        // When stock hasn't loaded yet: show all items.
         const visibleItems = hasStockData
           ? cat.items.filter(item => {
               const avail =
                 Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
-              return avail > 0;
+              const prefilledQty = initialQtys[item] ?? 0;
+              // Show if available > 0 OR this entry previously used this item (edit mode)
+              return avail > 0 || prefilledQty > 0;
             })
           : cat.items;
 
@@ -134,8 +142,12 @@ export default function StockCategoryAccordion({
                 {visibleItems.map(item => {
                   const key = `${cat.id}__${item}`;
                   const val = catQtys[key] ?? catQtys[item] ?? 0;
-                  const available =
+                  const rawAvailable =
                     Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
+                  // In edit mode, the available stock for THIS entry's previously-used items
+                  // already has initialQty deducted. Restore it so the max hint is accurate.
+                  const prefilledQty = initialQtys[item] ?? 0;
+                  const available = rawAvailable !== null ? rawAvailable + prefilledQty : null;
 
                   return (
                     <div key={item} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

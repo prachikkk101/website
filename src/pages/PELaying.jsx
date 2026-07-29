@@ -213,6 +213,7 @@ export default function PELaying() {
             d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
             workStatus: capitaliseStatus(r.status) || 'Laying',
             mdpeMaterials: r.mdpeMaterials || [],
+            customFields:  r.customFields  || {},
           }));
           setAllData(mapped);
         })
@@ -242,6 +243,7 @@ export default function PELaying() {
             // Map DB status enum back to display label for the form
             workStatus: capitaliseStatus(r.status) || 'Laying',
             mdpeMaterials: r.mdpeMaterials || [],
+            customFields:  r.customFields  || {},
           }));
           setAllData(mapped);
         })
@@ -471,7 +473,7 @@ export default function PELaying() {
       dprPhotoUrl:      row.dprPhotoUrl      || '',
       dprPhotoUploading: false,
     };
-    customCols.forEach(c => { initForm[c.key] = row[c.key] || ''; });
+    customCols.forEach(c => { initForm[c.key] = row.customFields?.[c.key] ?? row[c.key] ?? ''; });
     setForm(initForm);
     setErrors({});
     setPanelOpen(true);
@@ -479,6 +481,10 @@ export default function PELaying() {
 
   async function handleSave() {
     if (!validateForm()) return;
+    // Collect custom column values into a proper object for the backend customFields column
+    const customFieldsPayload = Object.fromEntries(customCols.map(c => [c.key, form[c.key] || '']));
+    console.log('🔵 PE Laying — saving customFields:', JSON.stringify(customFieldsPayload));
+
     const entryBase = {
       ...form,
       area:    formArea,
@@ -494,7 +500,6 @@ export default function PELaying() {
       d125oc:  Number(form.d125oc)  || 0,
       d125b:   Number(form.d125b)   || 0,
       d125hdd: Number(form.d125hdd) || 0,
-      ...Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
     };
 
     // Resolve the correct siteId for this entry.
@@ -558,15 +563,19 @@ export default function PELaying() {
         // Issue #3: DPR photo URL (R2)
         dprPhotoUrl: entryBase.dprPhotoUrl || null,
         mdpeMaterials: mdpeMaterialsPayload,
+        // Custom column values — stored in customFields JSON column
+        customFields: Object.keys(customFieldsPayload).length > 0 ? customFieldsPayload : undefined,
       };
       if (editingId) {
         const updated = await peLayingAPI.update(resolvedSiteId, editingId, payload);
+        console.log('🟢 PE Laying updated. customFields saved:', JSON.stringify(customFieldsPayload));
         setAllData(prev => prev.map(r => (r.id === editingId || r.sr === editingId)
-          ? { ...r, ...entryBase, mdpeMaterials: mdpeMaterialsPayload, id: updated?.id || r.id } : r));
+          ? { ...r, ...entryBase, mdpeMaterials: mdpeMaterialsPayload, customFields: customFieldsPayload, id: updated?.id || r.id } : r));
         showToast('✓ PE Laying entry updated');
       } else {
         const created = await peLayingAPI.create(resolvedSiteId, payload);
-        const newEntry = { ...entryBase, mdpeMaterials: mdpeMaterialsPayload, id: created?.id || Date.now(), sr: allData.length + 1 };
+        console.log('🟢 PE Laying created. customFields saved:', JSON.stringify(customFieldsPayload));
+        const newEntry = { ...entryBase, mdpeMaterials: mdpeMaterialsPayload, customFields: customFieldsPayload, id: created?.id || Date.now(), sr: allData.length + 1 };
         setAllData(prev => [newEntry, ...prev]);
         showToast('✓ PE Laying entry added');
       }
@@ -1187,6 +1196,16 @@ export default function PELaying() {
             setCatQtys={setCatQtys}
             catOpen={catOpen}
             setCatOpen={setCatOpen}
+            initialQtys={(() => {
+              // Build { itemName: qty } from the current row's mdpeMaterials
+              // so accordion shows previously-used items even if stock is now 0 (edit mode)
+              const map = {};
+              if (!editingId) return map;
+              const row = allData.find(r => r.id === editingId || r.sr === editingId);
+              if (!row) return map;
+              (row.mdpeMaterials || []).forEach(m => { if (m.material) map[m.material] = m.qty; });
+              return map;
+            })()}
           />
         </div>
 

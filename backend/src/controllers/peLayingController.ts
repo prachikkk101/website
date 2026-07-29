@@ -88,6 +88,8 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
       material: z.string().min(1),
       qty: z.number().nonnegative(),
     })).nullable().optional(),
+    // Custom column values: { colKey: value }
+    customFields: z.record(z.string(), z.any()).nullable().optional(),
   });
 
   try {
@@ -176,6 +178,8 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
           dprPhotoUrl: data.dprPhotoUrl || null,
           // Store MDPE materials used (non-zero qty only) for reversal on update/delete
           mdpeMaterials: mdpeUsage.length > 0 ? mdpeUsage : Prisma.JsonNull,
+          // Custom column values (user-defined extra fields)
+          customFields: data.customFields ? data.customFields : Prisma.JsonNull,
         },
       });
 
@@ -257,6 +261,8 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
       material: z.string().min(1),
       qty: z.number().nonnegative(),
     })).nullable().optional(),
+    // Custom column values update: pass entire updated object
+    customFields: z.record(z.string(), z.any()).nullable().optional(),
   });
 
   try {
@@ -374,6 +380,8 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
         dprPhotoUrl: data.dprPhotoUrl !== undefined ? data.dprPhotoUrl : undefined,
         // Update stored MDPE list if caller sent a new one
         ...(data.mdpeMaterials !== undefined ? { mdpeMaterials: newMdpe.length > 0 ? newMdpe : Prisma.JsonNull } : {}),
+        // Update custom fields if caller sent them
+        ...(data.customFields !== undefined ? { customFields: data.customFields ?? Prisma.JsonNull } : {}),
         updatedAt: new Date(),
       },
     });

@@ -747,17 +747,19 @@ export default function HouseTable() {
     });
 
     // Restore stock category material quantities (SECONDARY)
-    // ONLY restore here if the material is NOT in the top matList
+    // ONLY restore here if the material is NOT in the top matList.
+    // stockCatData is always [] (categories are fetched inside the accordion component),
+    // so we build initCatQtys directly from savedMatsMap keyed by item name.
+    // The accordion reads: catQtys[`${cat.id}__${item}`] ?? catQtys[item] ?? 0
+    // — the fallback catQtys[item] picks up these name-keyed entries correctly.
     const initCatQtys = {};
-    stockCatData.forEach(cat => {
-      cat.items.forEach(item => {
-        if (matListNames.has(item)) return; // Already restored in the top list!
-        const qty = savedMatsMap[item];
-        if (qty !== undefined && qty !== 0) {
-          initCatQtys[`${cat.id}__${item}`] = qty;
-        }
-      });
+    Object.entries(savedMatsMap).forEach(([itemName, qty]) => {
+      if (matListNames.has(itemName)) return; // Already restored in the top matList
+      if (qty !== undefined && qty !== 0) {
+        initCatQtys[itemName] = qty; // accordion fallback: catQtys[item] ?? 0
+      }
     });
+    console.log('🟢 [HouseTable] openEditPanel — restoring catQtys from savedMatsMap:', initCatQtys);
     setCatQtys(initCatQtys);
 
     customCols.forEach(c => { initForm[c.key] = h.customFields?.[c.key] ?? h[c.key] ?? ''; });
@@ -1210,6 +1212,18 @@ export default function HouseTable() {
             setCatQtys={setCatQtys}
             catOpen={catOpen}
             setCatOpen={setCatOpen}
+            initialQtys={(() => {
+              // Build { itemName: qty } from the saved entry's materialsUsed
+              // so the accordion can show previously-used items even if stock is now 0
+              const map = {};
+              if (!editEntry) return map;
+              if (Array.isArray(editEntry.materialsUsed)) {
+                editEntry.materialsUsed.forEach(m => { if (m.material) map[m.material] = m.qty; });
+              } else if (editEntry.materialsUsed && typeof editEntry.materialsUsed === 'object') {
+                Object.entries(editEntry.materialsUsed).forEach(([k, v]) => { map[k] = v?.qty ?? v; });
+              }
+              return map;
+            })()}
           />
         </div>
       </>
