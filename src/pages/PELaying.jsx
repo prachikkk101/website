@@ -313,30 +313,31 @@ export default function PELaying() {
     return selectedSiteId || null;
   }, [isAdmin, assignedPairs, formGA, formCity, formArea, siteList, selectedSiteId]);
 
-  // Effective siteId for column config persistence (handles ADMIN view where selectedSiteId is null)
-  const effectiveSiteId = useMemo(() => {
+  // Stable site ID for column config — must NOT depend on formSiteId
+  // so opening the edit panel doesn't re-fetch and wipe custom columns
+  const configSiteId = useMemo(() => {
     if (selectedSiteId) return selectedSiteId;
-    if (formSiteId) return formSiteId;
     return siteList[0]?.id || null;
-  }, [selectedSiteId, formSiteId, siteList]);
+  }, [selectedSiteId, siteList]);
 
   // Helper — persist column config changes to backend so all users see the same columns
   function saveColConfig(custom, hidden) {
-    const targetSiteId = effectiveSiteId || 'all';
+    const targetSiteId = configSiteId || 'all';
     columnConfigAPI.update(targetSiteId, 'pelaying', custom, hidden)
       .catch(e => console.error('[PELaying] Failed to save column config:', e));
   }
 
-  // Load column config from backend when effectiveSiteId changes
+  // Load column config from backend ONCE on mount (or when selectedSiteId changes)
+  // Does NOT re-fire when the edit panel opens
   useEffect(() => {
-    const targetSiteId = effectiveSiteId || 'all';
+    const targetSiteId = configSiteId || 'all';
     columnConfigAPI.get(targetSiteId, 'pelaying')
       .then(cfg => {
         setCustomCols(cfg.customCols || []);
         setHiddenCols(cfg.hiddenCols || []);
       })
       .catch(() => { /* no config yet — start with empty */ });
-  }, [effectiveSiteId]);
+  }, [configSiteId]);
 
   useEffect(() => {
     if (!panelOpen || !formSiteId) { setPipeStockMap({}); setSiteStockMap({}); return; }
