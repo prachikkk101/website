@@ -4,7 +4,7 @@ import SlidePanel, { Field, Input, Select, SectionTitle } from '../components/Sl
 import { useToast } from '../components/Toast';
 import { AuthContext } from '../context/AuthContext';
 import { useSite } from '../context/SiteContext';
-import { stockAPI, dataAPI, uploadAPI } from '../utils/api';
+import { stockAPI, dataAPI, uploadAPI, columnConfigAPI } from '../utils/api';
 import PhotoViewer from '../components/PhotoViewer';
 import { DEFAULT_MATERIALS_BY_CATEGORY, buildAccordionCategories } from '../utils/stockCategories';
 
@@ -910,30 +910,33 @@ export default function Inventory() {
     }
   }
 
-  const [customCols, setCustomCols] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('gppms_custom_columns_inventory') || '[]');
-    } catch { return []; }
-  });
-
-  const [hiddenCols, setHiddenCols] = useState(() => {
-    // Migration: wipe stale column-visibility prefs that reference old field names
-    const SCHEMA_V = 'v2_2024_schema';
-    if (localStorage.getItem('gppms_inv_col_schema') !== SCHEMA_V) {
-      localStorage.removeItem('gppms_hidden_cols_inventory');
-      localStorage.setItem('gppms_inv_col_schema', SCHEMA_V);
-    }
-    try { return JSON.parse(localStorage.getItem('gppms_hidden_cols_inventory') || '[]'); } catch { return []; }
-  });
+  const [customCols, setCustomCols] = useState([]);
+  const [hiddenCols, setHiddenCols] = useState([]);
   const [showColManager, setShowColManager] = useState(false);
   const [newColNameInv, setNewColNameInv] = useState(''); // controlled input for col manager
+
+  const effectiveInvSiteId = currentSiteId || 'all';
+
+  function saveColConfigInv(custom, hidden) {
+    columnConfigAPI.update(effectiveInvSiteId, 'inventory', custom, hidden)
+      .catch(e => console.error('[Inventory] Failed to save column config:', e));
+  }
+
+  useEffect(() => {
+    columnConfigAPI.get(effectiveInvSiteId, 'inventory')
+      .then(cfg => {
+        setCustomCols(cfg.customCols || []);
+        setHiddenCols(cfg.hiddenCols || []);
+      })
+      .catch(() => {});
+  }, [effectiveInvSiteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
       ? hiddenCols.filter(k => k !== key)
       : [...hiddenCols, key];
     setHiddenCols(updated);
-    localStorage.setItem('gppms_hidden_cols_inventory', JSON.stringify(updated));
+    saveColConfigInv(customCols, updated);
   }
 
 
@@ -946,7 +949,7 @@ export default function Inventory() {
     };
     const updated = [...customCols, newCol];
     setCustomCols(updated);
-    localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+    saveColConfigInv(updated, hiddenCols);
     showToast(`✓ Column "${name.trim()}" added`);
   };
 
@@ -960,7 +963,7 @@ export default function Inventory() {
     const removed = customCols[idx];
     const updated = customCols.filter((_, i) => i !== idx);
     setCustomCols(updated);
-    localStorage.setItem('gppms_custom_columns_inventory', JSON.stringify(updated));
+    saveColConfigInv(updated, hiddenCols);
     showToast(`✓ Column "${removed.label}" removed`);
   };
 

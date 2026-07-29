@@ -697,10 +697,17 @@ export const getColumnConfig = async (req: AuthenticatedRequest, res: Response, 
     const idStr = id as string;
     const table = (req.query.table as string) || 'house';
 
-    const site = await prisma.site.findUnique({
+    let site = idStr !== 'all' ? await prisma.site.findUnique({
       where: { id: idStr },
-      select: { columnConfig: true },
-    });
+      select: { id: true, columnConfig: true },
+    }) : null;
+
+    if (!site) {
+      site = await prisma.site.findFirst({
+        where: { status: 'Active' },
+        select: { id: true, columnConfig: true },
+      });
+    }
 
     if (!site) {
       return res.status(404).json({ success: false, error: 'Site not found' });
@@ -727,11 +734,17 @@ export const updateColumnConfig = async (req: AuthenticatedRequest, res: Respons
 
     const { table, customCols, hiddenCols } = schema.parse(req.body);
 
-    // Fetch existing config and merge — so changes to 'house' don't wipe 'pelaying' config
-    const site = await prisma.site.findUnique({
+    let site = idStr !== 'all' ? await prisma.site.findUnique({
       where: { id: idStr },
-      select: { columnConfig: true },
-    });
+      select: { id: true, columnConfig: true },
+    }) : null;
+
+    if (!site) {
+      site = await prisma.site.findFirst({
+        where: { status: 'Active' },
+        select: { id: true, columnConfig: true },
+      });
+    }
 
     if (!site) {
       return res.status(404).json({ success: false, error: 'Site not found' });
@@ -741,7 +754,7 @@ export const updateColumnConfig = async (req: AuthenticatedRequest, res: Respons
     const merged = { ...existing, [table]: { customCols, hiddenCols } };
 
     await prisma.site.update({
-      where: { id: idStr },
+      where: { id: site.id },
       data: { columnConfig: merged },
     });
 

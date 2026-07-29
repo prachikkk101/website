@@ -18,8 +18,14 @@ router.get(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const siteId = req.params.siteId as string;
+      const site = await prisma.site.findUnique({ where: { id: siteId } });
+      let siteIds = [siteId];
+      if (site && site.gaName) {
+        const gaSites = await prisma.site.findMany({ where: { gaName: site.gaName }, select: { id: true } });
+        siteIds = gaSites.map(s => s.id);
+      }
       const receipts = await prisma.stockReceipt.findMany({
-        where: { siteId },
+        where: { siteId: { in: siteIds } },
         orderBy: { receivedAt: 'desc' },
       });
       res.json({ success: true, receipts });
@@ -42,9 +48,15 @@ router.get(
       const siteId = req.params.siteId as string;
       const dateStr = (req.query.date as string) || new Date().toISOString().split('T')[0];
 
-      // Return current inventory state (with dateQueried for reference)
+      const site = await prisma.site.findUnique({ where: { id: siteId } });
+      let siteIds = [siteId];
+      if (site && site.gaName) {
+        const gaSites = await prisma.site.findMany({ where: { gaName: site.gaName }, select: { id: true } });
+        siteIds = gaSites.map(s => s.id);
+      }
+
       const items = await prisma.inventoryItem.findMany({
-        where: { siteId },
+        where: { siteId: { in: siteIds } },
         orderBy: { material: 'asc' },
       });
 
@@ -62,7 +74,7 @@ router.get(
 );
 
 /* ── GET /api/sites/:siteId/inventory
-   Returns all InventoryItems for a site, ordered alphabetically by material.
+   Returns all InventoryItems for a site (or all sites in the same GA), ordered alphabetically by material.
 ─────────────────────────────────────────────────────────── */
 router.get(
   '/',
@@ -71,10 +83,35 @@ router.get(
   async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const siteId = req.params.siteId as string;
+      const site = await prisma.site.findUnique({ where: { id: siteId } });
+      let siteIds = [siteId];
+      if (site && site.gaName) {
+        const gaSites = await prisma.site.findMany({ where: { gaName: site.gaName }, select: { id: true } });
+        siteIds = gaSites.map(s => s.id);
+      }
+
       const items = await prisma.inventoryItem.findMany({
-        where: { siteId },
+        where: { siteId: { in: siteIds } },
         orderBy: { material: 'asc' },
       });
+
+      if (siteIds.length > 1) {
+        const aggregatedMap = new Map<string, any>();
+        for (const item of items) {
+          const mat = item.material;
+          if (!aggregatedMap.has(mat)) {
+            aggregatedMap.set(mat, { ...item });
+          } else {
+            const existing = aggregatedMap.get(mat);
+            existing.received += item.received;
+            existing.issued   += item.issued;
+            existing.returned += item.returned;
+            existing.inStore  += item.inStore;
+          }
+        }
+        return res.json({ success: true, items: Array.from(aggregatedMap.values()) });
+      }
+
       res.json({ success: true, items });
     } catch (err) {
       next(err);

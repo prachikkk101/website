@@ -492,23 +492,24 @@ export default function HouseTable() {
   const [showColManager, setShowColManager] = useState(false);
   const [newColNameHT, setNewColNameHT] = useState(''); // controlled input for col manager
 
+  // Effective siteId for column config persistence
+  const effectiveSiteId = siteId || 'all';
+
   // Helper — persist column config to backend
   function saveColConfig(custom, hidden) {
-    if (!siteId) return;
-    columnConfigAPI.update(siteId, 'house', custom, hidden)
+    columnConfigAPI.update(effectiveSiteId, 'house', custom, hidden)
       .catch(e => console.error('[HouseTable] Failed to save column config:', e));
   }
 
-  // Load column config from backend when siteId changes
+  // Load column config from backend when effectiveSiteId changes
   useEffect(() => {
-    if (!siteId) return;
-    columnConfigAPI.get(siteId, 'house')
+    columnConfigAPI.get(effectiveSiteId, 'house')
       .then(cfg => {
         setCustomCols(cfg.customCols || []);
         setHiddenCols(cfg.hiddenCols || []);
       })
       .catch(() => { /* no config yet — start empty */ });
-  }, [siteId]);
+  }, [effectiveSiteId]);
 
   function toggleColVisibility(key) {
     const updated = hiddenCols.includes(key)
