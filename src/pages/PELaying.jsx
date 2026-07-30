@@ -287,11 +287,11 @@ export default function PELaying() {
     if (!isAdmin && assignedPairs.length > 0) {
       if (assignedPairs.length === 1) return assignedPairs[0].siteId;
       const pair = assignedPairs.find(p =>
-        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
-        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+        (p.gaName?.toLowerCase()) === (formGA || '').toLowerCase() &&
+        (p.cityName?.toLowerCase()) === (formCity || '').toLowerCase()
       );
       if (pair) return pair.siteId;
-      const gaOnly = assignedPairs.find(p => p.gaName.toLowerCase() === (formGA || '').toLowerCase());
+      const gaOnly = assignedPairs.find(p => (p.gaName?.toLowerCase()) === (formGA || '').toLowerCase());
       if (gaOnly) return gaOnly.siteId;
       return assignedPairs[0].siteId;
     }
@@ -531,8 +531,8 @@ export default function PELaying() {
     let resolvedSiteId = null;
     if (!isAdmin && assignedPairs.length > 0) {
       const pair = assignedPairs.find(p =>
-        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
-        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+        (p.gaName || '').toLowerCase() === (formGA || '').toLowerCase() &&
+        (p.cityName || '').toLowerCase() === (formCity || '').toLowerCase()
       );
       resolvedSiteId = pair?.siteId ?? (assignedPairs.length === 1 ? assignedPairs[0].siteId : null);
     }

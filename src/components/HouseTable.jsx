@@ -423,11 +423,11 @@ export default function HouseTable() {
     if (!isAdmin && assignedPairs.length > 0) {
       if (assignedPairs.length === 1) return assignedPairs[0].siteId;
       const pair = assignedPairs.find(p =>
-        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
-        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+        (p.gaName || '').toLowerCase() === (formGA || '').toLowerCase() &&
+        (p.cityName || '').toLowerCase() === (formCity || '').toLowerCase()
       );
       if (pair) return pair.siteId;
-      const gaOnly = assignedPairs.find(p => p.gaName.toLowerCase() === (formGA || '').toLowerCase());
+      const gaOnly = assignedPairs.find(p => (p.gaName || '').toLowerCase() === (formGA || '').toLowerCase());
       if (gaOnly) return gaOnly.siteId;
       return assignedPairs[0].siteId;
     }
@@ -738,26 +738,14 @@ export default function HouseTable() {
       Object.entries(h.materialsUsed).forEach(([k, v]) => { savedMatsMap[k] = v?.qty ?? v; });
     }
 
-    // Build a set of matList labels so we can avoid restoring them into the accordion
-    const matListNames = new Set(matList.map(m => m.label));
-
-    // Restore matList form fields (PRIMARY source for overlapping materials)
-    matList.forEach(m => {
-      const qty = savedMatsMap[m.label];
-      initForm[m.key] = qty !== undefined && qty !== 0 ? qty : '';
-    });
-
-    // Restore stock category material quantities (SECONDARY)
-    // ONLY restore here if the material is NOT in the top matList.
-    // stockCatData is always [] (categories are fetched inside the accordion component),
-    // so we build initCatQtys directly from savedMatsMap keyed by item name.
+    // Restore stock category material quantities
+    // Build initCatQtys directly from savedMatsMap keyed by item name.
     // The accordion reads: catQtys[`${cat.id}__${item}`] ?? catQtys[item] ?? 0
     // — the fallback catQtys[item] picks up these name-keyed entries correctly.
     const initCatQtys = {};
     Object.entries(savedMatsMap).forEach(([itemName, qty]) => {
-      if (matListNames.has(itemName)) return; // Already restored in the top matList
       if (qty !== undefined && qty !== 0) {
-        initCatQtys[itemName] = qty; // accordion fallback: catQtys[item] ?? 0
+        initCatQtys[itemName] = qty;
       }
     });
     console.log('🟢 [HouseTable] openEditPanel — restoring catQtys from savedMatsMap:', initCatQtys);
@@ -807,28 +795,19 @@ export default function HouseTable() {
     }
     console.log('🔵 PNG final photo URLs before save — photo1Data:', p1url, '| photo2Data:', p2url);
 
-    // Step 1: matList form fields (Primary)
+    // Step 1: catQtys (Accordion & restored saved items)
     const matMergeMap = {};
-    matList.forEach(mat => {
-      const qty = form[mat.key] || 0;
-      if (qty > 0) matMergeMap[mat.label] = { qty, unit: mat.unit };
-    });
-    // Step 2: catQtys (Accordion — add to existing if user typed in both places)
     Object.entries(catQtys).forEach(([key, qty]) => {
-      if (qty > 0) {
-        const [, ...parts] = key.split('__');
-        const name = parts.join('__');
-        if (matMergeMap[name]) {
-          matMergeMap[name].qty += qty;
-        } else {
-          matMergeMap[name] = { qty, unit: 'pcs' };
-        }
+      const numQty = Number(qty);
+      if (numQty > 0) {
+        const name = key.includes('__') ? key.split('__').slice(1).join('__') : key;
+        matMergeMap[name] = { qty: numQty, unit: 'pcs' };
       }
     });
-    // Step 3: custom per-entry materials
+    // Step 2: custom per-entry materials
     customMaterials.forEach(mat => {
       if (mat.label?.trim() && mat.qty > 0) {
-        matMergeMap[mat.label.trim()] = { qty: mat.qty, unit: mat.unit || 'pcs' };
+        matMergeMap[mat.label.trim()] = { qty: Number(mat.qty), unit: mat.unit || 'pcs' };
       }
     });
 
@@ -847,8 +826,8 @@ export default function HouseTable() {
     let resolvedSiteId = null;
     if (!isAdmin && assignedPairs.length > 0) {
       const pair = assignedPairs.find(p =>
-        p.gaName.toLowerCase() === (formGA || '').toLowerCase() &&
-        p.cityName.toLowerCase() === (formCity || '').toLowerCase()
+        (p.gaName || '').toLowerCase() === (formGA || '').toLowerCase() &&
+        (p.cityName || '').toLowerCase() === (formCity || '').toLowerCase()
       );
       resolvedSiteId = pair?.siteId ?? (assignedPairs.length === 1 ? assignedPairs[0].siteId : null);
     }
