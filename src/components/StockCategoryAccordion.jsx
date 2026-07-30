@@ -82,13 +82,16 @@ export default function StockCategoryAccordion({
         const isOpen = catOpen === cat.id;
 
         // When stock is loaded: show items with available > 0 OR that have a pre-filled
-        // initialQty > 0 (items used by the entry being edited — stock already deducted).
+        // initialQty \u003e 0 (items used by the entry being edited — stock already deducted).
         // When stock hasn't loaded yet: show all items.
+        // Helper: normalized lookup into initialQtys (keys may differ in case/whitespace)
+        const getInitialQty = (itemName) =>
+          Object.entries(initialQtys).find(([k]) => normalize(k) === normalize(itemName))?.[1] ?? 0;
         const visibleItems = hasStockData
           ? cat.items.filter(item => {
               const avail =
                 Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
-              const prefilledQty = initialQtys[item] ?? 0;
+              const prefilledQty = getInitialQty(item);
               // Show if available > 0 OR this entry previously used this item (edit mode)
               return avail > 0 || prefilledQty > 0;
             })
@@ -146,7 +149,7 @@ export default function StockCategoryAccordion({
                     Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? null;
                   // In edit mode, the available stock for THIS entry's previously-used items
                   // already has initialQty deducted. Restore it so the max hint is accurate.
-                  const prefilledQty = initialQtys[item] ?? 0;
+                  const prefilledQty = getInitialQty(item);
                   const available = rawAvailable !== null ? rawAvailable + prefilledQty : null;
 
                   return (

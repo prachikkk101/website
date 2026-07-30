@@ -320,23 +320,34 @@ export default function PELaying() {
     return siteList[0]?.id || null;
   }, [selectedSiteId, siteList]);
 
+  // Track whether initial column config has loaded (prevents flash of empty columns)
+  const [columnsReady, setColumnsReady] = useState(false);
+
   // Helper — persist column config changes to backend so all users see the same columns
   function saveColConfig(custom, hidden) {
     const targetSiteId = configSiteId || 'all';
+    console.log('🔵 [PELaying] Saving column config to site:', targetSiteId, 'cols:', custom.length);
     columnConfigAPI.update(targetSiteId, 'pelaying', custom, hidden)
       .catch(e => console.error('[PELaying] Failed to save column config:', e));
   }
 
   // Load column config from backend ONCE on mount (or when selectedSiteId changes)
   // Does NOT re-fire when the edit panel opens
+  // RACE CONDITION FIX: skip fetch when configSiteId is null (siteList not loaded yet)
   useEffect(() => {
-    const targetSiteId = configSiteId || 'all';
-    columnConfigAPI.get(targetSiteId, 'pelaying')
+    if (!configSiteId) return; // Wait for siteList to load — do NOT fetch with 'all'
+    console.log('🔵 [PELaying] Fetching column config for site:', configSiteId, 'role:', user?.role);
+    columnConfigAPI.get(configSiteId, 'pelaying')
       .then(cfg => {
+        console.log('🟢 [PELaying] Column config received:', JSON.stringify(cfg));
         setCustomCols(cfg.customCols || []);
         setHiddenCols(cfg.hiddenCols || []);
+        setColumnsReady(true);
       })
-      .catch(() => { /* no config yet — start with empty */ });
+      .catch(() => {
+        console.warn('⚠️ [PELaying] Column config fetch failed — starting with empty');
+        setColumnsReady(true); // still mark ready so table renders
+      });
   }, [configSiteId]);
 
   useEffect(() => {
