@@ -886,7 +886,7 @@ export default function HouseTable() {
               photo1Data: p1url || h.photo1Data, photo1Name: photo1?.name || h.photo1Name,
               photo2Data: p2url || h.photo2Data, photo2Name: photo2?.name || h.photo2Name,
               photoCount: [p1url || h.photo1Data, p2url || h.photo2Data].filter(Boolean).length,
-              materialsUsed, customMaterials: customMaterials.filter(m => m.label.trim()),
+              materialsUsed: materialsUsedPayload, customMaterials: customMaterials.filter(m => m.label.trim()),
               hiddenMaterials,
               customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),
               updatedAt: new Date().toISOString() } } : h));
@@ -908,7 +908,7 @@ export default function HouseTable() {
             photo1Data: p1url || null, photo1Name: photo1?.name || null,
             photo2Data: p2url || null, photo2Name: photo2?.name || null,
             photoCount: [p1url, p2url].filter(Boolean).length,
-            materialsUsed,
+            materialsUsed: materialsUsedPayload,
             customMaterials: customMaterials.filter(m => m.label.trim()),
             hiddenMaterials,
             customFields: Object.fromEntries(customCols.map(c => [c.key, form[c.key] || ''])),

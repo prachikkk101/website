@@ -410,20 +410,37 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
     // If delta = 0 → no DB write. If delta > 0 → add to issued. If delta < 0 → subtract from issued.
     // This makes saving with zero changes a true no-op (no inventory updates at all).
     if (data.materialsUsed !== undefined) {
-      const oldMaterials = (existing.materialsUsed as { material: string; qty: number }[] | null) ?? [];
-      const newMaterials = data.materialsUsed ?? [];
+      const rawOld = existing.materialsUsed;
+      const newMaterials = (data.materialsUsed ?? []).filter(m => m.material && m.material.trim());
       const siteId = existing.siteId;
 
       // ── DIAGNOSTIC LOGGING ─────────────────────────────────────────────────
-      console.log(`[PNG update] 🔵 EXISTING materialsUsed (from DB):`, JSON.stringify(oldMaterials));
+      console.log(`[PNG update] 🔵 EXISTING materialsUsed (from DB):`, JSON.stringify(rawOld));
       console.log(`[PNG update] 🔵 INCOMING materialsUsed (from request):`, JSON.stringify(newMaterials));
 
-      // Build lookup maps
+      // Build lookup maps supporting both Array and legacy Object shapes
       const oldMap: Record<string, number> = {};
-      for (const m of oldMaterials) { oldMap[m.material] = Math.round(m.qty ?? 0); }
+      if (Array.isArray(rawOld)) {
+        for (const m of (rawOld as any[])) {
+          if (m && typeof m === 'object' && m.material && m.material.trim()) {
+            oldMap[m.material.trim()] = Math.round(Number(m.qty) || 0);
+          }
+        }
+      } else if (rawOld && typeof rawOld === 'object') {
+        for (const [k, v] of Object.entries(rawOld as Record<string, any>)) {
+          if (k && k.trim()) {
+            const qty = (v && typeof v === 'object') ? (v as any).qty : v;
+            oldMap[k.trim()] = Math.round(Number(qty) || 0);
+          }
+        }
+      }
 
       const newMap: Record<string, number> = {};
-      for (const m of newMaterials) { newMap[m.material] = Math.round(m.qty ?? 0); }
+      for (const m of newMaterials) {
+        if (m.material && m.material.trim()) {
+          newMap[m.material.trim()] = Math.round(Number(m.qty) || 0);
+        }
+      }
 
       console.log(`[PNG update] 🔵 oldMap:`, JSON.stringify(oldMap));
       console.log(`[PNG update] 🔵 newMap:`, JSON.stringify(newMap));
