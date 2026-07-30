@@ -171,6 +171,7 @@ export default function StockCategoryAccordion({
                       <input
                         type="number"
                         min={0}
+                        step="any"
                         max={available !== null ? available : undefined}
                         value={val === 0 ? '' : val}
                         onFocus={e => e.target.select()}

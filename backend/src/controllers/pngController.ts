@@ -418,19 +418,19 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       console.log(`[PNG update] 🔵 EXISTING materialsUsed (from DB):`, JSON.stringify(rawOld));
       console.log(`[PNG update] 🔵 INCOMING materialsUsed (from request):`, JSON.stringify(newMaterials));
 
-      // Build lookup maps supporting both Array and legacy Object shapes
+      // Build lookup maps supporting both Array and legacy Object shapes (preserving floats like 3.4m)
       const oldMap: Record<string, number> = {};
       if (Array.isArray(rawOld)) {
         for (const m of (rawOld as any[])) {
           if (m && typeof m === 'object' && m.material && m.material.trim()) {
-            oldMap[m.material.trim()] = Math.round(Number(m.qty) || 0);
+            oldMap[m.material.trim()] = Math.round((Number(m.qty) || 0) * 100) / 100;
           }
         }
       } else if (rawOld && typeof rawOld === 'object') {
         for (const [k, v] of Object.entries(rawOld as Record<string, any>)) {
           if (k && k.trim()) {
             const qty = (v && typeof v === 'object') ? (v as any).qty : v;
-            oldMap[k.trim()] = Math.round(Number(qty) || 0);
+            oldMap[k.trim()] = Math.round((Number(qty) || 0) * 100) / 100;
           }
         }
       }
@@ -438,7 +438,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       const newMap: Record<string, number> = {};
       for (const m of newMaterials) {
         if (m.material && m.material.trim()) {
-          newMap[m.material.trim()] = Math.round(Number(m.qty) || 0);
+          newMap[m.material.trim()] = Math.round((Number(m.qty) || 0) * 100) / 100;
         }
       }
 

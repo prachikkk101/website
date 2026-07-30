@@ -349,8 +349,8 @@ export const dataAPI = {
     api.post('/stock-categories', { name, parentGroup, gaName }).then((r) => r.data.category),
 
   /** Admin only: add a material item to an existing StockCategory. */
-  addStockMaterial: (categoryId, name) =>
-    api.post(`/stock-categories/${categoryId}/materials`, { name }).then(r => r.data.material),
+  addStockMaterial: (categoryId, name, unit) =>
+    api.post(`/stock-categories/${categoryId}/materials`, { name, unit }).then(r => r.data.material),
 
   /** Admin only: rename an existing material. */
   updateStockMaterial: (categoryId, materialId, name) =>

@@ -33,6 +33,22 @@ function filterByDateRange(data, fromDate, toDate, ...fields) {
   });
 }
 
+/* Helper to format materialsUsed / mdpeMaterials objects/arrays into string for Excel */
+function formatMaterials(mats) {
+  if (!mats) return '—';
+  if (Array.isArray(mats)) {
+    const valid = mats.filter(m => m && (m.qty > 0 || m.qty !== undefined));
+    if (valid.length === 0) return '—';
+    return valid.map(m => `${m.material}: ${m.qty}${m.unit ? ' ' + m.unit : ''}`).join(' | ');
+  }
+  if (typeof mats === 'object') {
+    const entries = Object.entries(mats).filter(([, v]) => (v?.qty ?? v) > 0);
+    if (entries.length === 0) return '—';
+    return entries.map(([k, v]) => `${k}: ${v?.qty ?? v}${v?.unit ? ' ' + v.unit : ''}`).join(' | ');
+  }
+  return String(mats);
+}
+
 /* ══════════════════════════════════════
    1. Export House Connections
    ══════════════════════════════════════ */
@@ -42,6 +58,7 @@ export function exportHouseData(houses, fromDate, toDate, filterLabel, filenameS
   const headers = [
     'Acct Type','BP No.','Customer Name','Mobile','House No.','Area','City',
     'Meter No.','Meter Date','GC Status','GI Status','RFC','NG Status','SARAL Status','Photo Uploaded',
+    'Materials Consumed / Used',
   ];
 
   const rows = data.map(h => [
@@ -59,7 +76,8 @@ export function exportHouseData(houses, fromDate, toDate, filterLabel, filenameS
     h.rfc         || h.rfcStatus   || '',
     h.ng          || h.ngStatus    || '',
     h.saral       || h.saralStatus || '',
-    (h.meterPhoto || h.photo) ? 'Yes' : 'No',
+    (h.meterPhoto || h.photo || h.photo1Data || h.photo2Data) ? 'Yes' : 'No',
+    formatMaterials(h.materialsUsed || h.materials),
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
@@ -67,6 +85,7 @@ export function exportHouseData(houses, fromDate, toDate, filterLabel, filenameS
     { wch: 10 },{ wch: 16 },{ wch: 20 },{ wch: 14 },{ wch: 14 },
     { wch: 10 },{ wch: 10 },{ wch: 16 },{ wch: 12 },
     { wch: 12 },{ wch: 10 },{ wch: 8  },{ wch: 12 },{ wch: 16 },{ wch: 12 },
+    { wch: 45 },
   ];
 
   const wb = XLSX.utils.book_new();
@@ -133,40 +152,43 @@ export function exportPELaying(data, fromDate, toDate) {
   const headers = [[
     'Sr.','Laying Date','Testing Date','Charging Date','RA Bill No.','Report No.','Work Status','Area',
     'Coil No.','Ø32mm OC','Ø32mm Boring','Ø32mm Total','Ø63mm OC','Ø63mm Boring','Ø63mm HDD','Ø63mm Total','Ø90mm Total','Ø125mm Total',
+    'MDPE Materials Consumed / Used',
   ]];
 
   const rows = filteredData.map(r => [
     r.sr, r.layDate, r.testDate, r.chargeDate, r.raBill, r.reportNo, r.status, r.area, r.coil,
-    r.d32oc, r.d32b, r.d32oc + r.d32b,
-    r.d63oc, r.d63b, r.d63hdd, r.d63oc + r.d63b + r.d63hdd,
+    r.d32oc, r.d32b, (r.d32oc || 0) + (r.d32b || 0),
+    r.d63oc, r.d63b, r.d63hdd, (r.d63oc || 0) + (r.d63b || 0) + (r.d63hdd || 0),
     r.d90tot, r.d125tot,
+    formatMaterials(r.mdpeMaterials || r.materialsUsed),
   ]);
 
   const tot = filteredData.reduce((acc, r) => ({
-    d32oc: acc.d32oc + r.d32oc, d32b: acc.d32b + r.d32b,
-    d63oc: acc.d63oc + r.d63oc, d63b: acc.d63b + r.d63b,
-    d63h:  acc.d63h  + r.d63hdd, d90: acc.d90  + r.d90tot, d125: acc.d125 + r.d125tot,
+    d32oc: acc.d32oc + (r.d32oc || 0), d32b: acc.d32b + (r.d32b || 0),
+    d63oc: acc.d63oc + (r.d63oc || 0), d63b: acc.d63b + (r.d63b || 0),
+    d63h:  acc.d63h  + (r.d63hdd || 0), d90: acc.d90  + (r.d90tot || 0), d125: acc.d125 + (r.d125tot || 0),
   }), { d32oc:0,d32b:0,d63oc:0,d63b:0,d63h:0,d90:0,d125:0 });
 
   const totalRow = [
-    '','','','','','','','TOTAL','',
-    tot.d32oc, tot.d32b, tot.d32oc+tot.d32b,
-    tot.d63oc, tot.d63b, tot.d63h, tot.d63oc+tot.d63b+tot.d63h,
+    'TOTAL', '', '', '', '', '', '', '', '',
+    tot.d32oc, tot.d32b, tot.d32oc + tot.d32b,
+    tot.d63oc, tot.d63b, tot.d63h, tot.d63oc + tot.d63b + tot.d63h,
     tot.d90, tot.d125,
+    '',
   ];
 
   const ws = XLSX.utils.aoa_to_sheet([...headers, ...rows, totalRow]);
   ws['!cols'] = [
-    { wch:5 },{ wch:12 },{ wch:12 },{ wch:14 },{ wch:14 },
-    { wch:10 },{ wch:10 },{ wch:20 },{ wch:18 },
-    { wch:10 },{ wch:12 },{ wch:12 },
-    { wch:10 },{ wch:12 },{ wch:10 },{ wch:12 },{ wch:12 },{ wch:12 },
+    { wch: 5 },{ wch: 12 },{ wch: 12 },{ wch: 12 },{ wch: 12 },{ wch: 12 },{ wch: 14 },{ wch: 14 },
+    { wch: 12 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },{ wch: 10 },
+    { wch: 10 },{ wch: 10 },
+    { wch: 45 },
   ];
 
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Data');
-  const filename = (fromDate && toDate)
-    ? `GP_PMS_PELaying_${fromDate}_to_${toDate}.xlsx`
+  XLSX.utils.book_append_sheet(wb, ws, 'PE Laying Progress');
+  const filename = fromDate
+    ? `GP_PMS_PELaying_${fromDate}.xlsx`
     : `GP_PMS_PELaying_${today()}.xlsx`;
   download(wb, filename);
 }

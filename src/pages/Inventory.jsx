@@ -112,6 +112,7 @@ function CategoryAccordion({
   // Add item
   const [addItemCat, setAddItemCat] = useState(null); // { id, label, dbId? }
   const [addItemName, setAddItemName] = useState('');
+  const [addItemUnit, setAddItemUnit] = useState('pcs');
   const [addItemSaving, setAddItemSaving] = useState(false);
   // Edit item
   const [editItem, setEditItem] = useState(null); // { catDbId, matDbId, currentName }
@@ -121,15 +122,19 @@ function CategoryAccordion({
   function handleAddItemClick(cat) {
     setAddItemCat(cat);
     setAddItemName('');
+    const labelLower = (cat?.label || '').toLowerCase();
+    const isPipeCat = labelLower.includes('pipe') || labelLower.includes('pe') || labelLower.includes('mdpe') || labelLower.includes('gi pipe');
+    setAddItemUnit(isPipeCat ? 'mtr' : 'pcs');
   }
 
   async function handleSaveNewItem() {
     if (!addItemName.trim() || !addItemCat) return;
     setAddItemSaving(true);
     try {
-      await dataAPI.addStockMaterial(Number(addItemCat.id), addItemName.trim());
+      await dataAPI.addStockMaterial(Number(addItemCat.id), addItemName.trim(), addItemUnit);
       setAddItemCat(null);
       setAddItemName('');
+      setAddItemUnit('pcs');
       const refreshed = await dataAPI.getStockCategories(gaName);
       setRawCats(refreshed);
       if (onCategoriesChanged) onCategoriesChanged();
@@ -402,14 +407,33 @@ function CategoryAccordion({
       {/* Admin Add Item modal */}
       {isAdmin && addItemCat && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 360, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
+          <div style={{ background: 'white', borderRadius: 10, padding: 24, width: 380, boxShadow: '0 20px 60px rgba(0,0,0,0.25)' }}>
             <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#1f4e1a' }}>Add New Item</h3>
             <p style={{ margin: '0 0 14px', fontSize: 12, color: '#64748b' }}>Adding to: <b>{addItemCat.label}</b></p>
-            <input autoFocus type="text" placeholder="Item name (e.g. GI Fitting — 2 inch)"
-              value={addItemName} onChange={e => setAddItemName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); if (e.key === 'Escape') setAddItemCat(null); }}
-              style={{ width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6, padding: '0 10px', fontSize: 13, boxSizing: 'border-box', marginBottom: 14 }}
-            />
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Item Name</label>
+              <input autoFocus type="text" placeholder="Item name (e.g. 63mm PE Pipe)"
+                value={addItemName} onChange={e => setAddItemName(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveNewItem(); if (e.key === 'Escape') setAddItemCat(null); }}
+                style={{ width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6, padding: '0 10px', fontSize: 13, boxSizing: 'border-box' }}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: '#475569', marginBottom: 4 }}>Unit of Measurement</label>
+              <select
+                value={addItemUnit}
+                onChange={e => setAddItemUnit(e.target.value)}
+                style={{ width: '100%', height: 36, border: '1px solid #a7c4a3', borderRadius: 6, padding: '0 10px', fontSize: 13, background: 'white', boxSizing: 'border-box' }}
+              >
+                <option value="pcs">pcs (Pieces)</option>
+                <option value="mtr">mtr (Meters)</option>
+                <option value="kg">kg (Kilograms)</option>
+                <option value="rolls">rolls (Rolls)</option>
+                <option value="set">set (Sets)</option>
+                <option value="nos">nos (Numbers)</option>
+                <option value="ltr">ltr (Liters)</option>
+              </select>
+            </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
               <button type="button" onClick={() => setAddItemCat(null)}
                 style={{ height: 34, padding: '0 16px', border: '1px solid #d1d5db', borderRadius: 6, background: 'white', fontSize: 13, cursor: 'pointer' }}>Cancel</button>
