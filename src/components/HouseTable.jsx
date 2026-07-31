@@ -1,5 +1,4 @@
-// src/components/HouseTable.jsx
-import { useState, useMemo, useEffect, useContext } from 'react';
+import { useState, useMemo, useEffect, useContext, useCallback } from 'react';
 import MeterModal from './MeterModal';
 import { exportHouseData } from '../utils/exportExcel';
 import SlidePanel, { Field, Input, Select, SectionTitle } from './SlidePanel';
