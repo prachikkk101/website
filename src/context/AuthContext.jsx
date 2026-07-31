@@ -152,12 +152,13 @@ export function AuthProvider({ children }) {
       // Backend responded but said login failed (wrong password etc.)
       return { success: false, error: response.data.error || 'Invalid credentials.' };
     } catch (err) {
-      // ── 2. Network/502 error — fall back to local mode ──
       const isNetworkError = !err.response;
       const is5xx = err.response?.status >= 500;
 
-      if (isNetworkError || is5xx) {
-        // Silent local fallback — check hardcoded admin creds first
+      // Only fall back to local mode IF VITE_API_URL is NOT set (pure local dev mode without backend)
+      const isLocalDevOnly = !import.meta.env.VITE_API_URL;
+      if (isLocalDevOnly && (isNetworkError || is5xx)) {
+        // Silent local fallback for local standalone testing
         const mockUser = buildMockUser(email, password);
         localStorage.setItem('gppms_token', mockUser.token);
         localStorage.setItem('gppms_session', JSON.stringify(mockUser));
@@ -165,10 +166,12 @@ export function AuthProvider({ children }) {
         return { success: true, user: mockUser };
       }
 
-      // Backend is reachable but returned 4xx (wrong credentials)
+      // Live production backend — return clear error message if server error or invalid credentials
       return {
         success: false,
-        error: err.response?.data?.error || 'Invalid email or password.',
+        error: isNetworkError
+          ? 'Server is starting up. Please wait a moment and try logging in again.'
+          : (err.response?.data?.error || 'Invalid email or password.'),
       };
     }
   };

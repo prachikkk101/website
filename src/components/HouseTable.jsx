@@ -164,30 +164,19 @@ export default function HouseTable() {
   const [tFilterCity, setTFilterCity] = useState('all');
   const [tFilterArea, setTFilterArea] = useState('all');
 
-  useEffect(() => {
-    document.title = 'GP-PMS — PNG Connections';
-
+  const fetchHouses = useCallback((isSilent = false) => {
     const isAdmin = user?.role === 'ADMIN';
 
     // ADMIN with no specific site selected — fetch ALL sites in parallel
     if (isAdmin && !siteId) {
-      // Wait until siteList has loaded (guard against race condition D)
+      // Wait until siteList has loaded
       if (siteLoading || siteList.length === 0) {
-        console.log('[PNG FETCH]', { trigger: 'admin-all-sites-waiting', siteLoading, siteListLen: siteList.length });
         return;
       }
-      setLoadingHouses(true);
-      console.log('[PNG FETCH]', {
-        trigger: 'admin-all-sites',
-        siteCount: siteList.length,
-        sites: siteList.map(s => s.name),
-        isAdmin: true,
-        urls: siteList.map(s => `/sites/${s.id}/png-connections`),
-      });
+      if (!isSilent) setLoadingHouses(true);
       Promise.all(siteList.map(s => pngAPI.getAll(s.id)))
         .then(resultsPerSite => {
           const merged = resultsPerSite.flat();
-          console.log('[PNG FETCH] admin-all-sites result:', merged.length, 'total connections across', siteList.length, 'sites');
           const mapped = merged.map(c => ({
             id:           c.id,
             bpNo:         c.bpNo         || '',
@@ -225,24 +214,18 @@ export default function HouseTable() {
         })
         .catch(err => {
           console.error('[PNG FETCH] admin-all-sites fetch failed:', err);
-          setAllHouses([]);
         })
-        .finally(() => setLoadingHouses(false));
+        .finally(() => {
+          if (!isSilent) setLoadingHouses(false);
+        });
       return;
     }
 
     // Non-admin (or admin with an explicit site selected) — fetch single site
     if (siteId) {
-      setLoadingHouses(true);
-      console.log('[PNG FETCH]', {
-        trigger: isAdmin ? 'admin-single-site' : 'worker-site',
-        siteId,
-        isAdmin,
-        url: `/sites/${siteId}/png-connections`,
-      });
+      if (!isSilent) setLoadingHouses(true);
       pngAPI.getAll(siteId)
         .then(connections => {
-          // map backend PNGConnection shape to the frontend house shape
           const mapped = connections.map(c => ({
             id:           c.id,
             bpNo:         c.bpNo         || '',
@@ -280,13 +263,23 @@ export default function HouseTable() {
         })
         .catch(err => {
           console.error('[PNG FETCH] single-site fetch failed:', err);
-          setAllHouses([]);
         })
-        .finally(() => setLoadingHouses(false));
+        .finally(() => {
+          if (!isSilent) setLoadingHouses(false);
+        });
     } else {
       setAllHouses([]);
     }
   }, [siteId, siteList, siteLoading, user?.role]);
+
+  useEffect(() => {
+    document.title = 'GP-PMS — PNG Connections';
+    fetchHouses(false);
+    const interval = setInterval(() => {
+      fetchHouses(true); // 15s silent background refresh
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchHouses]);
 
   // Sync with global navbar GA selection
   useEffect(() => {
@@ -924,6 +917,7 @@ export default function HouseTable() {
         setHiddenMaterials([]);
         setCatQtys({});
         setCatOpen(null);
+        fetchHouses(true); // background silent refresh from server
       } catch (err) {
         console.error('PNG API save error:', err);
         const errData = err?.response?.data;

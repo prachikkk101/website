@@ -5,7 +5,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 6000,
+  timeout: 15000,
 });
 
 // Request interceptor to attach JWT token
@@ -20,7 +20,7 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor — silent token refresh on 401, then redirect if refresh fails
+// Response interceptor — automatic retry on Fly.io cold start (502/503/504/timeout) + silent token refresh on 401
 let _isRefreshing = false;
 let _failedQueue = [];
 
@@ -33,7 +33,19 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    if (!originalRequest) return Promise.reject(error);
 
+    // 1. Retry server cold-start / 502 Bad Gateway / Gateway Timeout automatically
+    const isColdStartError = !error.response || (error.response.status >= 502 && error.response.status <= 504) || error.code === 'ECONNABORTED';
+    if (isColdStartError && (originalRequest._coldRetryCount || 0) < 3) {
+      originalRequest._coldRetryCount = (originalRequest._coldRetryCount || 0) + 1;
+      const delayMs = originalRequest._coldRetryCount * 1500;
+      console.log(`[API Interceptor] Retrying request due to server cold start (${originalRequest._coldRetryCount}/3) after ${delayMs}ms...`);
+      await new Promise(r => setTimeout(r, delayMs));
+      return api(originalRequest);
+    }
+
+    // 2. Token refresh on 401 Unauthorized
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (_isRefreshing) {
         return new Promise((resolve, reject) => {

@@ -188,15 +188,13 @@ export default function PELaying() {
     }
   }, [panelOpen, editingId, globalLocationContext, mergedGAs, allData, assignedPairs, isAdmin, uniqueGAs, uniqueCities]);
 
-  useEffect(() => {
-    document.title = 'GP-PMS — PE Laying';
-
+  const fetchPELayingData = useCallback((isSilent = false) => {
     const isAdmin = user?.role === 'ADMIN';
 
     // ADMIN with no specific site selected — fetch ALL sites in parallel
     if (isAdmin && !siteId) {
       if (siteLoading || siteList.length === 0) return; // wait for siteList to load
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       Promise.all(siteList.map(s => peLayingAPI.getAll(s.id)))
         .then(resultsPerSite => {
           const merged = resultsPerSite.flat();
@@ -217,21 +215,21 @@ export default function PELaying() {
           }));
           setAllData(mapped);
         })
-        .catch(err => { console.error('[PELaying] admin-all-sites fetch failed:', err); setAllData([]); })
-        .finally(() => setLoading(false));
+        .catch(err => { console.error('[PELaying] admin-all-sites fetch failed:', err); })
+        .finally(() => {
+          if (!isSilent) setLoading(false);
+        });
       return;
     }
 
     // Non-admin (or admin with explicit site selected) — fetch single site
     if (siteId) {
-      setLoading(true);
+      if (!isSilent) setLoading(true);
       peLayingAPI.getAll(siteId)
         .then(records => {
-          // normalise backend shape to match frontend field names
           const mapped = records.map(r => ({
             id: r.id, sr: r.id,
             layDate:    r.layingDate ? r.layingDate.split('T')[0] : '',
-            // Use stored connType (Domestic/Commercial/Industrial) from DB — do NOT derive from status
             connType:   r.connType   || 'Domestic',
             area:       r.area       || '',
             coil:       r.coilNo     || '',
@@ -240,7 +238,6 @@ export default function PELaying() {
             d63oc:  Number(r.d63oc)  || 0, d63b:  Number(r.d63b)  || 0, d63hdd:  Number(r.d63hdd)  || 0,
             d90oc:  Number(r.d90oc)  || 0, d90b:  Number(r.d90b)  || 0, d90hdd:  Number(r.d90hdd)  || 0, d90tot:  Number(r.d90tot)  || 0,
             d125oc: Number(r.d125oc) || 0, d125b: Number(r.d125b) || 0, d125hdd: Number(r.d125hdd) || 0, d125tot: Number(r.d125tot) || 0,
-            // Map DB status enum back to display label for the form
             workStatus: capitaliseStatus(r.status) || 'Laying',
             mdpeMaterials: r.mdpeMaterials || [],
             customFields:  r.customFields  || {},
@@ -249,16 +246,23 @@ export default function PELaying() {
         })
         .catch(err => {
           console.error('PE API fetch failed:', err);
-          setAllData([]);
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (!isSilent) setLoading(false);
+        });
     } else {
       setAllData([]);
     }
-  // siteLoading intentionally omitted: siteList/siteId update when loading finishes,
-  // so they already re-trigger this effect. Including siteLoading caused double-fires.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [siteId, siteList, user?.role]);
+  }, [siteId, siteList, user?.role, siteLoading]);
+
+  useEffect(() => {
+    document.title = 'GP-PMS — PE Laying';
+    fetchPELayingData(false);
+    const interval = setInterval(() => {
+      fetchPELayingData(true); // 15s silent background refresh
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [fetchPELayingData]);
 
   // Filter / tab state
   const [activeTab, setActiveTab] = useState('Domestic');
@@ -600,6 +604,7 @@ export default function PELaying() {
         setAllData(prev => [newEntry, ...prev]);
         showToast('✓ PE Laying entry added');
       }
+      fetchPELayingData(true); // background silent refresh from server
     } catch (err) {
       console.error('PE API save error:', err);
       const errData = err?.response?.data;
