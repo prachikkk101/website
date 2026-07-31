@@ -1213,37 +1213,34 @@ export default function HouseTable() {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+      <div style={{ marginBottom: 4 }}>
         {/* Export bar */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+        <div className="export-controls-row">
           <span style={{ fontSize: 12, color: '#64748b' }}>From</span>
           <input type="date" value={exportFrom} onChange={e => setExportFrom(e.target.value)}
-            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+            style={{ height: 34, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
           <span style={{ fontSize: 12, color: '#64748b' }}>to</span>
           <input type="date" value={exportTo} onChange={e => setExportTo(e.target.value)}
-            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+            style={{ height: 34, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
           <select value={exportFilter} onChange={e => setExportFilter(e.target.value)}
-            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12, background: 'white' }}>
+            style={{ height: 34, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12, background: 'white' }}>
             <option value="all">All Entries</option>
             <option value="done">Done Only</option>
             <option value="pending">Pending Only</option>
           </select>
-          <button onClick={handleExport}
-            style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={handleExport} className="btn-export-excel">
             ↓ Export Excel
           </button>
           {canWrite && (
-            <>
-              <button onClick={() => setShowColManager(true)}
-                style={{ height: 32, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div className="page-header-actions" style={{ marginLeft: 'auto' }}>
+              <button onClick={() => setShowColManager(true)} className="btn-header-secondary">
                 ⚙ Manage Columns
               </button>
-              <button onClick={openAddPanel}
-                style={{ height: 32, background: '#1f4e1a', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <button onClick={openAddPanel} className="btn-header-primary">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
                 + Add New Entry
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>

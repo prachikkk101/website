@@ -653,15 +653,13 @@ export default function PELaying() {
   return (
     <div>
       {/* Title + Action buttons */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-        <h1 style={{ fontSize: 20, fontWeight: 700, color: '#1f4e1a', margin: 0 }}>PE Laying — Pipeline Progress</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button onClick={() => setShowColManager(true)}
-            style={{ height: 34, background: '#2d6a27', color: '#fff', border: 'none', borderRadius: 5, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+      <div className="page-header-row">
+        <h1 className="page-title">PE Laying — Pipeline Progress</h1>
+        <div className="page-header-actions">
+          <button onClick={() => setShowColManager(true)} className="btn-header-secondary">
             ⚙ Manage Columns
           </button>
-          <button onClick={openAddPanel}
-            style={{ height: 34, background: '#1f4e1a', color: '#fff', border: 'none', borderRadius: 5, padding: '0 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={openAddPanel} className="btn-header-primary">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
@@ -671,7 +669,7 @@ export default function PELaying() {
       </div>
 
       {/* KPI Summary Row — recalculated from data */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 16 }}>
+      <div className="kpi-summary-grid">
         {[
           { label: 'Total Ø32mm', val: kpiTotals.d32  },
           { label: 'Total Ø63mm', val: kpiTotals.d63  },
@@ -680,7 +678,7 @@ export default function PELaying() {
         ].map(k => (
           <div key={k.label} className="kpi-tile" style={{ background: '#2d6a27' }}>
             <p className="kpi-label">{k.label}</p>
-            <p className="kpi-value" style={{ fontSize: 22 }}>{k.val.toLocaleString()} mtr</p>
+            <p className="kpi-value">{k.val.toLocaleString()} mtr</p>
           </div>
         ))}
       </div>
@@ -709,50 +707,47 @@ export default function PELaying() {
       </div>
 
       {/* Filter bar */}
-      <div className="card section-block" style={{ 
+      <div className="card section-block filter-bar-card" style={{ 
         padding: '12px 14px', 
-        display: 'flex', 
-        flexWrap: 'wrap', 
-        gap: 10, 
-        alignItems: 'center', 
         marginBottom: 12 }}>
-        <input className="gp-input" 
-          placeholder="Filter by Area..."
-          style={{ 
-            width: 220, 
-            height: '38px', 
-            fontSize: 13, 
-            padding: '0 14px',
-            border: '1px solid #d1d5db',
-            borderRadius: '6px'
-          }} 
-          value={filterArea}
-          onChange={e => setFilterArea(e.target.value)} />
-        <button onClick={() => setFilterArea('')}
-          style={{
-            padding: '0 20px', 
-            height: '38px', 
-            fontSize: 13, 
-            fontWeight: 600,
-            background: 'white', 
-            border: '1px solid #2d6a27',
-            color: '#2d6a27', 
-            borderRadius: '6px',
-            cursor: 'pointer'
-          }}>
-          Clear
-        </button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }} className="mobile-full-width">
+          <input className="gp-input filter-area-input" 
+            placeholder="Filter by Area..."
+            style={{ 
+              height: '38px', 
+              fontSize: 13, 
+              padding: '0 14px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px'
+            }} 
+            value={filterArea}
+            onChange={e => setFilterArea(e.target.value)} />
+          <button onClick={() => setFilterArea('')} className="btn-filter-clear"
+            style={{
+              padding: '0 20px', 
+              height: '38px', 
+              fontSize: 13, 
+              fontWeight: 600,
+              background: 'white', 
+              border: '1px solid #2d6a27',
+              color: '#2d6a27', 
+              borderRadius: '6px',
+              cursor: 'pointer'
+            }}>
+            Clear
+          </button>
+        </div>
 
         {/* Export */}
-        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div className="export-controls-row">
           <span style={{ fontSize: 12, color: '#64748b' }}>Export from</span>
           <input type="date" value={exportFromDate} onChange={e => setExportFromDate(e.target.value)}
-            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+            style={{ height: 34, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
           <span style={{ fontSize: 12, color: '#64748b' }}>to</span>
           <input type="date" value={exportToDate} onChange={e => setExportToDate(e.target.value)}
-            style={{ height: 32, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
-          <button onClick={handleExport} disabled={!!dateError}
-            style={{ height: 32, background: dateError ? '#94a3b8' : '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: dateError ? 'not-allowed' : 'pointer' }}>
+            style={{ height: 34, border: '1px solid #d1d5db', borderRadius: 4, padding: '0 8px', fontSize: 12 }} />
+          <button onClick={handleExport} disabled={!!dateError} className="btn-export-excel"
+            style={{ height: 34, background: dateError ? '#94a3b8' : '#2d6a27', color: '#fff', border: 'none', borderRadius: 4, padding: '0 14px', fontSize: 12, fontWeight: 600, cursor: dateError ? 'not-allowed' : 'pointer' }}>
             ↓ Export Excel
           </button>
         </div>

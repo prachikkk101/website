@@ -431,8 +431,152 @@ body {
   }
 }
 
-/* ---- Slide Panel — full width on mobile ---- */
+/* ---- Page Header & Actions ---- */
+.page-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f4e1a;
+  margin: 0;
+}
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-header-primary {
+  height: 36px;
+  background: #1f4e1a;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn-header-secondary {
+  height: 36px;
+  background: #2d6a27;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+/* ---- KPI Summary Grid ---- */
+.kpi-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* ---- Filter Bar Card & Export Row ---- */
+.filter-bar-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.filter-area-input {
+  width: 220px;
+}
+.export-controls-row {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- Slide Panel & Mobile Responsive Overrides (<= 768px ONLY) ---- */
 @media (max-width: 768px) {
+  .page-header-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+  }
+  .page-title {
+    font-size: 17px !important;
+    text-align: left;
+  }
+  .page-header-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 8px !important;
+  }
+  .btn-header-primary,
+  .btn-header-secondary {
+    flex: 1 1 50% !important;
+    height: 40px !important;
+    padding: 0 6px !important;
+    font-size: 12px !important;
+    justify-content: center !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+  .kpi-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+  }
+  .kpi-tile {
+    min-height: 75px !important;
+    padding: 10px 8px !important;
+  }
+  .kpi-label {
+    font-size: 11px !important;
+    margin-bottom: 4px !important;
+  }
+  .kpi-value {
+    font-size: 18px !important;
+  }
+  .filter-bar-card {
+    flex-direction: column !important;
+    align-items: stretch !important;
+  }
+  .mobile-full-width {
+    width: 100% !important;
+  }
+  .filter-area-input {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+  }
+  .btn-filter-clear {
+    width: 100% !important;
+  }
+  .export-controls-row {
+    margin-left: 0 !important;
+    width: 100% !important;
+    justify-content: space-between;
+  }
+  .export-controls-row input[type="date"] {
+    flex: 1 1 auto !important;
+  }
+  .btn-export-excel {
+    width: 100% !important;
+    margin-top: 4px;
+  }
+
   .slide-panel {
     width: 100vw !important;
     max-width: 100vw !important;
