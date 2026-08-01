@@ -451,7 +451,7 @@ export const addStockMaterial = async (req: AuthenticatedRequest, res: Response,
       return res.status(403).json({ success: false, error: 'Only admins can add new materials.' });
     }
     const categoryId = Number(req.params.categoryId);
-    const { name } = req.body;
+    const { name, unit } = req.body;
     if (!name || !String(name).trim()) {
       return res.status(400).json({ success: false, error: 'Material name is required.' });
     }
@@ -459,11 +459,14 @@ export const addStockMaterial = async (req: AuthenticatedRequest, res: Response,
     if (!cat) {
       return res.status(404).json({ success: false, error: 'Category not found.' });
     }
+    const matName = String(name).trim();
+    const isPipe = matName.toLowerCase().includes('pipe');
+    const matUnit = unit && String(unit).trim() ? String(unit).trim() : (isPipe ? 'mtr' : 'pcs');
     const mat = await prisma.stockMaterial.upsert({
-      where: { name_categoryId: { name: String(name).trim(), categoryId } },
-      // Un-hide if admin re-adds a previously soft-deleted item
-      update: { isHidden: false },
-      create: { name: String(name).trim(), categoryId },
+      where: { name_categoryId: { name: matName, categoryId } },
+      // Un-hide if admin re-adds a previously soft-deleted item and update unit
+      update: { isHidden: false, unit: matUnit },
+      create: { name: matName, categoryId, unit: matUnit },
     });
     res.status(201).json({ success: true, material: mat });
   } catch (error) {

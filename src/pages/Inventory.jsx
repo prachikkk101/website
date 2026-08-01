@@ -680,24 +680,29 @@ export default function Inventory() {
   }, [stockData]);
 
   const mapStockData = (items) => {
-    return (items || []).map((item, idx) => ({
-      sr: idx + 1,
-      mat: item.material,
-      material: item.material,
-      unit: item.unit || 'pcs',
-      open: 0,
-      recv: item.received || 0,
-      received: item.received || 0,
-      issued: item.issued || 0,
-      used: item.issued || 0,
-      ret: item.returned || 0,
-      returned: item.returned || 0,
-      onSite: (item.received || 0) - (item.issued || 0) - (item.returned || 0),
-      inStore: item.inStore || 0,
-      available: item.inStore || 0,
-      req: 0,
-      challanPhotoUrl: item.challanPhotoUrl || null,
-    }));
+    return (items || []).map((item, idx) => {
+      const matName = item.material || item.mat || '';
+      const isPipe = matName.toLowerCase().includes('pipe');
+      const effectiveUnit = (item.unit && item.unit !== 'pcs') ? item.unit : (isPipe ? 'mtr' : (item.unit || 'pcs'));
+      return {
+        sr: idx + 1,
+        mat: matName,
+        material: matName,
+        unit: effectiveUnit,
+        open: 0,
+        recv: item.received || 0,
+        received: item.received || 0,
+        issued: item.issued || 0,
+        used: item.issued || 0,
+        ret: item.returned || 0,
+        returned: item.returned || 0,
+        onSite: (item.received || 0) - (item.issued || 0) - (item.returned || 0),
+        inStore: item.inStore || 0,
+        available: item.inStore || 0,
+        req: 0,
+        challanPhotoUrl: item.challanPhotoUrl || null,
+      };
+    });
   };
 
   useEffect(() => {

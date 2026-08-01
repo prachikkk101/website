@@ -95,9 +95,21 @@ router.get(
         orderBy: { material: 'asc' },
       });
 
+      // Helper to normalize unit: pipes default to 'mtr' if recorded as 'pcs' or missing
+      const normalizeUnit = (material: string, unit?: string) => {
+        const isPipe = (material || '').toLowerCase().includes('pipe');
+        if (unit && unit !== 'pcs') return unit;
+        return isPipe ? 'mtr' : (unit || 'pcs');
+      };
+
+      const normalizedItems = items.map(item => ({
+        ...item,
+        unit: normalizeUnit(item.material, item.unit),
+      }));
+
       if (siteIds.length > 1) {
         const aggregatedMap = new Map<string, any>();
-        for (const item of items) {
+        for (const item of normalizedItems) {
           const mat = item.material;
           if (!aggregatedMap.has(mat)) {
             aggregatedMap.set(mat, { ...item });
@@ -107,12 +119,13 @@ router.get(
             existing.issued   += item.issued;
             existing.returned += item.returned;
             existing.inStore  += item.inStore;
+            if (item.unit && item.unit !== 'pcs') existing.unit = item.unit;
           }
         }
         return res.json({ success: true, items: Array.from(aggregatedMap.values()) });
       }
 
-      res.json({ success: true, items });
+      res.json({ success: true, items: normalizedItems });
     } catch (err) {
       next(err);
     }
@@ -148,23 +161,27 @@ router.post(
       for (const item of items) {
         const material = String(item.material);
         const qty      = Number(item.qty);
-        const unit     = String(item.unit     ?? 'pcs');
+        const rawUnit  = String(item.unit ?? 'pcs');
         const category = String(item.category ?? '');
         if (!material || qty <= 0) continue;
 
-        // 1. Upsert aggregate InventoryItem (unchanged logic)
+        const isPipe = material.toLowerCase().includes('pipe');
+        const effectiveUnit = (rawUnit && rawUnit !== 'pcs') ? rawUnit : (isPipe ? 'mtr' : rawUnit);
+
+        // 1. Upsert aggregate InventoryItem
         const upserted = await prisma.inventoryItem.upsert({
           where: { siteId_material: { siteId, material } },
           update: {
             received: { increment: qty },
             inStore:  { increment: qty },
+            unit: effectiveUnit,
             ...(challanPhotoUrl ? { challanPhotoUrl } : {}),
             updatedAt: new Date(),
           },
           create: {
             siteId,
             material,
-            unit,
+            unit: effectiveUnit,
             category,
             received: qty,
             inStore: qty,
@@ -180,7 +197,7 @@ router.post(
           data: {
             siteId,
             material,
-            unit,
+            unit: effectiveUnit,
             category,
             quantity: qty,
             challanNo: challanNo || null,

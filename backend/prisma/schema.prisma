@@ -463,6 +463,7 @@ model StockCategory {
 model StockMaterial {
   id         Int           @id @default(autoincrement())
   name       String        // e.g. "½\" GI Elbow"
+  unit       String        @default("pcs") // e.g. "pcs", "mtr", "kg", "rolls", "set"
   categoryId Int
   isHidden   Boolean       @default(false) // soft-delete: used to hide seeded default items
   createdAt  DateTime      @default(now())
