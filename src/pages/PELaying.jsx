@@ -7,6 +7,7 @@ import { AuthContext } from '../context/AuthContext';
 import { peLayingAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/api';
 import PhotoViewer from '../components/PhotoViewer';
 import StockCategoryAccordion from '../components/StockCategoryAccordion';
+import { compressImage } from '../utils/imageCompressor';
 
 function initStore(key, defaults) {
   try {
@@ -926,26 +927,19 @@ export default function PELaying() {
                       return;
                     }
                     console.log('🔵 DPR Photo upload starting:', file.name, file.size, 'bytes', file.type);
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                      f('dprPhotoUploading', true);
-                      try {
-                        const url = await uploadAPI.uploadPhoto(reader.result, 'dpr_pe_' + (form.layDate || 'entry'));
-                        console.log('🟢 DPR Photo uploaded successfully:', url);
-                        f('dprPhotoUrl', url);
-                        showToast('✓ DPR photo uploaded');
-                      } catch (err) {
-                        console.error('❌ DPR Photo upload FAILED:', err?.message, err?.response?.status, err?.response?.data, err);
-                        showToast(`✗ DPR photo upload failed: ${err?.response?.data?.error || err?.message || 'Unknown error'}`, 'error');
-                      } finally {
-                        f('dprPhotoUploading', false);
-                      }
-                    };
-                    reader.onerror = (err) => {
-                      console.error('❌ DPR Photo FileReader error:', err);
-                      showToast('✗ Could not read photo file', 'error');
-                    };
-                    reader.readAsDataURL(file);
+                    f('dprPhotoUploading', true);
+                    try {
+                      const compressed = await compressImage(file, 1280, 0.75);
+                      const url = await uploadAPI.uploadPhoto(compressed, 'dpr_pe_' + (form.layDate || 'entry'));
+                      console.log('🟢 DPR Photo uploaded successfully:', url);
+                      f('dprPhotoUrl', url);
+                      showToast('✓ DPR photo uploaded');
+                    } catch (err) {
+                      console.error('❌ DPR Photo upload FAILED:', err?.message, err?.response?.status, err?.response?.data, err);
+                      showToast(`✗ DPR photo upload failed: ${err?.response?.data?.error || err?.message || 'Unknown error'}`, 'error');
+                    } finally {
+                      f('dprPhotoUploading', false);
+                    }
                     // Reset input value so the same file can be re-selected
                     e.target.value = '';
                   }}

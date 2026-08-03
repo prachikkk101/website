@@ -9,6 +9,7 @@ import { pngAPI, dataAPI, stockAPI, columnConfigAPI, uploadAPI } from '../utils/
 import { buildAccordionCategories } from '../utils/stockCategories';
 import StockCategoryAccordion from './StockCategoryAccordion';
 import PhotoViewer from './PhotoViewer';
+import { compressImage } from '../utils/imageCompressor';
 
 
 /* ── Helpers ── */
@@ -185,7 +186,7 @@ export default function HouseTable() {
             altMobile:    c.altMobile    || '',
             acctType:     c.accountType  || 'DOMESTIC',
             houseNo:      c.houseNo      || '',
-            floor:        'GF',
+            floor:        c.floor        || 'GF',
             address1:     c.address1     || '',
             area:         c.society      || '',
             city:         c.city         || '',
@@ -234,7 +235,7 @@ export default function HouseTable() {
             altMobile:    c.altMobile    || '',
             acctType:     c.accountType  || 'DOMESTIC',
             houseNo:      c.houseNo      || '',
-            floor:        'GF',
+            floor:        c.floor        || 'GF',
             address1:     c.address1     || '',
             area:         c.society      || '',
             city:         c.city         || '',
@@ -764,7 +765,7 @@ export default function HouseTable() {
     if (photo1) {
       console.log('🔵 PNG Photo 1 upload starting:', photo1.name, photo1.size, 'bytes', photo1.type);
       try {
-        const p1b64 = await toBase64(photo1);
+        const p1b64 = await compressImage(photo1, 1280, 0.75);
         p1url = await uploadAPI.uploadPhoto(p1b64, `png_photo1_${form.appNo || 'house'}`);
         console.log('🟢 PNG Photo 1 uploaded:', p1url);
       } catch (err) {
@@ -776,7 +777,7 @@ export default function HouseTable() {
     if (photo2) {
       console.log('🔵 PNG Photo 2 upload starting:', photo2.name, photo2.size, 'bytes', photo2.type);
       try {
-        const p2b64 = await toBase64(photo2);
+        const p2b64 = await compressImage(photo2, 1280, 0.75);
         p2url = await uploadAPI.uploadPhoto(p2b64, `png_photo2_${form.appNo || 'house'}`);
         console.log('🟢 PNG Photo 2 uploaded:', p2url);
       } catch (err) {

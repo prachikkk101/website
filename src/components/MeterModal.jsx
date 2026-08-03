@@ -1,5 +1,5 @@
-// src/components/MeterModal.jsx
 import { useState } from 'react';
+import { compressImage } from '../utils/imageCompressor';
 
 const meterMakes = ['Itron', 'Elster', 'Honeywell', 'Landis+Gyr'];
 
@@ -18,12 +18,18 @@ export default function MeterModal({ house, onClose, onSave }) {
   const [position,  setPosition]  = useState('LHS');
   const [installDate, setInstallDate] = useState(today());
 
-  const handlePhoto = (e, slot) => {
+  const handlePhoto = async (e, slot) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const url = URL.createObjectURL(file);
-    if (slot === 1) { setPhoto1(file); setPhoto1Preview(url); }
-    else            { setPhoto2(file); setPhoto2Preview(url); }
+    try {
+      const compressedB64 = await compressImage(file, 1280, 0.75);
+      if (slot === 1) { setPhoto1(compressedB64); setPhoto1Preview(compressedB64); }
+      else            { setPhoto2(compressedB64); setPhoto2Preview(compressedB64); }
+    } catch {
+      const url = URL.createObjectURL(file);
+      if (slot === 1) { setPhoto1(file); setPhoto1Preview(url); }
+      else            { setPhoto2(file); setPhoto2Preview(url); }
+    }
   };
 
   function handleSave() {

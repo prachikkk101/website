@@ -187,7 +187,7 @@ export const uploadAPI = {
     console.log('🔵 [uploadAPI] uploadPhoto called —', filename, '| dataUrl type:', typeof dataUrl, '| length:', typeof dataUrl === 'string' ? dataUrl.length : 'N/A');
     console.log('🔵 [uploadAPI] dataUrl prefix:', typeof dataUrl === 'string' ? dataUrl.slice(0, 50) : '(not a string)');
     try {
-      const response = await api.post('/uploads/photo', { data: dataUrl, filename }, { timeout: 30000 });
+      const response = await api.post('/uploads/photo', { data: dataUrl, filename }, { timeout: 60000 });
       console.log('🟢 [uploadAPI] Upload success:', response.data);
       if (!response.data?.url) throw new Error('Upload response missing URL');
       return response.data.url;

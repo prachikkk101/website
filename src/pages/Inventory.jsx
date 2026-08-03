@@ -7,6 +7,7 @@ import { useSite } from '../context/SiteContext';
 import { stockAPI, dataAPI, uploadAPI, columnConfigAPI } from '../utils/api';
 import PhotoViewer from '../components/PhotoViewer';
 import { DEFAULT_MATERIALS_BY_CATEGORY, buildAccordionCategories } from '../utils/stockCategories';
+import { compressImage } from '../utils/imageCompressor';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -1578,20 +1579,17 @@ export default function Inventory() {
                   onChange={async e => {
                     const file = e.target.files?.[0];
                     if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = async () => {
-                      try {
-                        setChallanPhotoUploading(true);
-                        const url = await uploadAPI.uploadPhoto(reader.result, 'challan_' + challan);
-                        setChallanPhotoUrl(url);
-                      } catch (err) {
-                        console.error('❌ Challan photo upload failed:', err);
-                        showToast('✗ Photo upload failed — check R2 config', 'error');
-                      } finally {
-                        setChallanPhotoUploading(false);
-                      }
-                    };
-                    reader.readAsDataURL(file);
+                    try {
+                      setChallanPhotoUploading(true);
+                      const compressed = await compressImage(file, 1280, 0.75);
+                      const url = await uploadAPI.uploadPhoto(compressed, 'challan_' + challan);
+                      setChallanPhotoUrl(url);
+                    } catch (err) {
+                      console.error('❌ Challan photo upload failed:', err);
+                      showToast('✗ Photo upload failed — check R2 config', 'error');
+                    } finally {
+                      setChallanPhotoUploading(false);
+                    }
                   }}
                 />
                 {challanPhotoUrl && (
