@@ -95,6 +95,15 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
   try {
     const siteId = req.params.siteId as string;
 
+    console.log('🔵 PE Laying save - materials payload:', JSON.stringify(req.body.mdpeMaterials || req.body.materialsUsed || [], null, 2));
+    for (const material of req.body.mdpeMaterials || req.body.materialsUsed || []) {
+      const materialName = material.material || material.name;
+      const inv = await prisma.inventoryItem.findUnique({
+        where: { siteId_material: { siteId, material: materialName } },
+      });
+      console.log(`🔵 Checking material "${materialName}" for site ${siteId}: exists in inventory =`, !!inv, 'available =', inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0);
+    }
+
     let data;
     try {
       data = schema.parse(req.body);
