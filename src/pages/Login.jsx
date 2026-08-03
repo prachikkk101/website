@@ -171,22 +171,19 @@ export default function Login() {
   };
 
 
-  const handleGoogleSuccess = (credentialResponse) => {
+  const handleGoogleSuccess = async (credentialResponse) => {
     try {
       const decoded = jwtDecode(credentialResponse.credential);
-      const googleUser = {
-        id: decoded.sub,
-        name: decoded.name,
+      const res = await loginWithGoogle({
         email: decoded.email,
+        name: decoded.name,
         picture: decoded.picture,
-        role: 'SUPERVISOR',
-        siteAccess: 'none',
-        token: 'local-google-' + Date.now(),
-        isLocalMode: true,
-      };
-      localStorage.setItem('gppms_session', JSON.stringify(googleUser));
-      localStorage.setItem('gppms_token',   googleUser.token);
-      window.location.href = '/customers';
+      });
+      if (res.success) {
+        navigate('/customers');
+      } else {
+        setError(res.error || 'Google sign-in failed.');
+      }
     } catch {
       setError('Google sign-in failed. Please try again.');
     }

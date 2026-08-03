@@ -86,13 +86,6 @@ export default function Layout() {
   useEffect(() => {
     checkBackend().then(result => {
       setBackendStatus(result.status === 'connected' ? 'connected' : 'offline');
-      if (result.status === 'connected') {
-        const session = getSession();
-        if (session.isLocalMode) {
-          localStorage.setItem('gppms_session', JSON.stringify({ ...session, isLocalMode: false }));
-          window.location.reload();
-        }
-      }
     });
   }, []);
 

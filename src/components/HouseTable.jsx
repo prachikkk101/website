@@ -844,7 +844,7 @@ export default function HouseTable() {
         appNo: form.appNo, bpNo: form.bpNo || null,
         accountType: (form.acctType || 'DOMESTIC').toUpperCase(),
         customerName: form.name, mobile: form.mobile, altMobile: form.altMobile || null,
-        houseNo: form.houseNo || '', address1: form.address1 || '',
+        houseNo: form.houseNo || '', floor: form.floor || 'GF', address1: form.address1 || '',
         city: finalCityLabel, society: formArea || null,
         status: form.gcStatus !== '—' ? form.gcStatus : 'Pending',
         plumbingDate: form.gcDate || null,

@@ -425,3 +425,66 @@ export const changePassword = async (req: AuthenticatedRequest, res: Response, n
     next(error);
   }
 };
+
+/* ══════════════════════════════════════════════════
+   GOOGLE SIGN-IN AUTHENTICATION
+══════════════════════════════════════════════════ */
+
+export const googleLogin = async (req: Request, res: Response, next: NextFunction) => {
+  const schema = z.object({
+    email: z.string().email(),
+    name: z.string().optional(),
+    picture: z.string().optional(),
+  });
+
+  try {
+    const { email, name, picture } = schema.parse(req.body);
+
+    let user = await prisma.user.findUnique({ where: { email } });
+
+    if (!user) {
+      const isWhitelisted = await prisma.adminWhitelist.findUnique({ where: { email } });
+      const assignedRole = isWhitelisted ? Role.ADMIN : Role.WORKER;
+      const dummyPassword = await bcrypt.hash(Math.random().toString(36), 10);
+
+      user = await prisma.user.create({
+        data: {
+          email,
+          name: name || email.split('@')[0],
+          passwordHash: dummyPassword,
+          role: assignedRole,
+          emailVerified: true,
+        },
+      });
+      console.log(`[googleLogin] Created new user from Google: ${email} (role: ${assignedRole})`);
+    }
+
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    const assignment = await prisma.siteUser.findFirst({
+      where: { userId: user.id },
+      include: { site: { select: { id: true, name: true } } },
+    });
+
+    console.log('[googleLogin] Success:', email, '| role:', user.role);
+
+    return res.status(200).json({
+      success: true,
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        siteId: assignment?.siteId ?? null,
+        siteName: assignment?.site?.name ?? null,
+        assignedSites: assignment ? [assignment] : [],
+        picture: picture || null,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

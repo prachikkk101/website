@@ -3,41 +3,6 @@ import api from '../utils/api';
 
 export const AuthContext = createContext();
 
-/* ── Hardcoded admin credentials (local / offline mode) ── */
-const ADMIN_EMAILS = [
-  'oxygenprotech@gmail.com',
-  'radhe.sangwan1980@gmail.com',
-];
-
-// Any email in ADMIN_EMAILS with password ≥4 chars gets ADMIN in local fallback.
-function buildMockUser(email, password) {
-  const em = email.toLowerCase();
-  const isHardcodedAdmin = ADMIN_EMAILS.includes(em);
-
-  if (isHardcodedAdmin) {
-    return {
-      id: 1,
-      name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      email,
-      role: 'ADMIN',
-      siteAccess: 'all',
-      token: 'local-admin-' + Date.now(),
-      isLocalMode: true,
-    };
-  }
-
-  // Everyone else → SUPERVISOR, view-only until approved
-  return {
-    id: Date.now(),
-    name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    email,
-    role: 'SUPERVISOR',
-    siteAccess: 'none',
-    token: 'local-' + Date.now(),
-    isLocalMode: true,
-  };
-}
-
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [loading, setLoading] = useState(true);
@@ -47,7 +12,6 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('gppms_refresh');
     localStorage.removeItem('gppms_session');
     setUser(null);
-    // Store revocation message for the Login page to display
     if (reason) sessionStorage.setItem('gppms_revoked_msg', reason);
     window.location.href = '/login';
   };
@@ -55,7 +19,6 @@ export function AuthProvider({ children }) {
   const refreshSession = async (customToken) => {
     const token = customToken || localStorage.getItem('gppms_token');
     if (!token) return;
-    if (token.startsWith('local-')) return;
 
     try {
       const response = await api.get('/auth/me');
@@ -80,14 +43,12 @@ export function AuthProvider({ children }) {
 
         localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
         setUser(prev => {
-          // Only update state if something actually changed (avoid needless re-renders)
           if (JSON.stringify(prev) === JSON.stringify(sessionObj)) return prev;
           return sessionObj;
         });
       }
     } catch (err) {
       const status = err.response?.status;
-      // 401 = token invalid/expired, 404 = user deleted — force immediate logout
       if (status === 401 || status === 404) {
         forceLogout('Your access has been revoked. Please contact your administrator.');
       } else {
@@ -111,18 +72,13 @@ export function AuthProvider({ children }) {
     initAuth();
   }, []);
 
-  // ── Combined session-validity + permission-sync interval every 30s ──
-  // Serves two purposes:
-  //   1. Picks up new role/siteAccess for approved supervisors (existing feature)
-  //   2. Forces logout if the user has been deleted by admin (new feature)
-  //      — within 30 seconds of deletion, the removed user is automatically logged out.
   useEffect(() => {
     const token = localStorage.getItem('gppms_token');
-    if (!token || token.startsWith('local-')) return;
+    if (!token) return;
 
     const interval = setInterval(() => {
       const currentToken = localStorage.getItem('gppms_token');
-      if (currentToken && !currentToken.startsWith('local-')) {
+      if (currentToken) {
         refreshSession(currentToken).catch(() => {});
       }
     }, 30000); // every 30 seconds
@@ -130,15 +86,12 @@ export function AuthProvider({ children }) {
     return () => clearInterval(interval);
   }, []);
 
-
   const login = async (email, password) => {
-    // Basic client-side validation
     if (!password || password.length < 4) {
       return { success: false, error: 'Password must be at least 4 characters.' };
     }
 
     try {
-      // ── 1. Try real backend ──
       const response = await api.post('/auth/login', { email, password });
       if (response.data.success) {
         const { user: u, accessToken, refreshToken } = response.data;
@@ -149,29 +102,35 @@ export function AuthProvider({ children }) {
         setUser(sessionObj);
         return { success: true, user: sessionObj };
       }
-      // Backend responded but said login failed (wrong password etc.)
       return { success: false, error: response.data.error || 'Invalid credentials.' };
     } catch (err) {
       const isNetworkError = !err.response;
-      const is5xx = err.response?.status >= 500;
-
-      // Only fall back to local mode IF VITE_API_URL is NOT set (pure local dev mode without backend)
-      const isLocalDevOnly = !import.meta.env.VITE_API_URL;
-      if (isLocalDevOnly && (isNetworkError || is5xx)) {
-        // Silent local fallback for local standalone testing
-        const mockUser = buildMockUser(email, password);
-        localStorage.setItem('gppms_token', mockUser.token);
-        localStorage.setItem('gppms_session', JSON.stringify(mockUser));
-        setUser(mockUser);
-        return { success: true, user: mockUser };
-      }
-
-      // Live production backend — return clear error message if server error or invalid credentials
       return {
         success: false,
         error: isNetworkError
           ? 'Server is starting up. Please wait a moment and try logging in again.'
           : (err.response?.data?.error || 'Invalid email or password.'),
+      };
+    }
+  };
+
+  const loginWithGoogle = async (googlePayload) => {
+    try {
+      const response = await api.post('/auth/google', googlePayload);
+      if (response.data.success) {
+        const { user: u, accessToken, refreshToken } = response.data;
+        const sessionObj = { ...u, token: accessToken };
+        localStorage.setItem('gppms_token', accessToken);
+        if (refreshToken) localStorage.setItem('gppms_refresh', refreshToken);
+        localStorage.setItem('gppms_session', JSON.stringify(sessionObj));
+        setUser(sessionObj);
+        return { success: true, user: sessionObj };
+      }
+      return { success: false, error: response.data.error || 'Google login failed.' };
+    } catch (err) {
+      return {
+        success: false,
+        error: err.response?.data?.error || 'Google sign-in failed. Please try again.',
       };
     }
   };
@@ -228,7 +187,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, registerUser, verifyEmail, refreshSession }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, registerUser, verifyEmail, refreshSession }}>
       {children}
     </AuthContext.Provider>
   );
