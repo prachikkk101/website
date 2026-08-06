@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import prisma from '../config/db';
 import { AccountType } from '@prisma/client';
+import { adjustInventoryStock } from '../utils/stockHelper';
 
 /* ───────────────────────────────────────────────────────────
    PNG Connections
@@ -159,32 +160,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       }
     }
 
-    // ── PRE-FLIGHT: Stock sufficiency check before creating ──
-    // Reject if: (a) item doesn't exist in inventory, OR (b) available qty < requested qty.
-    if (data.materialsUsed && data.materialsUsed.length > 0) {
-      const materialsToCheck = data.materialsUsed.filter(m => Math.round(m.qty) > 0);
-      const insufficientItems: { name: string; requested: number; available: number }[] = [];
-      for (const mat of materialsToCheck) {
-        const inv = await prisma.inventoryItem.findUnique({
-          where: { siteId_material: { siteId, material: mat.material } },
-        });
-        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        const qty = Math.round(mat.qty);
-        if (!inv || qty > available) {
-          insufficientItems.push({ name: mat.material, requested: qty, available });
-        }
-      }
-      if (insufficientItems.length > 0) {
-        const lines = insufficientItems.map(i => `• ${i.name}: requested ${i.requested}, only ${i.available} available`);
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient stock for the following material(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
-          insufficientItems,
-          missingItems: insufficientItems.map(i => i.name),
-          field: 'materialsUsed',
-        });
-      }
-    }
+    // Note: Stock sufficiency pre-flight check removed so workers are never blocked from saving work.
+    // Stock is automatically issued/deducted in the background.
 
     // ── STEP 1: Create the PNG connection record (committed independently) ──
     const connection = await prisma.pNGConnection.create({
@@ -249,35 +226,8 @@ export const createPNGConnection = async (req: AuthenticatedRequest, res: Respon
       setImmediate(async () => {
         console.log(`[PNG create] 🟡 Background stock deduction starting for ${materialsSnapshot.length} material(s)...`);
         for (const mat of materialsSnapshot) {
-          try {
-            const qty = Math.round(mat.qty);
-            if (qty <= 0) {
-              console.log(`[PNG create] Skipping "${mat.material}" — qty ${mat.qty} rounds to 0`);
-              continue;
-            }
-
-            console.log(`[PNG create] Looking up "${mat.material}" in inventory (site: ${siteIdSnapshot})...`);
-
-            const invItem = await prisma.inventoryItem.findUnique({
-              where: { siteId_material: { siteId: siteIdSnapshot, material: mat.material } },
-            });
-
-            if (!invItem) {
-              console.warn(`[PNG create] ⚠ Material NOT FOUND in inventory: "${mat.material}" — skipping`);
-              continue;
-            }
-
-            const newIssued  = invItem.issued + qty;
-            const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-
-            await prisma.inventoryItem.update({
-              where: { siteId_material: { siteId: siteIdSnapshot, material: mat.material } },
-              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-            });
-
-            console.log(`[PNG create] ✅ Stock deducted — "${mat.material}" +${qty} issued → ${newIssued} total issued`);
-          } catch (stockErr: any) {
-            console.error(`[PNG create] ❌ Stock deduction failed for "${mat.material}":`, stockErr.message);
+          if (Number(mat.qty) > 0) {
+            await adjustInventoryStock(siteIdSnapshot, mat.material, Number(mat.qty));
           }
         }
         console.log(`[PNG create] 🟢 Background stock deduction complete.`);
@@ -449,31 +399,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       console.log(`[PNG update] 🔵 oldMap:`, JSON.stringify(oldMap));
       console.log(`[PNG update] 🔵 newMap:`, JSON.stringify(newMap));
 
-      // ── PRE-FLIGHT: Check materials with net positive delta have sufficient available stock ──
-      const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
-      const insufficientItems: { name: string; requested: number; available: number }[] = [];
-      for (const material of allMaterials) {
-        const delta = (newMap[material] ?? 0) - (oldMap[material] ?? 0);
-        if (delta > 0) {
-          const inv = await prisma.inventoryItem.findUnique({
-            where: { siteId_material: { siteId, material } },
-          });
-          const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-          if (!inv || delta > available) {
-            insufficientItems.push({ name: material, requested: delta, available });
-          }
-        }
-      }
-      if (insufficientItems.length > 0) {
-        const lines = insufficientItems.map(i => `• ${i.name}: need ${i.requested} more, only ${i.available} available`);
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient stock for the following material(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
-          insufficientItems,
-          missingItems: insufficientItems.map(i => i.name),
-          field: 'materialsUsed',
-        });
-      }
+      // Note: Stock sufficiency pre-flight check removed so workers are never blocked from saving work.
 
       // Persist the new materialsUsed to DB
       await prisma.pNGConnection.update({
@@ -482,6 +408,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
       });
 
       // Compute deltas and adjust inventory — runs in background, never blocks response
+      const allMaterials = new Set([...Object.keys(oldMap), ...Object.keys(newMap)]);
       const adjustments: { material: string; delta: number }[] = [];
       for (const material of allMaterials) {
         const oldQty = oldMap[material] ?? 0;
@@ -496,24 +423,7 @@ export const updatePNGConnection = async (req: AuthenticatedRequest, res: Respon
         setImmediate(async () => {
           console.log(`[PNG update] 🟡 Stock diff-adjustment: ${adjustments.length} material(s) changed`);
           for (const adj of adjustments) {
-            try {
-              const inv = await prisma.inventoryItem.findUnique({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
-              });
-              if (!inv) {
-                console.warn(`[PNG update] ⚠️ Material "${adj.material}" not in inventory — skipping`);
-                continue;
-              }
-              const newIssued  = Math.max(0, inv.issued + adj.delta);
-              const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
-              await prisma.inventoryItem.update({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
-                data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-              });
-              console.log(`[PNG update] ✅ "${adj.material}" delta=${adj.delta > 0 ? '+' : ''}${adj.delta} → issued now ${newIssued}`);
-            } catch (e: any) {
-              console.error(`[PNG update] ❌ Adjustment failed for "${adj.material}":`, e.message);
-            }
+            await adjustInventoryStock(siteIdSnapshot, adj.material, adj.delta);
           }
           console.log('[PNG update] 🟢 Stock diff-adjustment complete.');
         });
@@ -624,25 +534,8 @@ export const deletePNGConnection = async (req: AuthenticatedRequest, res: Respon
     if (Array.isArray(materials) && materials.length > 0) {
       console.log(`[PNG delete] 🟡 Reversing stock deduction for ${materials.length} material(s)...`);
       for (const mat of materials) {
-        try {
-          const qty = Math.round(mat.qty ?? 0);
-          if (qty <= 0) continue;
-          const invItem = await prisma.inventoryItem.findUnique({
-            where: { siteId_material: { siteId: existing.siteId, material: mat.material } },
-          });
-          if (!invItem) {
-            console.warn(`[PNG delete] ⚠ Material "${mat.material}" not found in inventory — skipping reversal`);
-            continue;
-          }
-          const newIssued  = Math.max(0, invItem.issued - qty);
-          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-          await prisma.inventoryItem.update({
-            where: { siteId_material: { siteId: existing.siteId, material: mat.material } },
-            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-          });
-          console.log(`[PNG delete] ✅ Reversed "${mat.material}" −${qty} issued → ${newIssued} total issued`);
-        } catch (stockErr: any) {
-          console.error(`[PNG delete] ❌ Stock reversal failed for "${mat.material}":`, stockErr.message);
+        if (Number(mat.qty) > 0) {
+          await adjustInventoryStock(existing.siteId, mat.material, -Number(mat.qty));
         }
       }
       console.log('[PNG delete] 🟢 Stock reversal complete.');

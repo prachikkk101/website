@@ -186,7 +186,7 @@ export default function PELaying() {
         }
       }
     }
-  }, [panelOpen, editingId, globalLocationContext, mergedGAs, allData, assignedPairs, isAdmin, uniqueGAs, uniqueCities]);
+  }, [panelOpen, editingId, globalLocationContext, mergedGAs, assignedPairs, isAdmin, uniqueGAs, uniqueCities]); // allData intentionally excluded: background data refreshes must never reset location fields the user has selected
 
   const fetchPELayingData = useCallback((isSilent = false) => {
     const isAdmin = user?.role === 'ADMIN';

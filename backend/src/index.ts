@@ -120,11 +120,16 @@ app.use('/api/sites/:siteId', inventoryRoutes);
 // ── Global Error Handler ──────────────────────────────────
 app.use(errorHandler);
 
+import { syncSiteInventoryFromEntries } from './utils/stockHelper';
+
 // ── Start Server ──────────────────────────────────────────
 app.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`\n🔥 GP-PMS Backend running on http://0.0.0.0:${PORT}`);
   console.log(`📋 Health check: http://0.0.0.0:${PORT}/health`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}\n`);
+
+  // Auto-sync inventory on startup so all past entries match stock
+  syncSiteInventoryFromEntries().catch(err => console.error('Startup stock sync failed:', err));
 });
 
 export default app;

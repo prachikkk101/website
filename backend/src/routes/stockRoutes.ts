@@ -314,6 +314,26 @@ router.put(
   }
 );
 
+/* ── POST /api/sites/:siteId/inventory/sync
+   Recalculates and syncs inventory stock from all PNG connections and PE laying entries.
+─────────────────────────────────────────────────────────── */
+import { syncSiteInventoryFromEntries } from '../utils/stockHelper';
+
+router.post(
+  '/sync',
+  authenticate,
+  checkSiteAccess,
+  async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const siteId = req.params.siteId as string;
+      await syncSiteInventoryFromEntries(siteId);
+      res.json({ success: true, message: 'Stock inventory synced successfully' });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
 /* ── DELETE /api/sites/:siteId/inventory/:material
    Permanently removes a stock item for this site.
 ─────────────────────────────────────────────────────────── */

@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from '../middlewares/auth';
 import { z } from 'zod';
 import prisma from '../config/db';
 import { PEStatus, Prisma } from '@prisma/client';
+import { adjustInventoryStock } from '../utils/stockHelper';
 
 export const getPELaying = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   try {
@@ -118,42 +119,11 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
     }
 
     try {
-      // Compute pipe usage totals to check before creating
-      const pipeUsage = [
-        { material: '32mm PE Pipe',  qty: Math.round((data.d32oc ?? 0) + (data.d32b ?? 0) + (data.d32hdd ?? 0)) },
-        { material: '63mm PE Pipe',  qty: Math.round((data.d63oc ?? 0) + (data.d63b ?? 0) + (data.d63hdd ?? 0)) },
-        { material: '90mm PE Pipe',  qty: Math.round(data.d90tot ?? ((data.d90oc ?? 0) + (data.d90b ?? 0) + (data.d90hdd ?? 0))) },
-        { material: '125mm PE Pipe', qty: Math.round(data.d125tot ?? ((data.d125oc ?? 0) + (data.d125b ?? 0) + (data.d125hdd ?? 0))) },
-      ].filter(p => p.qty > 0);
-
-      // ── PRE-FLIGHT: Stock sufficiency check before creating ──
-      // Reject if: (a) item doesn't exist in inventory, OR (b) available qty < requested qty.
-      // Checked for both pipe sizes AND MDPE fittings.
-      const mdpeUsage: { material: string; qty: number }[] = (data.mdpeMaterials || [])
-        .filter((m: any) => m.qty > 0)
-        .map((m: any) => ({ material: m.material, qty: Math.round(m.qty) }));
-
-      const allMaterialsToCheck = [...pipeUsage, ...mdpeUsage];
-      const insufficientItems: { name: string; requested: number; available: number }[] = [];
-      for (const item of allMaterialsToCheck) {
-        const inv = await prisma.inventoryItem.findUnique({
-          where: { siteId_material: { siteId, material: item.material } },
-        });
-        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        if (!inv || item.qty > available) {
-          insufficientItems.push({ name: item.material, requested: item.qty, available });
-        }
-      }
-      if (insufficientItems.length > 0) {
-        const lines = insufficientItems.map(i => `• ${i.name}: requested ${i.requested}, only ${i.available} available`);
-        return res.status(400).json({
-          success: false,
-          error: `Insufficient stock for the following pipe(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
-          insufficientItems,
-          missingItems: insufficientItems.map(i => i.name),
-          field: 'materials',
-        });
-      }
+    // Note: Stock sufficiency pre-flight check removed so workers are never blocked from saving work.
+    // Stock is automatically issued/deducted in the background.
+    const mdpeUsage: { material: string; qty: number }[] = (data.mdpeMaterials || [])
+      .filter((m: any) => m.qty > 0)
+      .map((m: any) => ({ material: m.material, qty: Math.round(m.qty) }));
 
       const record = await prisma.pELaying.create({
         data: {
@@ -194,31 +164,15 @@ export const createPELaying = async (req: AuthenticatedRequest, res: Response, n
 
       console.log('🟢 PE Laying created successfully. ID:', record.id);
 
-      // ── STEP 2: Deduct stock (fire-and-forget) ──
-      // Deduct both pipe sizes AND MDPE fittings.
-      const allDeductions = [...pipeUsage, ...mdpeUsage];
-      if (allDeductions.length > 0) {
+      // ── STEP 2: Deduct stock — MDPE fittings only (fire-and-forget) ──
+      // Pipe metre quantities do NOT deduct inventory. Only mdpeMaterials (fittings) do.
+      if (mdpeUsage.length > 0) {
         const siteIdSnapshot = siteId;
         setImmediate(async () => {
-          console.log(`[PE create] 🟡 Background stock deduction starting for ${pipeUsage.length} pipe(s) + ${mdpeUsage.length} MDPE fitting(s)...`);
-          for (const item of allDeductions) {
-            try {
-              const invItem = await prisma.inventoryItem.findUnique({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: item.material } },
-              });
-              if (!invItem) {
-                console.warn(`[PE create] ⚠ Material NOT FOUND in inventory: "${item.material}" — skipping`);
-                continue;
-              }
-              const newIssued  = invItem.issued + item.qty;
-              const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-              await prisma.inventoryItem.update({
-                where: { siteId_material: { siteId: siteIdSnapshot, material: item.material } },
-                data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-              });
-              console.log(`[PE create] ✅ Deducted ${item.qty} from "${item.material}" → issued now ${newIssued}, inStore now ${newInStore}`);
-            } catch (stockErr: any) {
-              console.error(`[PE create] ❌ Stock deduction failed for "${item.material}":`, stockErr.message);
+          console.log(`[PE create] 🟡 Background stock deduction starting for ${mdpeUsage.length} MDPE fitting(s)...`);
+          for (const item of mdpeUsage) {
+            if (Number(item.qty) > 0) {
+              await adjustInventoryStock(siteIdSnapshot, item.material, Number(item.qty));
             }
           }
           console.log('[PE create] 🟢 Background stock deduction complete.');
@@ -284,31 +238,11 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
       return res.status(404).json({ success: false, error: 'PE Laying record not found' });
     }
 
-    // Compute OLD pipe totals from DB
-    const old32  = Math.round(existing.d32oc.toNumber()  + existing.d32b.toNumber()  + existing.d32hdd.toNumber());
-    const old63  = Math.round(existing.d63oc.toNumber()  + existing.d63b.toNumber()  + existing.d63hdd.toNumber());
-    const old90  = Math.round(existing.d90tot.toNumber());
-    const old125 = Math.round(existing.d125tot.toNumber());
-
-    // Compute NEW pipe totals from incoming data (fall back to existing if not provided)
-    const new32  = Math.round((data.d32oc  ?? existing.d32oc.toNumber())  + (data.d32b  ?? existing.d32b.toNumber())  + (data.d32hdd  ?? existing.d32hdd.toNumber()));
-    const new63  = Math.round((data.d63oc  ?? existing.d63oc.toNumber())  + (data.d63b  ?? existing.d63b.toNumber())  + (data.d63hdd  ?? existing.d63hdd.toNumber()));
-    const new90  = data.d90tot  !== undefined ? Math.round(data.d90tot  ?? 0) : Math.round((data.d90oc  ?? existing.d90oc.toNumber())  + (data.d90b  ?? existing.d90b.toNumber())  + (data.d90hdd  ?? existing.d90hdd.toNumber()));
-    const new125 = data.d125tot !== undefined ? Math.round(data.d125tot ?? 0) : Math.round((data.d125oc ?? existing.d125oc.toNumber()) + (data.d125b ?? existing.d125b.toNumber()) + (data.d125hdd ?? existing.d125hdd.toNumber()));
-
-    const pipeDeltas = [
-      { material: '32mm PE Pipe',  delta: new32  - old32  },
-      { material: '63mm PE Pipe',  delta: new63  - old63  },
-      { material: '90mm PE Pipe',  delta: new90  - old90  },
-      { material: '125mm PE Pipe', delta: new125 - old125 },
-    ];
-
-    console.log(`[PE update] Pipe deltas:`, JSON.stringify(pipeDeltas));
-
-    // ── PRE-FLIGHT: Check materials with net positive delta exist AND have sufficient available stock ──
     const siteId = existing.siteId;
 
-    // Compute MDPE material deltas (new qty − old qty for each material name)
+    // ── PRE-FLIGHT: Stock check — MDPE fittings only ──
+    // Pipe metre quantities (d32, d63, d90, d125) are progress records, NOT inventory
+    // issuances — they must never gate-check or deduct from stock.
     const oldMdpe: { material: string; qty: number }[] = Array.isArray((existing as any).mdpeMaterials)
       ? (existing as any).mdpeMaterials
       : [];
@@ -324,41 +258,7 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
       .map(([material, delta]) => ({ material, delta: Math.round(delta) }))
       .filter(d => d.delta !== 0);
 
-    const insufficientItems: { name: string; requested: number; available: number }[] = [];
-    // Check pipe deltas
-    for (const p of pipeDeltas) {
-      if (p.delta > 0) {
-        const inv = await prisma.inventoryItem.findUnique({
-          where: { siteId_material: { siteId, material: p.material } },
-        });
-        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        if (!inv || p.delta > available) {
-          insufficientItems.push({ name: p.material, requested: p.delta, available });
-        }
-      }
-    }
-    // Check MDPE deltas
-    for (const d of mdpeDeltas) {
-      if (d.delta > 0) {
-        const inv = await prisma.inventoryItem.findUnique({
-          where: { siteId_material: { siteId, material: d.material } },
-        });
-        const available = inv ? Math.max(0, inv.received - inv.issued - inv.returned) : 0;
-        if (!inv || d.delta > available) {
-          insufficientItems.push({ name: d.material, requested: d.delta, available });
-        }
-      }
-    }
-    if (insufficientItems.length > 0) {
-      const lines = insufficientItems.map(i => `• ${i.name}: need ${i.requested} more, only ${i.available} available`);
-      return res.status(400).json({
-        success: false,
-        error: `Insufficient stock for the following pipe(s):\n${lines.join('\n')}\n\nPlease receive more stock in Inventory first.`,
-        insufficientItems,
-        missingItems: insufficientItems.map(i => i.name),
-        field: 'materials',
-      });
-    }
+    // Note: Stock sufficiency pre-flight check removed so workers are never blocked from saving work.
 
     const updated = await prisma.pELaying.update({
       where: { id: recordId },
@@ -395,40 +295,19 @@ export const updatePELaying = async (req: AuthenticatedRequest, res: Response, n
       },
     });
 
-    // ── Diff-based stock adjustment (fire-and-forget) ──
-    // Handles both pipe size deltas AND MDPE fitting deltas.
-    const allAdjustments = [
-      ...pipeDeltas.filter(p => p.delta !== 0),
-      ...mdpeDeltas,
-    ];
-    if (allAdjustments.length > 0) {
+    // ── Diff-based stock adjustment — MDPE fittings only (fire-and-forget) ──
+    // Pipe metre quantities do NOT deduct inventory.
+    if (mdpeDeltas.length > 0) {
       const siteIdSnapshot = siteId;
       setImmediate(async () => {
-        console.log(`[PE update] 🟡 Stock diff-adjustment: ${pipeDeltas.filter(p => p.delta !==0).length} pipe(s) + ${mdpeDeltas.length} MDPE fitting(s) changed`);
-        for (const adj of allAdjustments) {
-          try {
-            const inv = await prisma.inventoryItem.findUnique({
-              where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
-            });
-            if (!inv) {
-              console.warn(`[PE update] ⚠️ "${adj.material}" not in inventory — skipping`);
-              continue;
-            }
-            const newIssued  = Math.max(0, inv.issued + adj.delta);
-            const newInStore = Math.max(0, inv.received - newIssued - inv.returned);
-            await prisma.inventoryItem.update({
-              where: { siteId_material: { siteId: siteIdSnapshot, material: adj.material } },
-              data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-            });
-            console.log(`[PE update] ✅ "${adj.material}" delta=${adj.delta > 0 ? '+' : ''}${adj.delta} → issued now ${newIssued}`);
-          } catch (e: any) {
-            console.error(`[PE update] ❌ Adjustment failed for "${adj.material}":`, e.message);
-          }
+        console.log(`[PE update] 🟡 Stock diff-adjustment: ${mdpeDeltas.length} MDPE fitting(s) changed`);
+        for (const adj of mdpeDeltas) {
+          await adjustInventoryStock(siteIdSnapshot, adj.material, adj.delta);
         }
         console.log('[PE update] 🟢 Stock diff-adjustment complete.');
       });
     } else {
-      console.log('[PE update] ⚪ No material quantities changed — no inventory adjustments needed.');
+      console.log('[PE update] ⚪ No MDPE fitting quantities changed — no inventory adjustments needed.');
     }
 
     res.status(200).json({ success: true, record: updated });
@@ -460,37 +339,8 @@ export const deletePELaying = async (req: AuthenticatedRequest, res: Response, n
       return res.status(404).json({ success: false, error: 'PE Laying record not found' });
     }
 
-    // ── Reverse pipe-stock deductions before deleting ────────────────────────
-    const pipeReversal = [
-      { material: '32mm PE Pipe',  qty: Math.round(existing.d32oc.toNumber() + existing.d32b.toNumber() + existing.d32hdd.toNumber()) },
-      { material: '63mm PE Pipe',  qty: Math.round(existing.d63oc.toNumber() + existing.d63b.toNumber() + existing.d63hdd.toNumber()) },
-      { material: '90mm PE Pipe',  qty: Math.round(existing.d90tot.toNumber()) },
-      { material: '125mm PE Pipe', qty: Math.round(existing.d125tot.toNumber()) },
-    ].filter(p => p.qty > 0);
-
-    if (pipeReversal.length > 0) {
-      console.log(`[PE delete] 🟡 Reversing stock deduction for ${pipeReversal.length} pipe size(s)...`);
-      for (const pipe of pipeReversal) {
-        try {
-          const invItem = await prisma.inventoryItem.findUnique({
-            where: { siteId_material: { siteId: existing.siteId, material: pipe.material } },
-          });
-          if (!invItem) {
-            console.warn(`[PE delete] ⚠ Material "${pipe.material}" not found in inventory — skipping reversal`);
-            continue;
-          }
-          const newIssued  = Math.max(0, invItem.issued - pipe.qty);
-          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-          await prisma.inventoryItem.update({
-            where: { siteId_material: { siteId: existing.siteId, material: pipe.material } },
-            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-          });
-          console.log(`[PE delete] ✅ Reversed "${pipe.material}" −${pipe.qty} issued → ${newIssued} total issued`);
-        } catch (stockErr: any) {
-          console.error(`[PE delete] ❌ Stock reversal failed for "${pipe.material}":`, stockErr.message);
-        }
-      }
-    }
+    // ── Pipe metres are progress records, NOT inventory issuances ──
+    // No pipe stock reversal needed on delete — pipe metres never touched inventory.
 
     // Also reverse MDPE fittings stock deductions
     const mdpeReversal: { material: string; qty: number }[] = Array.isArray((existing as any).mdpeMaterials)
@@ -499,23 +349,8 @@ export const deletePELaying = async (req: AuthenticatedRequest, res: Response, n
     if (mdpeReversal.length > 0) {
       console.log(`[PE delete] 🟡 Reversing MDPE fittings stock for ${mdpeReversal.length} item(s)...`);
       for (const item of mdpeReversal) {
-        try {
-          const invItem = await prisma.inventoryItem.findUnique({
-            where: { siteId_material: { siteId: existing.siteId, material: item.material } },
-          });
-          if (!invItem) {
-            console.warn(`[PE delete] ⚠ MDPE "${item.material}" not found in inventory — skipping reversal`);
-            continue;
-          }
-          const newIssued  = Math.max(0, invItem.issued - item.qty);
-          const newInStore = Math.max(0, invItem.received - newIssued - invItem.returned);
-          await prisma.inventoryItem.update({
-            where: { siteId_material: { siteId: existing.siteId, material: item.material } },
-            data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
-          });
-          console.log(`[PE delete] ✅ Reversed MDPE "${item.material}" −${item.qty} issued → ${newIssued} total issued`);
-        } catch (stockErr: any) {
-          console.error(`[PE delete] ❌ MDPE stock reversal failed for "${item.material}":`, stockErr.message);
+        if (Number(item.qty) > 0) {
+          await adjustInventoryStock(existing.siteId, item.material, -Number(item.qty));
         }
       }
       console.log('[PE delete] 🟢 MDPE stock reversal complete.');
