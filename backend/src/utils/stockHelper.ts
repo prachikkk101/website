@@ -2,9 +2,10 @@ import prisma from '../config/db';
 
 /**
  * Adjust issued and inStore stock for a material at a given site.
- * - Searches for exact or case-insensitive/trimmed match of material for siteId.
- * - If found, updates `issued = issued + delta`, `inStore = received - issued - returned`.
- * - If not found, creates new InventoryItem record for siteId with `received: 0`, `issued: delta`, `inStore: -delta`.
+ * - Searches for exact match first, then case-insensitive / trimmed match.
+ * - If found: updates issued += delta, inStore = received - issued - returned.
+ * - If NOT found: logs a warning and skips — does NOT create phantom rows.
+ *   Phantom rows (received:0, issued:N) cause confusing negative inStore values.
  */
 export async function adjustInventoryStock(siteId: string, materialName: string, delta: number) {
   if (!siteId || !materialName || delta === 0) return;
@@ -21,10 +22,11 @@ export async function adjustInventoryStock(siteId: string, materialName: string,
     if (!invItem) {
       const siteItems = await prisma.inventoryItem.findMany({
         where: { siteId },
+        select: { id: true, material: true, received: true, issued: true, returned: true, inStore: true },
       });
       const match = siteItems.find(i => i.material.trim().toLowerCase() === name.toLowerCase());
       if (match) {
-        invItem = match;
+        invItem = match as any;
       }
     }
 
@@ -38,24 +40,12 @@ export async function adjustInventoryStock(siteId: string, materialName: string,
         where: { id: invItem.id },
         data: { issued: newIssued, inStore: newInStore, updatedAt: new Date() },
       });
-      console.log(`[stockHelper] ✅ Updated "${invItem.material}" for site ${siteId}: delta=${roundDelta}, issued=${newIssued}, inStore=${newInStore}`);
+      console.log(`[stockHelper] ✅ Updated "${invItem.material}" for site ${siteId}: delta=${roundDelta >= 0 ? '+' : ''}${roundDelta}, issued=${newIssued}, inStore=${newInStore}`);
     } else {
-      // 4. If not found, create new item record for this site!
-      const issued = Math.max(0, roundDelta);
-      const inStore = -issued;
-      await prisma.inventoryItem.create({
-        data: {
-          siteId,
-          material: name,
-          unit: 'pcs',
-          category: '',
-          received: 0,
-          issued,
-          returned: 0,
-          inStore,
-        },
-      });
-      console.log(`[stockHelper] 🟢 Created new inventory item "${name}" for site ${siteId}: issued=${issued}, inStore=${inStore}`);
+      // 4. Material not in inventory — log warning, do NOT create phantom row.
+      // Phantom rows (received:0, issued:N, inStore:-N) are confusing and pollute inventory.
+      // Admins must first receive this material in the Inventory page before it can be deducted.
+      console.warn(`[stockHelper] ⚠️ SKIP — "${name}" not found in inventory for site ${siteId}. Delta=${roundDelta} not applied. Receive this material in the Inventory page first.`);
     }
   } catch (err: any) {
     console.error(`[stockHelper] ❌ Stock adjustment failed for "${name}" (site: ${siteId}):`, err.message);
@@ -64,7 +54,11 @@ export async function adjustInventoryStock(siteId: string, materialName: string,
 
 /**
  * Full inventory recalculation from all PNG connections and PE laying entries for a site.
- * Ensures total `issued` and `inStore` match actual usage across all entries.
+ * Resets issued/inStore to match actual usage stored in entry records.
+ *
+ * IMPORTANT: Only call this manually (via admin endpoint) — never on server startup.
+ * Running on startup overwrites incremental deductions from entries saved before
+ * mdpeMaterials/materialsUsed fields were tracked.
  */
 export async function syncSiteInventoryFromEntries(siteId?: string) {
   try {
@@ -119,7 +113,9 @@ export async function syncSiteInventoryFromEntries(siteId?: string) {
       }
     }
 
-    // Now update or create InventoryItems for each site
+    // Now update EXISTING InventoryItems — do NOT create new ones for missing materials
+    let updated = 0;
+    let skipped = 0;
     for (const [sId, matMap] of siteMaterialIssuedMap.entries()) {
       const existingItems = await prisma.inventoryItem.findMany({ where: { siteId: sId } });
       const itemByNormName = new Map<string, typeof existingItems[0]>();
@@ -137,24 +133,17 @@ export async function syncSiteInventoryFromEntries(siteId?: string) {
             where: { id: existing.id },
             data: { issued: calcIssued, inStore, updatedAt: new Date() },
           });
+          console.log(`[sync] ✅ "${matName}" site ${sId}: issued=${calcIssued}, inStore=${inStore}`);
+          updated++;
         } else {
-          await prisma.inventoryItem.create({
-            data: {
-              siteId: sId,
-              material: matName,
-              unit: 'pcs',
-              category: '',
-              received: 0,
-              issued: calcIssued,
-              returned: 0,
-              inStore: -calcIssued,
-            },
-          });
+          // Material used in an entry but not in inventory — skip, don't create phantom row
+          console.warn(`[sync] ⚠️ SKIP "${matName}" (site ${sId}) — not in inventory. Receive it first.`);
+          skipped++;
         }
       }
     }
 
-    console.log('🟢 Inventory stock sync complete for all sites.');
+    console.log(`🟢 Inventory stock sync complete. Updated: ${updated}, Skipped (not in inventory): ${skipped}`);
   } catch (err: any) {
     console.error('❌ Inventory stock sync error:', err.message);
   }

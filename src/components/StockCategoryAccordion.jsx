@@ -81,24 +81,13 @@ export default function StockCategoryAccordion({
       {filteredCategories.map(cat => {
         const isOpen = catOpen === cat.id;
 
-        // When stock is loaded: show items with available > 0 OR that have a pre-filled
-        // initialQty \u003e 0 (items used by the entry being edited — stock already deducted).
-        // When stock hasn't loaded yet: show all items.
+        // Always show all items regardless of stock level.
+        // Items with zero stock show (max: 0) in red as a visual warning.
+        // Workers can still record usage — admin is responsible for receiving stock.
         // Helper: normalized lookup into initialQtys (keys may differ in case/whitespace)
         const getInitialQty = (itemName) =>
           Object.entries(initialQtys).find(([k]) => normalize(k) === normalize(itemName))?.[1] ?? 0;
-        const visibleItems = hasStockData
-          ? cat.items.filter(item => {
-              const avail =
-                Object.entries(siteStockMap).find(([k]) => normalize(k) === normalize(item))?.[1] ?? 0;
-              const prefilledQty = getInitialQty(item);
-              // Show if available > 0 OR this entry previously used this item (edit mode)
-              return avail > 0 || prefilledQty > 0;
-            })
-          : cat.items;
-
-        // Skip entire category if stock is loaded and none of its items have stock
-        if (hasStockData && visibleItems.length === 0) return null;
+        const visibleItems = cat.items;
 
         return (
           <div
@@ -172,12 +161,14 @@ export default function StockCategoryAccordion({
                         type="number"
                         min={0}
                         step="any"
-                        max={available !== null ? available : undefined}
+                        max={available !== null && available > 0 ? available : undefined}
                         value={val === 0 ? '' : val}
                         onFocus={e => e.target.select()}
                         onChange={e => {
                           const num = e.target.value === '' ? 0 : Number(e.target.value);
-                          const capped = available !== null ? Math.min(num, available) : num;
+                          // Only cap to available when stock is actually > 0 (prevents over-issue from a stocked inventory)
+                          // When available is 0 or null, allow any value — worker records actual usage regardless of stock
+                          const capped = (available !== null && available > 0) ? Math.min(num, available) : num;
                           setCatQtys(prev => ({ ...prev, [key]: capped }));
                         }}
                         onBlur={e => {
